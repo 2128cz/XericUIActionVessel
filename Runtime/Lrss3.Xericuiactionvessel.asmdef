@@ -1,0 +1,16 @@
+{
+    "name": "Lrss3.Xericuiactionvessel",
+    "rootNamespace": "XericUI",
+    "references": [
+        "GUID:b1727b829ae4f0641acc8ad28ed624c2"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,19 @@
+{
+    "name": "Lrss3.Xericuiactionvessel",
+    "rootNamespace": "XericUIEditor",
+    "references": [
+        "Lrss3.Xericuiactionvessel",
+        "Lrss3.SesothoLine.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

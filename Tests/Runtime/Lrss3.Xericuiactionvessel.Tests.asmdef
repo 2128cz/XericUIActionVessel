@@ -1,0 +1,11 @@
+{
+    "name": "Lrss3.Xericuiactionvessel.Tests",
+    "references": [
+        "Lrss3.Xericuiactionvessel"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

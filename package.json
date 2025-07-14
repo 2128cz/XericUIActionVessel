@@ -1,0 +1,15 @@
+{
+	"name": "com.lrss3.xericuiactionvessel",
+	"displayName":"Xeric UI Action Vessel",
+	"version": "0.1.0",
+	"unity": "2022.1",
+	"description": "",
+	"dependencies": {
+	},
+	"category": "library",
+  	"type": "library",
+  	"hideInEditor": true,
+  	"author": "Lrss3",
+	"samples": [
+	]
+}
