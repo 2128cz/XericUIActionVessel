@@ -1,9 +1,13 @@
 {
-    "name": "Lrss3.Xericuiactionvessel",
+    "name": "Lrss3.Xericuiactionvessel.Editor",
     "rootNamespace": "XericUIEditor",
     "references": [
         "Lrss3.Xericuiactionvessel",
-        "Lrss3.SesothoLine.Editor"
+        "Lrss3.SesothoLine.Editor",
+        "Lrss3.Deconstruction",
+        "UnityEngine.UI",
+        "Unity.TextMeshPro",
+        "Unity.TextMeshPro.Editor"
     ],
     "includePlatforms": [
         "Editor"
