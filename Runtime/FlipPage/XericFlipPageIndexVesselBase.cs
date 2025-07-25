@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sirenix.OdinInspector;
 using UnityEngine;
 using UnityEngine.Serialization;
@@ -49,7 +50,7 @@ namespace XericUI.FlipPage
         [BoxGroup("设定")]
 #endif
         [SerializeField]
-        protected int defaultItemCountPerPage = -1;
+        private int defaultItemCountPerPage = -1;
 
         #endregion
 
@@ -92,6 +93,22 @@ namespace XericUI.FlipPage
             #region 生命周期
 
             /// <summary>
+            /// 页面创建时
+            /// </summary>
+            protected internal virtual void OnPageCreated(XericFlipPageIndexVesselBase parent)
+            {
+                
+            }
+
+            /// <summary>
+            /// 页面销毁时
+            /// </summary>
+            protected internal virtual void OnPageDestroy(XericFlipPageIndexVesselBase parent)
+            {
+                
+            }
+
+            /// <summary>
             /// 页面显示时
             /// </summary>
             /// <param name="quickVisit">快速浏览(用于区分动画和逻辑，为真时，不应当在动画事件后继续加载数据)</param>
@@ -102,7 +119,7 @@ namespace XericUI.FlipPage
             /// </summary>
             /// <param name="quickVisit">快速浏览(用于区分动画和逻辑，为真时，不应当在动画事件后继续加载数据)</param>
             protected internal abstract void OnPageInvisible(bool quickVisit);
-            
+
             #endregion
             
             public override string ToString()
@@ -123,6 +140,14 @@ namespace XericUI.FlipPage
             [LabelText("项目名称")]
 #endif
             public string name = DateTime.Now.Ticks.ToString();
+
+            /// <summary>
+            /// 从零开始计数的项目下标
+            /// </summary>
+#if ODIN_INSPECTOR
+            [LabelText("项目索引[0, n]")]
+#endif
+            public int itemNumber { get; internal set; }
 
             #endregion
 
@@ -159,9 +184,20 @@ namespace XericUI.FlipPage
         [SerializeField]
         protected int currentPageIndex = 0;
 
+#if UNITY_EDITOR
+        /// <summary>
+        /// 显示调试列表
+        /// </summary>
+#if ODIN_INSPECTOR
+        [ShowInInspector]
+#endif
+        private List<PageInfo> PageInfoLists => _pageInfos.ToList();
+#endif
+
         /// <summary>
         /// 所有页面
         /// </summary>
+        
         private LinkedList<PageInfo> _pageInfos = new LinkedList<PageInfo>();
 
         /// <summary>
@@ -169,11 +205,11 @@ namespace XericUI.FlipPage
         /// </summary>
         private HashSet<ItemInfo> _itemInfos = new HashSet<ItemInfo>();
 
+        
         /// <summary>
         /// 当前选中页面节点
         /// </summary>
-        public LinkedListNode<PageInfo> currentPageNode = null;
-
+        protected LinkedListNode<PageInfo> CurrentPageNode = null;
 
         /// <summary>
         /// 所有页面
@@ -183,7 +219,21 @@ namespace XericUI.FlipPage
         /// <summary>
         /// 当前选中页面内容
         /// </summary>
-        public PageInfo currentPage => currentPageNode.Value;
+        public PageInfo Currentpage => CurrentPageNode?.Value;
+
+        /// <summary>
+        /// 分布于所有页面上的所有数据项目
+        /// </summary>
+        public IEnumerable<ItemInfo> AllItemInfos => _pageInfos.SelectMany(page => page.itemInfos);
+        
+        /// <summary>
+        /// 页面默认最大项目数量
+        /// </summary>
+        protected int DefaultItemCountPerPage 
+            => defaultItemCountPerPage < 0 ? int.MaxValue : defaultItemCountPerPage;
+
+        
+        private List<ItemInfo> _backupItemInfos;
 
         #endregion
 
@@ -222,7 +272,7 @@ namespace XericUI.FlipPage
         {
             if (float.TryParse(pageNumber, out var index))
             {
-                FlipPage((int)index, forceRefresh);
+                FlipPage((int)index - 1, forceRefresh);
             }
         }
 
@@ -239,7 +289,7 @@ namespace XericUI.FlipPage
                 (pageIndex < 0 || pageIndex >= _pageInfos.Count))
                 pageIndex = Mathf.Clamp(pageIndex, 0, _pageInfos.Count - 1);
             else
-                pageIndex = MacroMath.PMod(pageIndex, _pageInfos.Count - 1);
+                pageIndex = MacroMath.PMod(pageIndex, _pageInfos.Count);
             // 检查翻页数量有效
             if (!forceRefresh && currentPageIndex == pageIndex)
                 return;
@@ -247,23 +297,23 @@ namespace XericUI.FlipPage
             var pageIndexOffset = pageIndex - currentPageIndex;
             var lastPageIndex = currentPageIndex;
             // 如果节点不存在，通过索引寻找
-            if (currentPageNode == null)
-                currentPageNode = _pageInfos.GetOrderNode().LandedIndex(currentPageIndex);
+            if (CurrentPageNode == null)
+                CurrentPageNode = _pageInfos.GetOrderNode().LandedIndex(currentPageIndex);
             // 如果索引偏移，逐个移动
             else if (pageIndexOffset > 0)
             {
                 for (var i = 0; i < pageIndexOffset; i++)
                 {
-                    var next = currentPageNode!.Next;
-                    SwitchPage(next, _pageInfos.Last, i + 1 == pageIndexOffset);
+                    var next = CurrentPageNode!.Next;
+                    SwitchPage(next, _pageInfos.Last, i + 1 < pageIndexOffset);
                 }
             }
             else if (pageIndexOffset < 0)
             {
                 for (var i = 0; i > pageIndexOffset; i--)
                 {
-                    var previa = currentPageNode!.Previous;
-                    SwitchPage(previa, _pageInfos.First, i - 1 == pageIndexOffset);
+                    var previa = CurrentPageNode!.Previous;
+                    SwitchPage(previa, _pageInfos.First, i - 1 > pageIndexOffset);
                 }
             }
             // 没有翻动有效页，退出
@@ -278,16 +328,16 @@ namespace XericUI.FlipPage
             {
                 if (newPageNode != null)
                 {
-                    currentPage.OnPageInvisible(quickPage);
-                    currentPageNode = newPageNode;
-                    currentPage.OnPageVisible(quickPage);
+                    Currentpage.OnPageInvisible(quickPage);
+                    CurrentPageNode = newPageNode;
+                    Currentpage.OnPageVisible(quickPage);
                 }
 
                 if (canPassIndexBoundary)
                 {
-                    currentPage.OnPageInvisible(quickPage);
-                    currentPageNode = defualtPageNode;
-                    currentPage.OnPageVisible(quickPage);
+                    Currentpage.OnPageInvisible(quickPage);
+                    CurrentPageNode = defualtPageNode;
+                    Currentpage.OnPageVisible(quickPage);
                 }
             }
         }
@@ -331,44 +381,49 @@ namespace XericUI.FlipPage
         /// <summary>
         /// 添加页面在开头
         /// </summary>
-        public virtual void AddPageFirst(PageInfo pageInfo)
+        public virtual PageInfo AddPageFirst(PageInfo pageInfo)
         {
             if (pageInfo == null)
             {
                 Debug.LogError($"不能添加一个空的页面内容到管理器中！", this);
-                return;
+                return null;
             }
-
-            // 添加页面
-            _pageInfos.AddFirst(pageInfo);
             // 添加页面下标
             pageInfo.pageNumber = 0;
+            // 添加页面
+            _pageInfos.AddFirst(pageInfo);
             // 更新后面页面的索引
             RefreshAllPageNumber();
+            // 执行页面生命周期
+            pageInfo.OnPageCreated(this);
             // 刷新页面
             FlipPage(currentPageIndex, true);
+            return pageInfo;
         }
 
         /// <summary>
         /// 添加页面在结尾
         /// </summary>
-        public virtual void AddPageLast(PageInfo pageInfo)
+        public virtual PageInfo AddPageLast(PageInfo pageInfo)
         {
             if (pageInfo == null)
             {
                 Debug.LogError($"不能添加一个空的页面内容到管理器中！", this);
-                return;
+                return null;
             }
             // 添加页面下标
             pageInfo.pageNumber = _pageInfos.Count;
             // 添加页面
             _pageInfos.AddLast(pageInfo);
+            // 执行页面生命周期
+            pageInfo.OnPageDestroy(this);
             // 刷新页面
             FlipPage(currentPageIndex, true);
+            return pageInfo;
         }
         
         /// <summary>
-        /// 移除页面
+        /// 移除页面（页面上的数据内容也会一同移除）
         /// </summary>
         public virtual void RemovePage(int pageIndex)
         {
@@ -388,23 +443,50 @@ namespace XericUI.FlipPage
                 tempPage.Value.pageNumber = tempPageNumber++;
             }
             // 如果移除的是当前页面，执行关闭操作
-            if (currentPageNode == page)
+            if (CurrentPageNode == page)
             {
                 page.Value.OnPageInvisible(true);
-                currentPageNode = null;
+                CurrentPageNode = null;
             }
+            // 执行页面生命周期
+            page.Value.OnPageDestroy(this);
+            // 页面索引移除
             _pageInfos.Remove(page); 
             // 刷新页面
             FlipPage(currentPageIndex, true);
         }
 
         /// <summary>
-        /// 清除所有页面
+        /// 仅移除页面，不会移除数据
         /// </summary>
-        public virtual void CleanPage()
+        /// <param name="pageIndex"></param>
+        public void RemovePageWithoutItems(int pageIndex)
+        {
+            BackupItemsFormPages();
+            RemovePage(pageIndex);
+            RestoreItemsToPages();
+        }
+        
+        /// <summary>
+        /// 获取索引下的页面
+        /// </summary>
+        /// <param name="pageIndex"></param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public T IndexOfPageInfo<T>(int pageIndex)
+            where T : PageInfo
+            => _pageInfos.LandedIndex(pageIndex) as T;
+        
+        /// <summary>
+        /// 清除所有页面 (所有页面数据也会一同移除)
+        /// </summary>
+#if ODIN_INSPECTOR
+        [HorizontalGroup("数据"), Button("清除所有页面")]
+#endif
+        public virtual void ClearPages()
         {
             _pageInfos.Clear();
-            currentPageNode = null;
+            CurrentPageNode = null;
             currentPageIndex = 0;
         }
         
@@ -436,5 +518,128 @@ namespace XericUI.FlipPage
         }
         
         #endregion
+
+        #region 数据项目
+
+        /// <summary>
+        /// 添加数据项目
+        /// </summary>
+        public void AddItem(ItemInfo item, Func<PageInfo> addPage)
+        {
+            // 向前寻找空缺（这在页面都被准确填充的情况下最忧）
+            var firstVacancy = _pageInfos
+                .GetReversedOrderNode()
+                .LastOrDefault(a
+                    => a.Value.itemInfos.Count < DefaultItemCountPerPage);
+            if (firstVacancy != null)
+            {
+                firstVacancy.Value.itemInfos.Add(item);
+                return;
+            }
+            if (addPage == null)
+            {
+                Debug.LogError("当前页面已满，数据项目顺位添加到新页面中，但未指定页面创建函数，添加过程已退出", this);
+                return;
+            }
+            // 新建一个页面存放数据
+            addPage.Invoke().itemInfos.Add(item);
+        }
+
+        /// <summary>
+        /// 移除所有包含给定项目的位置（这会在页面上留下空缺）
+        /// </summary>
+        /// <param name="item"></param>
+        public void RemoveItem(ItemInfo item)
+        {
+            foreach (var a in AllItemInfos
+                         .Adjoint()
+                         .Where(a => a.obj == item)
+                         .Reverse())
+            {
+                ItemIndex2PageIndex(a.index);
+            }
+        }
+
+        public void RemoveItem(int indexItem)
+        {
+            
+        }
+
+        /// <summary>
+        /// 保留页面的状态下清空所有数据
+        /// </summary>
+#if ODIN_INSPECTOR
+        [HorizontalGroup("数据"), Button("清除所有数据")]
+#endif
+        public void ClearItemsWithoutPages()
+        {
+            foreach (var page in _pageInfos)
+            {
+                page.itemInfos.Clear();
+            }
+        }
+        
+        /// <summary>
+        /// 使用索引定位到数据
+        /// </summary>
+        /// <param name="itemIndex"></param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public T IndexOfItemInfo<T>(int itemIndex)
+            where T : ItemInfo
+            => AllItemInfos.LandedIndex(itemIndex) as T;
+
+        /// <summary>
+        /// 将项目索引转为页面索引
+        /// </summary>
+        /// <param name="itemIndex"></param>
+        /// <returns></returns>
+        public virtual int ItemIndex2PageIndex(int itemIndex)
+        {
+            return itemIndex / DefaultItemCountPerPage;
+        }
+        
+        /// <summary>
+        /// 备份所有数据项目
+        /// </summary>
+        public void BackupItemsFormPages()
+        {
+            _backupItemInfos = AllItemInfos.ToList();
+        }
+
+        /// <summary>
+        /// 保存所有数据项目(强制重排操作)
+        /// </summary>
+        public void RestoreItemsToPages()
+        {
+            if (ItemIndex2PageIndex(_backupItemInfos.Count - 1) > _pageInfos.Count)
+            {
+                Debug.LogError($"重排数据时，原有数据数量({_backupItemInfos.Count})超出现有面板数量({_pageInfos.Count})，已拒绝重排", this);
+                return;
+            }
+            // 执行重拍
+            var page = _pageInfos.First;
+            page.Value.itemInfos.Clear();
+            var pageIndex = 0;
+            for (int i = 0; i < _backupItemInfos.Count; i++)
+            {
+                var newPageIndex = ItemIndex2PageIndex(i);
+                if (pageIndex != newPageIndex)
+                {
+                    pageIndex = newPageIndex;
+                    page = page.Next;
+                    if (page == null)
+                    {
+                        Debug.LogError($"重排数据时，页面链接错误，重排被迫中断", this);
+                        return;
+                    }
+                    page.Value.itemInfos.Clear();
+                }
+                page.Value.itemInfos.Add(_backupItemInfos[i]);
+            }
+        }
+
+        #endregion
+        
     }
 }

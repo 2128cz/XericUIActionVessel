@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using Deconstruction.Runtime.UI;
 using JetBrains.Annotations;
 using Sirenix.OdinInspector;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
@@ -120,7 +122,19 @@ namespace XericUI.FlipPage
 
         #region 字段属性
 
-        protected ToggleGroup ToggleGroup;
+        
+        private ToggleGroup _toggleGroup;
+
+        protected ToggleGroup ToggleGroup
+        {
+            get
+            {
+                if (_toggleGroup != null)
+                    return _toggleGroup;
+                _toggleGroup = transform.GetComponentAnyway<ToggleGroup>();
+                return _toggleGroup;
+            }
+        }
 
         #endregion
         
@@ -138,7 +152,7 @@ namespace XericUI.FlipPage
             [LabelText("页面翻页按钮")] 
 #endif
             [CanBeNull]
-            internal ObjectVessel<Selectable, TMPro.TMP_Text> pageIndexSelectable;
+            internal ObjectVessel<Selectable, TMPro.TMP_Text> pageSelectableVessel;
             
             protected internal override void OnPageVisible(bool quickVisit)
             {
@@ -146,18 +160,20 @@ namespace XericUI.FlipPage
                     return;
 
                 // 自动补全外部交互动画
-                if (pageIndexSelectable.IsValidVessel() && 
-                    pageIndexSelectable.Target0 is Toggle toggle &&
-                    !toggle.isOn)
-                {
-                    toggle.SetIsOnWithoutNotify(true);
-                    
-                }
+                if (pageSelectableVessel.IsValidVessel())
+                    SwitchSelectableVesselType(pageSelectableVessel.Target0,
+                        null,
+                        toggle =>
+                        {
+                            if (!toggle.isOn)
+                                toggle.SetIsOnWithoutNotify(true);
+                        });
             }
 
             protected internal override void OnPageInvisible(bool quickVisit)
             {
             }
+            
         }
 
         /// <summary>
@@ -202,29 +218,34 @@ namespace XericUI.FlipPage
             pageButtonPool.Init();
             
             // 根据组件类型创建相关内容
-            var prefabSelectable = pageButtonPool.Prefab.GetComponent<Selectable>();
-            switch (prefabSelectable)
-            {
-                // 单选项就创建但选项组
-                case Toggle toggle:
-                    ToggleGroup = transform.GetComponentAnyway<ToggleGroup>();
-                    break;
-                case Button button: 
-                    break;
-                default: 
-                    break;
-            }
+            // var prefabSelectable = pageButtonPool.Prefab.GetComponent<Selectable>();
+
         }
 
+        #endregion
+
+        #region 翻页功能
+        
         protected override void OnFlipPage()
         {
             base.OnFlipPage();
 
-            
             // 刷新所有成员的层级顺序
             for (int i = 0; i < pageSelectButton.Count; i++)
             {
                 pageSelectButton[i].Target0.transform.SetSiblingIndex(i);
+            }
+
+            if (Currentpage is PageComponentInfo componentPage && 
+                componentPage.pageSelectableVessel.IsValidVessel())
+            {
+                SwitchSelectableVesselType(componentPage.pageSelectableVessel.Target0,
+                    null,
+                    toggle =>
+                    {
+                        if (!toggle.isOn)
+                            toggle.isOn = true;
+                    });
             }
         }
 
@@ -232,56 +253,93 @@ namespace XericUI.FlipPage
         {
             base.FlipPage(pageIndex, forceRefresh);
             
-        }
-
-        public override void AddPageFirst(PageInfo pageInfo)
-        {
-            if (pageInfo is not PageComponentInfo componentPageInfo)
-            {
-                Debug.LogError($"页面容器{currentPage}不支持当前管理器，其必须由{nameof(FlipPageComponentManager)}.{nameof(PageComponentInfo)}继承/声名，否则无法支持后续功能", this);
-                return;
-            }
-
-            AddPageIndexButton(componentPageInfo);
-            base.AddPageFirst(pageInfo);
-            
-            RefreshLabelTextTotalPageCount();
             RefreshPageIndeButtonState();
         }
 
-        public override void AddPageLast(PageInfo pageInfo)
+        public override PageInfo AddPageFirst(PageInfo pageInfo)
         {
             if (pageInfo is not PageComponentInfo componentPageInfo)
             {
-                Debug.LogError($"页面容器{currentPage}不支持当前管理器，其必须由{nameof(FlipPageComponentManager)}.{nameof(PageComponentInfo)}继承/声名，否则无法支持后续功能", this);
-                return;
+                Debug.LogError($"页面容器{Currentpage}不支持当前管理器，其必须由{nameof(FlipPageComponentManager)}.{nameof(PageComponentInfo)}继承/声名，否则无法支持后续功能", this);
+                return null;
             }
-
+            // 页面基础初始化
+            var result = base.AddPageFirst(pageInfo);
+            // 添加选择按钮
             AddPageIndexButton(componentPageInfo);
-            base.AddPageLast(pageInfo);
-            
-            RefreshLabelTextTotalPageCount();
+            // 刷新选择按钮显示状态
             RefreshPageIndeButtonState();
+            // 刷新总页数
+            RefreshLabelTextTotalPageCount();
+            return result;
+        }
+
+        public override PageInfo AddPageLast(PageInfo pageInfo)
+        {
+            if (pageInfo is not PageComponentInfo componentPageInfo)
+            {
+                Debug.LogError($"页面容器{Currentpage}不支持当前管理器，其必须由{nameof(FlipPageComponentManager)}.{nameof(PageComponentInfo)}继承/声名，否则无法支持后续功能", this);
+                return null;
+            }
+            // 页面基础初始化
+            var result = base.AddPageLast(pageInfo);
+            // 添加选择按钮
+            AddPageIndexButton(componentPageInfo);
+            // 刷新选择按钮显示状态
+            RefreshPageIndeButtonState();
+            // 刷新总页数
+            RefreshLabelTextTotalPageCount();
+            return result;
         }
 
         public override void RemovePage(int pageIndex)
         {
             base.RemovePage(pageIndex);
-
+            
             pageButtonPool.DirectlyRelease(pageSelectButton[pageIndex].Target0.gameObject);
             pageSelectButton.RemoveAt(pageIndex);
 
             RefreshPageIndeButtonState();
         }
 
+        public override void ClearPages()
+        {
+            foreach (var pageInfo in PageInfos)
+            {
+                var page = pageInfo as PageComponentInfo;
+                pageButtonPool.DirectlyRelease(page.pageSelectableVessel.Target0.gameObject);
+            }
+            pageSelectButton.Clear();
+            base.ClearPages();
+        }
+
         /// <summary>
         /// 在页面上添加按钮
         /// </summary>
         /// <param name="pageInfo"></param>
-        private void AddPageIndexButton(PageComponentInfo pageInfo)
+        protected virtual void AddPageIndexButton(PageComponentInfo pageInfo)
         {
             var pageIndexSelectable = GetPageIndexButton();
-            pageInfo.pageIndexSelectable = pageIndexSelectable;
+            pageInfo.pageSelectableVessel = pageIndexSelectable;
+            // 将按钮对象添加到列表中便于管理
+            pageSelectButton.Add(pageIndexSelectable);
+
+            SwitchSelectableVesselType(pageIndexSelectable.Target0,
+                button =>
+                {
+                    button.onClick.AddListener(() => FlipPage(pageInfo.pageNumber));
+                }, 
+                toggle =>
+                {
+                    toggle.isOn = pageInfo.pageNumber == currentPageIndex;
+                    toggle.group = ToggleGroup;
+                    toggle.onValueChanged.AddListener(b =>
+                    {
+                        if (b) 
+                            FlipPage(pageInfo.pageNumber);
+                    });
+                });
+            RefreshPageSelectableVesselLabel(pageInfo);
         }
 
         /// <summary>
@@ -289,8 +347,14 @@ namespace XericUI.FlipPage
         /// </summary>
         private void RefreshPageIndeButtonState()
         {
-            var min = currentPageIndex - candidatesNumber / 2;
-            var max = currentPageIndex + candidatesNumber / 2;
+            var min = currentPageIndex - (int)(candidatesNumber / 2);
+
+            min = Math.Max(min, 0);
+            min = pageSelectButton.Count - candidatesNumber > 0 
+                ? Math.Min(min, (int)(pageSelectButton.Count - candidatesNumber)) 
+                : 0;
+            var max = min + (int)candidatesNumber;
+            
             for (int i = 0; i < pageSelectButton.Count; i++)
             {
                 pageSelectButton[i].Target0.transform.SetSiblingIndex(i);
@@ -299,13 +363,20 @@ namespace XericUI.FlipPage
                 if (inMaximumCandidatesNumber)
                     pageSelectButton[i].Target0.gameObject.SetActive(min <= i && i <= max);
                 else
-                    pageSelectButton[i].Target0.gameObject.SetActive(min < i && i < max);
+                    pageSelectButton[i].Target0.gameObject.SetActive(min <= i && i < max);
+                // 看不见的内容不刷新
+                if (!pageSelectButton[i].Target0.gameObject.activeSelf) 
+                    continue;
                 
                 // 更新索引
-                if (pageSelectButton[i].Target0.gameObject.activeSelf)
-                {
-                    pageSelectButton[i].Target1.text = MacroRegex.RegexReplace(pageIndexFormat, i);
-                }
+                pageSelectButton[i].Target1.text = MacroRegex.RegexReplace(pageIndexFormat, i + 1);
+                    
+                // SwitchSelectableVesselType(pageSelectButton[i].Target0,
+                //     null,
+                //     toggle =>
+                //     {
+                //         toggle.SetIsOnWithoutNotify(currentPageIndex == i);
+                //     });
             }   
         }
         
@@ -315,7 +386,18 @@ namespace XericUI.FlipPage
         private void RefreshLabelTextTotalPageCount()
         {
             if (labelTextTotalPageCount.IsValidVessel()) // 总页数更新 
-                labelTextTotalPageCount.Target.text = MacroRegex.RegexReplace(totalPageCountFormat, PageInfos.Count.ToString());
+                labelTextTotalPageCount.Target.text = 
+                    MacroRegex.RegexReplace(totalPageCountFormat, PageInfos.Count.ToString());
+        }
+        
+        /// <summary>
+        /// 刷新翻页按钮索引为当前页面索引
+        /// </summary>
+        public void RefreshPageSelectableVesselLabel(PageComponentInfo page, object customInput = null)
+        {
+            if (page.pageSelectableVessel.IsValidVessel())
+                page.pageSelectableVessel!.Target1.text = 
+                    MacroRegex.RegexReplace(pageIndexFormat, customInput ?? page.pageNumber); 
         }
 
         #endregion
@@ -345,7 +427,33 @@ namespace XericUI.FlipPage
                 });
             }
         }
-        
+
+        /// <summary>
+        /// 处理可选对象类型，如果要支持更多的类型优先改此方法，以便获得其他所有位置的编译器提示
+        /// </summary>
+        /// <param name="selectable"></param>
+        /// <param name="asButton"></param>
+        /// <param name="asToggle"></param>
+        /// <returns></returns>
+        protected static bool SwitchSelectableVesselType(Selectable selectable, Action<Button> asButton, Action<Toggle> asToggle)
+        {
+            switch (selectable)
+            {
+                case CircleSlider circleSlider: break; // asCircleSlider?.Invoke(circleSlider); break;
+                case TMP_Dropdown tmpDropdown:  break; // asTmpDropdown?.Invoke(tmpDropdown); break;
+                case TMP_InputField tmpInputField:  break; // asTmpInputField?.Invoke(tmpInputField); break;
+                case Button button: asButton?.Invoke(button); return true;
+                case Dropdown dropdown: break; // asDropdown?.Invoke(dropdown); break;
+                case InputField inputField: break; // asInputField?.Invoke(inputField); break;
+                case Scrollbar scrollbar:   break; // asScrollbar?.Invoke(scrollbar); break;
+                case Slider slider: break; // asSlider?.Invoke(slider); break;
+                case Toggle toggle: asToggle?.Invoke(toggle); return true;
+                default: break;
+            }
+            Debug.LogError($"目前不支持的可选类型:{selectable}");
+            return false;
+        }
+
         #endregion
     }
 }
