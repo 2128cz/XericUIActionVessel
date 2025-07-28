@@ -165,6 +165,17 @@ namespace XericUI.FlipPage
 
             #endregion
 
+            
+            /// <summary>
+            /// 是否通过过滤器
+            /// </summary>
+            /// <param name="manager">传入管理器，建议将过滤器放在管理器中，然后具体的通过规则写在这里，根据对象的不同，通过的规则都不一样。</param>
+            /// <returns></returns>
+            public virtual bool PassFilter(XericFlipPageIndexVesselBase manager)
+            {
+                return true;
+            }
+            
             public override string ToString()
             {
                 return $"[{nameof(ItemInfo)}] ({name})";
@@ -234,7 +245,8 @@ namespace XericUI.FlipPage
 
         
         private List<ItemInfo> _backupItemInfos;
-
+        public List<ItemInfo> BackItemInfos => _backupItemInfos;
+        
         #endregion
 
         #region 生命周期
@@ -600,6 +612,23 @@ namespace XericUI.FlipPage
         }
         
         /// <summary>
+        /// 获取备份所有数据项目
+        /// </summary>
+        /// <param name="backupAtLocal">是否在本地备份？（默认启用，启用后返回的枚举器内容来自备份数据，允许推迟处理过程，但也会覆盖上一次备份）</param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public IEnumerable<T> BackupItemsFormPages<T>(bool backupAtLocal = true)
+            where T : ItemInfo
+        {
+            if (backupAtLocal)
+            {
+                BackupItemsFormPages();
+                return _backupItemInfos.OfType<T>();
+            }
+            return AllItemInfos.OfType<T>();
+        }
+        
+        /// <summary>
         /// 备份所有数据项目
         /// </summary>
         public List<ItemInfo> BackupItemsFormPages()
@@ -609,26 +638,41 @@ namespace XericUI.FlipPage
         }
 
         /// <summary>
-        /// 保存所有数据项目(强制重排操作)
+        /// 强制重排所有数据项目（从备份中恢复数据）
         /// </summary>
-        public void RestoreItemsToPages(List<ItemInfo> overrideDatas = null)
+        public void RestoreItemsToPages()
         {
-            var od = overrideDatas ?? _backupItemInfos;
-            if (od == null)
+            RestoreItemsToPages(_backupItemInfos);
+        }
+        /// <summary>
+        /// 强制重排所有数据项目（从备份中通过过滤器恢复数据）
+        /// </summary>
+        public void RestoreItemsByFilterToPages()
+        {
+            RestoreItemsToPages(_backupItemInfos.Where(a => a.PassFilter(this)).ToList());
+        }
+        
+        /// <summary>
+        /// 强制重排所有数据项目（从给定备份中恢复数据）
+        /// </summary>
+        public void RestoreItemsToPages<T>(List<T> overrideDatas)
+            where T : ItemInfo
+        {
+            if (overrideDatas == null || overrideDatas.Count <= 0)
             {
-                Debug.LogError($"重排数据需要一个有效的数据对象列表", this);
+                Debug.LogError($"重排数据需要一个有效的数据对象列表，如果希望将数据重置为空，可以使用Clear方法，而不是重排操作。", this);
                 return;
             }
-            if (ItemIndex2PageIndex(od.Count - 1) > _pageInfos.Count)
+            if (ItemIndex2PageIndex(overrideDatas.Count - 1) > _pageInfos.Count)
             {
-                Debug.LogError($"重排数据时，原有数据数量({od.Count})超出现有面板数量({_pageInfos.Count})，已拒绝重排", this);
+                Debug.LogError($"重排数据时，原有数据数量({overrideDatas.Count})超出现有面板数量({_pageInfos.Count})，已拒绝重排", this);
                 return;
             }
             // 执行重排
             var page = _pageInfos.First;
             page.Value.itemInfos.Clear();
             var pageIndex = 0;
-            for (int i = 0; i < od.Count; i++)
+            for (int i = 0; i < overrideDatas.Count; i++)
             {
                 var newPageIndex = ItemIndex2PageIndex(i);
                 if (pageIndex != newPageIndex)
@@ -642,7 +686,7 @@ namespace XericUI.FlipPage
                     }
                     page.Value.itemInfos.Clear();
                 }
-                page.Value.itemInfos.Add(od[i]);
+                page.Value.itemInfos.Add(overrideDatas[i]);
             }
         }
 
