@@ -602,26 +602,33 @@ namespace XericUI.FlipPage
         /// <summary>
         /// 备份所有数据项目
         /// </summary>
-        public void BackupItemsFormPages()
+        public List<ItemInfo> BackupItemsFormPages()
         {
             _backupItemInfos = AllItemInfos.ToList();
+            return _backupItemInfos;
         }
 
         /// <summary>
         /// 保存所有数据项目(强制重排操作)
         /// </summary>
-        public void RestoreItemsToPages()
+        public void RestoreItemsToPages(List<ItemInfo> overrideDatas = null)
         {
-            if (ItemIndex2PageIndex(_backupItemInfos.Count - 1) > _pageInfos.Count)
+            var od = overrideDatas ?? _backupItemInfos;
+            if (od == null)
             {
-                Debug.LogError($"重排数据时，原有数据数量({_backupItemInfos.Count})超出现有面板数量({_pageInfos.Count})，已拒绝重排", this);
+                Debug.LogError($"重排数据需要一个有效的数据对象列表", this);
                 return;
             }
-            // 执行重拍
+            if (ItemIndex2PageIndex(od.Count - 1) > _pageInfos.Count)
+            {
+                Debug.LogError($"重排数据时，原有数据数量({od.Count})超出现有面板数量({_pageInfos.Count})，已拒绝重排", this);
+                return;
+            }
+            // 执行重排
             var page = _pageInfos.First;
             page.Value.itemInfos.Clear();
             var pageIndex = 0;
-            for (int i = 0; i < _backupItemInfos.Count; i++)
+            for (int i = 0; i < od.Count; i++)
             {
                 var newPageIndex = ItemIndex2PageIndex(i);
                 if (pageIndex != newPageIndex)
@@ -635,7 +642,7 @@ namespace XericUI.FlipPage
                     }
                     page.Value.itemInfos.Clear();
                 }
-                page.Value.itemInfos.Add(_backupItemInfos[i]);
+                page.Value.itemInfos.Add(od[i]);
             }
         }
 
