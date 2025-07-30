@@ -14,10 +14,20 @@ using Component = UnityEngine.Component;
 namespace XericUI.FlipPage
 {
     /// <summary>
-    /// 翻页组件管理器
-    ///
-    /// 对翻页组件的管理
+    /// 翻页组件管理器(UI层)
     /// </summary>
+    /// <code>
+    /// 翻页组件层（UI）脚本，约束基本用法：
+    /// 
+    /// FlipPageComponentManager : XericFlipPageIndexVesselBase 
+    /// |-PageComponentInfo 页面组件结构
+    /// | |-ItemComponentInfo 项目组件结构
+    ///
+    /// 组件层使用组件容器封装，预设的组件引用可以实现类似下面的样式
+    /// |<  < 2,3,4 >  >|
+    /// 两侧是固定的按钮，中间是一个横向的排列容器，在指定了按钮对象池后，将会自动生成绑定好的按钮用于翻页。
+    /// 页数按钮需要让button在预制体最外层，它的子集中需要包含一个TMP_Text。  
+    /// </code>
     public class FlipPageComponentManager : XericFlipPageIndexVesselBase
     {
         #region 界面属性

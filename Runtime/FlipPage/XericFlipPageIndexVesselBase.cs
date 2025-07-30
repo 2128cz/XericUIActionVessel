@@ -12,10 +12,22 @@ using XericUI.Core.Vessel;
 namespace XericUI.FlipPage
 {
     /// <summary>
-    /// 翻页管理器
+    /// 翻页管理器(逻辑层)
     /// </summary>
     /// <code>
-    /// 翻页允许按页，按项目进行管理。
+    /// 翻页逻辑层脚本，约束基本用法：
+    /// 
+    /// XericFlipPageIndexVesselBase 逻辑层管理器
+    /// |-PageInfo 页面数据结构
+    /// | |-ItemInfo 项目数据结构
+    /// 
+    /// 基本用法应该是，添加数据项目，这会自动分配到有效的页面中；
+    /// 如果页面项目已满，则新建一个页面继续填充项目。
+    /// 或者直接创建页面，将需要的数据项目直接写在页面数据中。
+    ///
+    /// 使用FlipPage()翻页，这会立刻执行，并触发OnFlipPage函数，
+    /// currentPageIndex可以获取当前页数，Currentpage获取当前页面数据；
+    /// 在页面数据中pageNumber可以获取自己所在的页数，itemInfos获取页面中的所有数据项目。
     /// </code>
     public class XericFlipPageIndexVesselBase : XericUIBehaciour
     {
