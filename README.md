@@ -13,6 +13,7 @@
 ### 翻页管理器
 
 提供一个`FlipPageComponentManager`类，其继承于`XericFlipPageIndexVesselBase`。  
+实现一种基于翻页逻辑的数据虚拟化结构管理器。  
 父级实现了基础翻页逻辑，而子类实现在此基础上的组件交互逻辑，使用时，需要继承于`FlipPageComponentManager`再实现数据层功能。  
 比如下面是一个通过翻页管理器控制Xchart.UITable内数据翻页的基础实例：
 ```

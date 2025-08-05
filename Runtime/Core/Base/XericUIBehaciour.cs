@@ -12,6 +12,8 @@ namespace XericUI.Core.Base
         string __EMPTYFIELD;
 
         
+        
+        
         protected bool PublicFieldNullReference;
         
         protected bool AlreadyAwake { get; private set; }

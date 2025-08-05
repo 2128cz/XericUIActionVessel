@@ -548,6 +548,16 @@ namespace XericUI.FlipPage
         /// <summary>
         /// 添加数据项目
         /// </summary>
+        /// <param name="item"></param>
+        /// <exception cref="Exception"></exception>
+        public virtual void AddItem(ItemInfo item)
+        {
+            AddItem(item, () => throw new Exception("需要翻页管理器实现相应的页面创建逻辑，并重写添加默认数据方法后才可以使用。"));
+        }
+        
+        /// <summary>
+        /// 添加数据项目
+        /// </summary>
         public void AddItem(ItemInfo item, Func<PageInfo> addPage)
         {
             // 向前寻找空缺（这在页面都被准确填充的情况下最忧）
