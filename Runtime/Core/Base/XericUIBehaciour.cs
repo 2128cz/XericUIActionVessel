@@ -7,7 +7,7 @@ namespace XericUI.Core.Base
 {
     public class XericUIBehaciour : UIBehaviour
     {
-        [InfoBox("脚本属性存在空引用！请检查开放属性后再试", InfoMessageType.Error, VisibleIf = "PublicFieldNullReference")]
+        [InfoBox("脚本必填属性存在空引用！请检查开放属性后再试", InfoMessageType.Error, VisibleIf = "PublicFieldNullReference")]
         [HideLabel, DisplayAsString]
         string __EMPTYFIELD;
 

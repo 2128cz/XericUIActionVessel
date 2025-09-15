@@ -207,13 +207,10 @@ namespace XericUI.FlipPage
         [SerializeField]
         protected int currentPageIndex = 0;
 
-#if UNITY_EDITOR
+#if UNITY_EDITOR && ODIN_INSPECTOR
         /// <summary>
         /// 显示调试列表
         /// </summary>
-#if ODIN_INSPECTOR
-        [ShowInInspector]
-#endif
         private List<PageInfo> PageInfoLists => _pageInfos.ToList();
 #endif
 
@@ -258,6 +255,17 @@ namespace XericUI.FlipPage
         
         private List<ItemInfo> _backupItemInfos;
         public List<ItemInfo> BackItemInfos => _backupItemInfos;
+
+
+        /// <summary>
+        /// 分布所有页面上的所有项目数量
+        /// </summary>
+        public int TotalItemCount => AllItemInfos.Count();
+
+        /// <summary>
+        /// 所有页面数量
+        /// </summary>
+        public int TotalPageCount => PageInfos.Count();
         
         #endregion
 
