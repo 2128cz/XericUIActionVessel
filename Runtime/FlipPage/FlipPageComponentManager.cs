@@ -310,6 +310,7 @@ namespace XericUI.FlipPage
             pageSelectButton.RemoveAt(pageIndex);
 
             RefreshPageIndeButtonState();
+            RefreshLabelTextTotalPageCount();
         }
 
         public override void ClearPages()
@@ -321,6 +322,7 @@ namespace XericUI.FlipPage
             }
             pageSelectButton.Clear();
             base.ClearPages();
+            RefreshLabelTextTotalPageCount();
         }
 
         /// <summary>
