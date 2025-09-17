@@ -28,6 +28,7 @@ namespace XericUI.FlipPage
     /// 两侧是固定的按钮，中间是一个横向的排列容器，在指定了按钮对象池后，将会自动生成绑定好的按钮用于翻页。
     /// 页数按钮需要让button在预制体最外层，它的子集中需要包含一个TMP_Text。  
     /// </code>
+    [AddComponentMenu("Xeric UI Vessel/FlipPage/Basic FilpPage Manager")]
     public class FlipPageComponentManager : XericFlipPageIndexVesselBase
     {
         #region 界面属性
