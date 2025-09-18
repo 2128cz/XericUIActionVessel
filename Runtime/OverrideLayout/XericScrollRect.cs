@@ -12,7 +12,7 @@ using Sirenix.OdinInspector;
 
 namespace XericUI.OverrideLayout
 {
-    [AddComponentMenu("Xeric UI Vessel/UI/Xeric Scroll Rect")]
+    [AddComponentMenu("Xeric UI Vessel/UI/Xeric Scroll Rect", 50)]
     [SelectionBase]
     [ExecuteAlways]
     [DisallowMultipleComponent]

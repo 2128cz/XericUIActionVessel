@@ -7,7 +7,7 @@ using XericLibrary.Runtime.MacroLibrary;
 
 namespace XericUI.OverrideLayout
 {
-    [AddComponentMenu("Xeric UI Vessel/Layout/Xeric Vertical Layout Group")]
+    [AddComponentMenu("Xeric UI Vessel/Layout/Xeric Vertical Layout Group", 10)]
     /// <summary>
     /// Layout child layout elements below each other.
     /// </summary>
@@ -23,8 +23,7 @@ namespace XericUI.OverrideLayout
             for (int i = 0; i < rectTransform.childCount; i++)
             {
                 var rect = rectTransform.GetChild(i) as RectTransform;
-                if (rect == null ||
-                    (layoutIgnoreInactive && !rect.gameObject.activeInHierarchy))
+                if (rect == null || CanSkipLayout(rect))
                     continue;
 
                 rect.GetComponents(typeof(ILayoutIgnorer), toIgnoreList);
