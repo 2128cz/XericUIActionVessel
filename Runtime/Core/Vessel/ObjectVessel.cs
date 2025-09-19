@@ -10,7 +10,7 @@ namespace XericUI.Core.Vessel
     /// </summary>
     /// <typeparam name="T0"></typeparam>
     [Serializable]
-    public class ObjectVessel<T0> : VesselBase
+    public sealed class ObjectVessel<T0> : VesselBase
         where T0 : Object
     {
         [SerializeField]

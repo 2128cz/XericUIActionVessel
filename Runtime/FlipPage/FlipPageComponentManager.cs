@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using Deconstruction.Runtime.UI;
 using JetBrains.Annotations;
 using Sirenix.OdinInspector;
@@ -164,6 +165,8 @@ namespace XericUI.FlipPage
 #endif
             [CanBeNull]
             internal ObjectVessel<Selectable, TMPro.TMP_Text> pageSelectableVessel;
+         
+            
             
             protected internal override void OnPageVisible(bool quickVisit)
             {
@@ -184,7 +187,7 @@ namespace XericUI.FlipPage
             protected internal override void OnPageInvisible(bool quickVisit)
             {
             }
-            
+
         }
 
         /// <summary>
@@ -303,6 +306,8 @@ namespace XericUI.FlipPage
             return result;
         }
 
+
+        
         public override void RemovePage(int pageIndex)
         {
             base.RemovePage(pageIndex);
@@ -316,11 +321,10 @@ namespace XericUI.FlipPage
 
         public override void ClearPages()
         {
-            foreach (var pageInfo in PageInfos)
-            {
-                var page = pageInfo as PageComponentInfo;
-                pageButtonPool.DirectlyRelease(page.pageSelectableVessel.Target0.gameObject);
-            }
+            PageInfos
+                .OfType<PageComponentInfo>()
+                .Where(a => a.pageSelectableVessel.IsValidVessel())
+                .ForEachDo(a => pageButtonPool.DirectlyRelease(a.pageSelectableVessel!.Target0.gameObject));
             pageSelectButton.Clear();
             base.ClearPages();
             RefreshLabelTextTotalPageCount();

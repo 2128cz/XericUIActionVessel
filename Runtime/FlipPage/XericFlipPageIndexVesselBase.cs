@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Sirenix.OdinInspector;
 using UnityEngine;
+using UnityEngine.Pool;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
@@ -67,136 +68,6 @@ namespace XericUI.FlipPage
 
         #endregion
 
-        #region 类内类型
-
-        /// <summary>
-        /// 页面信息
-        /// </summary>
-        [Serializable]
-        public abstract class PageInfo
-        {
-            #region 字段属性
-
-            /// <summary>
-            /// 页面名称
-            /// </summary>
-#if ODIN_INSPECTOR
-            [LabelText("页面名称")]
-#endif
-            public string name = DateTime.Now.Ticks.ToString();
-
-            /// <summary>
-            /// 页面内项目列表
-            /// </summary>
-#if ODIN_INSPECTOR
-            [LabelText("页面项目信息")]
-#endif
-            public List<ItemInfo> itemInfos = new List<ItemInfo>();
-
-            /// <summary>
-            /// 从零开始计数的页面下标
-            /// </summary>
-#if ODIN_INSPECTOR
-            [LabelText("页面索引[0, n]")]
-#endif
-            public int pageNumber { get; internal set; }
-
-            #endregion
-
-            #region 生命周期
-
-            /// <summary>
-            /// 页面创建时
-            /// </summary>
-            protected internal virtual void OnPageCreated(XericFlipPageIndexVesselBase parent)
-            {
-                
-            }
-
-            /// <summary>
-            /// 页面销毁时
-            /// </summary>
-            protected internal virtual void OnPageDestroy(XericFlipPageIndexVesselBase parent)
-            {
-                
-            }
-
-            /// <summary>
-            /// 页面显示时
-            /// </summary>
-            /// <param name="quickVisit">快速浏览(用于区分动画和逻辑，为真时，不应当在动画事件后继续加载数据)</param>
-            protected internal abstract void OnPageVisible(bool quickVisit);
-            
-            /// <summary>
-            /// 页面隐藏时
-            /// </summary>
-            /// <param name="quickVisit">快速浏览(用于区分动画和逻辑，为真时，不应当在动画事件后继续加载数据)</param>
-            protected internal abstract void OnPageInvisible(bool quickVisit);
-
-            #endregion
-            
-            public override string ToString()
-            {
-                return $"[{nameof(PageInfo)}] ({name})";
-            }
-        }
-
-        /// <summary>
-        /// 项目信息
-        /// </summary>
-        [Serializable]
-        public abstract class ItemInfo
-        {
-            #region 字段属性
-
-#if ODIN_INSPECTOR
-            [LabelText("项目名称")]
-#endif
-            public string name = DateTime.Now.Ticks.ToString();
-
-            /// <summary>
-            /// 从零开始计数的项目下标
-            /// </summary>
-#if ODIN_INSPECTOR
-            [LabelText("项目索引[0, n]")]
-#endif
-            public int itemNumber { get; internal set; }
-
-            #endregion
-
-            #region 生命周期
-
-            /// <summary>
-            /// 当项目显示时
-            /// </summary>
-            protected internal abstract void OnItemVisible();
-
-            /// <summary>
-            /// 当项目隐藏时
-            /// </summary>
-            protected internal abstract void OnItemInvisible();
-
-            #endregion
-
-            
-            /// <summary>
-            /// 是否通过过滤器
-            /// </summary>
-            /// <param name="manager">传入管理器，建议将过滤器放在管理器中，然后具体的通过规则写在这里，根据对象的不同，通过的规则都不一样。</param>
-            /// <returns></returns>
-            public virtual bool PassFilter(XericFlipPageIndexVesselBase manager)
-            {
-                return true;
-            }
-            
-            public override string ToString()
-            {
-                return $"[{nameof(ItemInfo)}] ({name})";
-            }
-        }
-
-        #endregion
-
         #region 字段属性
 
         /// <summary>
@@ -219,12 +90,12 @@ namespace XericUI.FlipPage
         /// 所有页面
         /// </summary>
         
-        private LinkedList<PageInfo> _pageInfos = new LinkedList<PageInfo>();
+        private readonly LinkedList<PageInfo> _pageInfos = new LinkedList<PageInfo>();
 
         /// <summary>
         /// 所有列表项目
         /// </summary>
-        private HashSet<ItemInfo> _itemInfos = new HashSet<ItemInfo>();
+        private readonly HashSet<ItemInfo> _itemInfos = HashSetPool<ItemInfo>.Get();
 
         
         /// <summary>
@@ -272,16 +143,16 @@ namespace XericUI.FlipPage
 
         #region 生命周期
 
-        protected override void Awake()
-        {
-            base.Awake();
-        }
-
         protected override void Start()
         {
             base.Start();
-
             FlipPage(currentPageIndex);
+        }
+
+        protected override void OnDestroy()
+        {
+            base.OnDestroy();
+            HashSetPool<ItemInfo>.Release(_itemInfos);
         }
 
         #endregion
@@ -335,6 +206,8 @@ namespace XericUI.FlipPage
             // 如果索引偏移，逐个移动
             else if (pageIndexOffset > 0)
             {
+                // 先关闭页面元素
+                CurrentPageNode.Value.CallChildItemInvisible();
                 for (var i = 0; i < pageIndexOffset; i++)
                 {
                     var next = CurrentPageNode!.Next;
@@ -343,16 +216,22 @@ namespace XericUI.FlipPage
             }
             else if (pageIndexOffset < 0)
             {
+                // 先关闭页面元素
+                CurrentPageNode.Value.CallChildItemInvisible();
                 for (var i = 0; i > pageIndexOffset; i--)
                 {
                     var previa = CurrentPageNode!.Previous;
                     SwitchPage(previa, _pageInfos.First, i - 1 > pageIndexOffset);
                 }
             }
-            // 没有翻动有效页，退出
+            // 没有翻动有效页，直接退出
             else
                 return;
-            
+            // 可能时当前不存在任何页面
+            if (CurrentPageNode == null)
+                return;
+            // 页面元素激活
+            CurrentPageNode.Value.CallChildItemVisible();
             currentPageIndex = pageIndex;
             OnFlipPage();
             
@@ -411,6 +290,8 @@ namespace XericUI.FlipPage
         public void FlipPageToEnd()
             => FlipPage(_pageInfos.Count - 1);
 
+        
+        
         /// <summary>
         /// 添加页面在开头
         /// </summary>
@@ -449,10 +330,32 @@ namespace XericUI.FlipPage
             // 添加页面
             _pageInfos.AddLast(pageInfo);
             // 执行页面生命周期
-            pageInfo.OnPageDestroy(this);
+            pageInfo.OnPageCreated(this);
             // 刷新页面
             FlipPage(currentPageIndex, true);
             return pageInfo;
+        }
+        
+        /// <summary>
+        /// 按对象引用删除页面
+        /// </summary>
+        /// <param name="pageInfo"></param>
+        public virtual void RemovePage(PageInfo pageInfo)
+        {
+            // 如果移除的是当前页面，执行关闭操作
+            if (CurrentPageNode.Value == pageInfo)
+            {
+                pageInfo.OnPageInvisible(true);
+                CurrentPageNode = null;
+            }
+            // 执行页面生命周期
+            pageInfo.OnPageDestroy(this);
+            // 页面索引移除
+            _pageInfos.Remove(pageInfo); 
+            // 刷新页面
+            FlipPage(currentPageIndex, true);
+            var index = PageInfos.IndexOf(a => a == pageInfo);
+            RemovePage(index);
         }
         
         /// <summary>
@@ -508,7 +411,16 @@ namespace XericUI.FlipPage
         /// <returns></returns>
         public T IndexOfPageInfo<T>(int pageIndex)
             where T : PageInfo
-            => _pageInfos.LandedIndex(pageIndex) as T;
+            => IndexOfPageInfo(pageIndex) as T;
+        
+        /// <summary>
+        /// 获取索引下的页面
+        /// </summary>
+        /// <param name="pageIndex"></param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public PageInfo IndexOfPageInfo(int pageIndex)
+            => _pageInfos.LandedIndex(pageIndex);
         
         /// <summary>
         /// 清除所有页面 (所有页面数据也会一同移除)
@@ -567,7 +479,7 @@ namespace XericUI.FlipPage
         /// <summary>
         /// 添加数据项目
         /// </summary>
-        public void AddItem(ItemInfo item, Func<PageInfo> addPage)
+        public virtual void AddItem(ItemInfo item, Func<PageInfo> addPage)
         {
             // 向前寻找空缺（这在页面都被准确填充的情况下最忧）
             var firstVacancy = _pageInfos
@@ -577,22 +489,24 @@ namespace XericUI.FlipPage
             if (firstVacancy != null)
             {
                 firstVacancy.Value.itemInfos.Add(item);
+                _itemInfos.Add(item);
                 return;
             }
             if (addPage == null)
             {
-                Debug.LogError("当前页面已满，数据项目顺位添加到新页面中，但未指定页面创建函数，添加过程已退出", this);
+                Debug.LogError("当前页面已满，数据项目期望顺位添加到新页面中，但未指定页面创建函数，添加过程已退出", this);
                 return;
             }
             // 新建一个页面存放数据
             addPage.Invoke().itemInfos.Add(item);
+            _itemInfos.Add(item);
         }
 
         /// <summary>
         /// 移除所有包含给定项目的位置（这会在页面上留下空缺）
         /// </summary>
         /// <param name="item"></param>
-        public void RemoveItem(ItemInfo item)
+        public virtual void RemoveItem(ItemInfo item)
         {
             foreach (var a in AllItemInfos
                          .Adjoint()
@@ -600,10 +514,11 @@ namespace XericUI.FlipPage
                          .Reverse())
             {
                 ItemIndex2PageIndex(a.index);
+                
             }
         }
 
-        public void RemoveItem(int indexItem)
+        public virtual void RemoveItem(int indexItem)
         {
             
         }
@@ -641,6 +556,15 @@ namespace XericUI.FlipPage
         {
             return itemIndex / DefaultItemCountPerPage;
         }
+
+        /// <summary>
+        /// 当前翻页管理器中包含给定数据项目
+        /// </summary>
+        /// <param name="item"></param>
+        /// <returns></returns>
+        public bool Contains(ItemInfo item)
+            => _itemInfos.Contains(item);
+        
         
         /// <summary>
         /// 获取备份所有数据项目
@@ -723,5 +647,174 @@ namespace XericUI.FlipPage
 
         #endregion
         
+        #region 类内类型
+
+        /// <summary>
+        /// 页面信息
+        /// </summary>
+        [Serializable]
+        public abstract class PageInfo
+        {
+            #region 字段属性
+
+            /// <summary>
+            /// 页面名称
+            /// </summary>
+#if ODIN_INSPECTOR
+            [LabelText("页面名称")]
+#endif
+            public string name = DateTime.Now.Ticks.ToString();
+
+            /// <summary>
+            /// 页面内项目列表
+            /// </summary>
+#if ODIN_INSPECTOR
+            [LabelText("页面项目信息")]
+#endif
+            public List<ItemInfo> itemInfos;
+
+            /// <summary>
+            /// 从零开始计数的页面下标
+            /// </summary>
+#if ODIN_INSPECTOR
+            [LabelText("页面索引[0, n]")]
+#endif
+            public int pageNumber { get; internal set; }
+
+            #endregion
+
+            #region 生命周期
+
+            /// <summary>
+            /// 页面创建时
+            /// </summary>
+            protected internal virtual void OnPageCreated(XericFlipPageIndexVesselBase parent)
+            {
+                // 获取列表
+                itemInfos = ListPool<ItemInfo>.Get();
+            }
+
+            /// <summary>
+            /// 页面销毁时
+            /// </summary>
+            protected internal virtual void OnPageDestroy(XericFlipPageIndexVesselBase parent)
+            {
+                // 从哈希表中移除
+                foreach (var itemInfo in itemInfos)
+                    parent._itemInfos.Remove(itemInfo);
+                // 释放列表
+                if (itemInfos != null)
+                    ListPool<ItemInfo>.Release(itemInfos);
+
+            }
+
+            /// <summary>
+            /// 页面显示时
+            /// </summary>
+            /// <param name="quickVisit">快速浏览(用于区分动画和逻辑，为真时，不应当在动画事件后继续加载数据)</param>
+            /// <code>
+            /// 页面中的成员会自动在非快速浏览模式下自动执行相应的激活函数
+            /// </code>
+            protected internal abstract void OnPageVisible(bool quickVisit);
+            
+            /// <summary>
+            /// 页面隐藏时
+            /// </summary>
+            /// <param name="quickVisit">快速浏览(用于区分动画和逻辑，为真时，不应当在动画事件后继续加载数据)</param>
+            /// <code>
+            /// 页面中的成员会自动在非快速浏览模式下自动执行相应的激活函数
+            /// </code>
+            protected internal abstract void OnPageInvisible(bool quickVisit);
+
+            #endregion
+
+            /// <summary>
+            /// 传递子项激活回调事件
+            /// </summary>
+            protected internal virtual void CallChildItemVisible()
+            {
+                itemInfos
+                    .Where(a => a != null)
+                    .ForEachDo(itemInfo => itemInfo.OnItemVisible());
+            }
+            
+            /// <summary>
+            /// 传递子项非激活回调事件
+            /// </summary>
+            protected internal virtual void CallChildItemInvisible()
+            {
+                itemInfos
+                    .Where(a => a != null)
+                    .ForEachDo(itemInfo => itemInfo.OnItemInvisible());
+            }
+            
+            public override string ToString()
+            {
+                return $"[{nameof(PageInfo)}] ({name})";
+            }
+        }
+
+        /// <summary>
+        /// 项目信息
+        /// </summary>
+        [Serializable]
+        public abstract class ItemInfo
+        {
+            #region 字段属性
+
+#if ODIN_INSPECTOR
+            [LabelText("项目名称")]
+#endif
+            public string name = DateTime.Now.Ticks.ToString();
+
+            /// <summary>
+            /// 从零开始计数的项目下标
+            /// </summary>
+#if ODIN_INSPECTOR
+            [LabelText("项目索引[0, n]")]
+#endif
+            public int itemNumber { get; internal set; }
+
+            #endregion
+
+            #region 生命周期
+
+            /// <summary>
+            /// 当项目显示时
+            /// </summary>
+            /// <code>
+            /// 这会在页面显示之后执行
+            /// </code>
+            protected internal abstract void OnItemVisible();
+
+            /// <summary>
+            /// 当项目隐藏时
+            /// </summary>
+            /// <code>
+            /// 这会在页面关闭之前执行
+            /// </code>
+            protected internal abstract void OnItemInvisible();
+
+            #endregion
+
+            
+            /// <summary>
+            /// 是否通过过滤器
+            /// </summary>
+            /// <param name="manager">传入管理器，建议将过滤器放在管理器中，然后具体的通过规则写在这里，根据对象的不同，通过的规则都不一样。</param>
+            /// <returns></returns>
+            public virtual bool PassFilter(XericFlipPageIndexVesselBase manager)
+            {
+                return true;
+            }
+            
+            public override string ToString()
+            {
+                return $"[{nameof(ItemInfo)}] ({name})";
+            }
+        }
+
+        #endregion
+
     }
 }

@@ -6,7 +6,7 @@ using Object = UnityEngine.Object;
 namespace XericUI.Core.Vessel
 {
     [Serializable]
-    public class ObjectVessel<T0, T1> : VesselBase
+    public sealed class ObjectVessel<T0, T1> : VesselBase
         where T0 : Object
         where T1 : Object
     {
