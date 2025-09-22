@@ -1,11 +1,11 @@
 # Changelog
-All notable changes to this package will be documented in this file.
 
-The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
-and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
+## [Unreales] 
+
+添加布局组件`Xeric Horizontal & Vertical Layout Group`  
+添加原生自带具有可见性剔除的滚动视图组件`XericScrollRect`  
 
 ## [0.1.0] - 2025-07-14
 
-### This is the first release of *\<XericUIActionVessel\>*.
-
-*Short description of this release*
+添加翻页管理数据虚拟化组件`FlipPageManager`  
+添加支持使用类型限定的Unity界面组件容器`ObjectVessel`  
