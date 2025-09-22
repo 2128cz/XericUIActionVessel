@@ -92,7 +92,8 @@ namespace XericUI.OverrideLayout
         {
             if (!enableListScreening)
                 return layoutIgnoreInactive && !target.gameObject.activeInHierarchy;
-            return blackListMode ? BlackListContains(target) : !WhiteListContains(target);
+            return (blackListMode ? BlackListContains(target) : !WhiteListContains(target)) || 
+                   (layoutIgnoreInactive && !target.gameObject.activeInHierarchy);
         }
 
         protected bool WhiteListContains(RectTransform target)

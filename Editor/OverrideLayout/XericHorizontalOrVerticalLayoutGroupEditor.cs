@@ -43,13 +43,7 @@ namespace XericUIEditor.OverrideLayout
                     EditorGUILayout.PropertyField(whiteList_list, EditorGUIUtility.TrTextContent("White List"));
                 EditorGUI.indentLevel--;
             }
-            else
-            {
-                EditorGUI.indentLevel++;
-                EditorGUILayout.PropertyField(ignoreInvisible, true);
-                EditorGUI.indentLevel--;
-            }
-
+            EditorGUILayout.PropertyField(ignoreInvisible, true);
             serializedObject.ApplyModifiedProperties();
         }
     }
