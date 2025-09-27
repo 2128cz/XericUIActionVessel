@@ -4,8 +4,10 @@ using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
-using XericLibraryEditor.Debug;
 
+#if UNITY_EDITOR
+using XericLibraryEditor.Debug;
+#endif
 #if ODIN_INSPECTOR
 using Sirenix.OdinInspector;
 #endif

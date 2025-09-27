@@ -8,9 +8,12 @@ using UnityEngine.Serialization;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
 using XericLibrary.Runtime.Type.SpatialAlgorithm;
-using XericLibraryEditor.Debug;
 using XericUI.Core.Base;
 using XericUI.OverrideLayout;
+
+#if UNITY_EDITOR
+using XericLibraryEditor.Debug;
+#endif
 #if ODIN_INSPECTOR
 using Sirenix.OdinInspector;
 #endif

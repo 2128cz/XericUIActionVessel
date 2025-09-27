@@ -127,7 +127,7 @@ namespace XericUI.Core.Base
         #region 脏处理
 
         /// <summary>
-        /// 设置层级脏
+        /// 设置层级脏()
         /// </summary>
         public void SetHierarchyDirty()
         {
@@ -136,6 +136,7 @@ namespace XericUI.Core.Base
             _graphicRaycaster = null;
             _hierarchyDirty = true;
         }
+        
         /// <summary>
         /// 复位层级脏
         /// </summary>
