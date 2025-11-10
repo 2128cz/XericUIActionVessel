@@ -35,5 +35,17 @@ namespace XericUI.Core.Vessel
             this.target0 = target0;
             this.target1 = target1;
         }
+        
+        
+        public static implicit operator T0(ObjectVessel<T0, T1> value)
+        {
+            return (T0)value.target0;
+        }
+        
+        
+        public static implicit operator T1(ObjectVessel<T0, T1> value)
+        {
+            return (T1)value.target1;
+        }
     }
 }

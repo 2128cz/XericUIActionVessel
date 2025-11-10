@@ -1,4 +1,5 @@
 ﻿using System;
+using OfficeOpenXml.FormulaParsing.Excel.Operators;
 using UnityEngine;
 using Object = UnityEngine.Object;
 
@@ -33,6 +34,11 @@ namespace XericUI.Core.Vessel
         public ObjectVessel(Object target)
         {
             this.target = target;
+        }
+
+        public static implicit operator T0(ObjectVessel<T0> value)
+        {
+            return (T0)value.target;
         }
     }
 }
