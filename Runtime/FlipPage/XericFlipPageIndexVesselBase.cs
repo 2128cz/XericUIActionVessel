@@ -114,18 +114,13 @@ namespace XericUI.FlipPage
         /// <summary>
         /// 分布于所有页面上的所有数据项目
         /// </summary>
-        public IEnumerable<ItemInfo> AllItemInfos => _pageInfos.SelectMany(page => page.itemInfos);
+        public IEnumerable<ItemInfo> AllItemInfos => _pageInfos.SelectMany(page => page.ItemInfos);
 
         /// <summary>
         /// 页面默认最大项目数量
         /// </summary>
         protected int DefaultItemCountPerPage
             => defaultItemCountPerPage < 0 ? int.MaxValue : defaultItemCountPerPage;
-
-
-        private List<ItemInfo> _backupItemInfos;
-        public List<ItemInfo> BackItemInfos => _backupItemInfos;
-
 
         /// <summary>
         /// 分布所有页面上的所有项目数量
@@ -220,12 +215,13 @@ namespace XericUI.FlipPage
             var lastPageIndex = currentPageIndex;
             var quickPage = false; // 快速浏览页
             bool visitOffsetDirIsNext;
+            var lastPage = CurrentPageNode;
             // 如果节点不存在，通过索引直接命中
             if (CurrentPageNode == null)
             {
                 CurrentPageNode = _pageInfos.GetOrderNode().LandedIndex(currentPageIndex);
                 if (CurrentPageNode == null)
-                    Debug.LogError($"索引{currentPageIndex}下的节点不存在, 请检查后再试", this);
+                    Debug.LogError($"索引{currentPageIndex}下的节点不存在(总数{_pageInfos.Count}页), 请检查后再试", this);
                 else
                     Currentpage.OnPageVisible(false);
             }
@@ -258,10 +254,27 @@ namespace XericUI.FlipPage
             {
                 Currentpage.OnPageInvisible(quickPage);
                 quickPage = !isEndPage;
-                CurrentPageNode = visitOffsetDirIsNext ? CurrentPageNode.Next : CurrentPageNode.Previous;
-                if (CurrentPageNode == null && canPassIndexBoundary)
+                // 先检查页面，再执行委托
+                var nextPage = visitOffsetDirIsNext ? CurrentPageNode.Next : CurrentPageNode.Previous;
+                // 如果都正常，执行生命周期
+                if (nextPage is { Value: not null })
+                {
+                    nextPage.Value.OnPageVisible(quickPage);
+                }
+                // 如果跳转失败，说明到头了，检查是否允许循环索引
+                else if (canPassIndexBoundary)
+                {
                     CurrentPageNode = visitOffsetDirIsNext ? _pageInfos.First : _pageInfos.Last;
-                Currentpage.OnPageVisible(quickPage);
+                    CurrentPageNode.Value.OnPageVisible(quickPage);
+                }
+                // 不允许循环索引就报个错然后什么都不做
+                else
+                {
+                    Debug.LogWarning("翻页超出范围，由于页面不允许循环索引，所以现在翻到了空页面");
+                    CurrentPageNode = null;
+                    return;
+                }
+                CurrentPageNode = nextPage;
             }
         }
 
@@ -324,8 +337,7 @@ namespace XericUI.FlipPage
 #endif
         public void FlipPageToEnd()
             => FlipPage(_pageInfos.Count - 1);
-
-
+        
         /// <summary>
         /// 添加页面在开头
         /// </summary>
@@ -335,7 +347,15 @@ namespace XericUI.FlipPage
         public virtual PageInfo AddPage(PageInfo pageInfo = null, bool isFirstOtherwiseLast = false)
         {
             if (pageInfo == null)
+            {
                 pageInfo = PageInfoPool.Get();
+                // 执行页面生命周期
+                if (!GetPageInfoWithoutCollection(pageInfo))
+                {
+                    Debug.LogError("创建的新页面意外的发生流程错误？");
+                    return pageInfo;
+                }
+            }
             else
                 GetPageInfo(pageInfo);
             
@@ -353,8 +373,6 @@ namespace XericUI.FlipPage
                 // 添加页面
                 _pageInfos.AddLast(pageInfo);
             }
-            // 执行页面生命周期
-            pageInfo.OnPageCreated(this);
             // 刷新页面
             FlipPage(currentPageIndex, true);
             return pageInfo;
@@ -403,17 +421,6 @@ namespace XericUI.FlipPage
         }
 
         /// <summary>
-        /// 仅移除页面，不会移除数据
-        /// </summary>
-        /// <param name="pageIndex"></param>
-        public void RemovePageWithoutItems(int pageIndex)
-        {
-            BackupItemsFormPages();
-            RemovePage(pageIndex);
-            RestoreItemsToPages();
-        }
-
-        /// <summary>
         /// 获取索引下的页面
         /// </summary>
         /// <param name="pageIndex"></param>
@@ -447,14 +454,18 @@ namespace XericUI.FlipPage
         {
             if (CurrentPageNode != null)
                 Currentpage.OnPageInvisible(true);
-            foreach (var pageInfo in _pageInfos)
+
+            var tempPageInfo = ListPool<PageInfo>.Get();
+            tempPageInfo.AddRange(_pageInfos);
+            foreach (var pageInfo in tempPageInfo)
             {
-                pageInfo.itemInfos.Clear();
-                if (resetPool)
+                pageInfo.ItemInfos.Clear();
+                if (!resetPool)
                     PageInfoPool.Release(pageInfo);
                 else
-                    ReleasePageInfo(pageInfo); // 直接调用释放事件，不走对象池，不知道这样能不能减少重复的入栈开销？还是会让gc变得碎片化？
+                    ReleasePageInfoWithoutCollection(pageInfo); // 直接调用释放事件
             }
+            ListPool<PageInfo>.Release(tempPageInfo);
             // 清空池
             if (resetPool)
                 PageInfoPool.Clear();
@@ -541,9 +552,10 @@ namespace XericUI.FlipPage
         /// 定义对象池如何执行获取页面后的事件
         /// </summary>
         /// <param name="info"></param>
-        protected virtual void GetPageInfo(PageInfo info)
+        protected void GetPageInfo(PageInfo info)
         {
-            info.pageNumber = 0;
+            if (!GetPageInfoWithoutCollection(info))
+                return;
             _pageInfos.AddLast(info);
         }
 
@@ -551,8 +563,39 @@ namespace XericUI.FlipPage
         /// 定义对象池如何执行释放页面后的事件
         /// </summary>
         /// <param name="info"></param>
-        protected virtual void ReleasePageInfo(PageInfo info)
+        protected void ReleasePageInfo(PageInfo info)
         {
+            if (!ReleasePageInfoWithoutCollection(info))
+                return;
+            _pageInfos.Remove(info);
+        }
+
+        /// <summary>
+        /// 定义对象池如何执行获取页面后面的事件，但不包含对集合的操作
+        /// </summary>
+        /// <param name="info"></param>
+        protected virtual bool GetPageInfoWithoutCollection(PageInfo info)
+        {
+            if (!info.IsAlreadyRelease)
+            {
+                Debug.LogError("流程错误，页面尝试重复获取，请检查代码流程");
+                return false;
+            }
+            info.OnPageCreated(this);
+            return true;
+        }
+        
+        /// <summary>
+        /// 定义对象池如何执行释放页面后的事件，但不包含对集合的操作
+        /// </summary>
+        /// <param name="info"></param>
+        protected virtual bool ReleasePageInfoWithoutCollection(PageInfo info)
+        {
+            if (info.IsAlreadyRelease)
+            {
+                Debug.LogError("流程错误，页面尝试重复释放，请检查代码流程");
+                return false;
+            }
             if (CurrentPageNode != null && Currentpage == info)
             {
                 info.OnPageInvisible(true);
@@ -561,6 +604,7 @@ namespace XericUI.FlipPage
 
             info.OnPageDestroy(this);
             _pageInfos.Remove(info);
+            return true;
         }
 
         /// <summary>
@@ -599,23 +643,25 @@ namespace XericUI.FlipPage
         /// 添加数据项目
         /// </summary>
         /// <remarks>
-        /// 添加项目到页面中，
+        /// 添加项目到页面中
         /// </remarks>
         public virtual void AddItem(ItemInfo item, Func<PageInfo> customGetPage = null)
         {
             var page = _pageInfos.Count <= 0 ? null : _pageInfos.Last.Value;
             if (page != null &&
                 page.CheckPageAnyLack(item) &&
-                page.itemInfos.Count < DefaultItemCountPerPage)
+                page.ItemInfos.Count < DefaultItemCountPerPage)
             {
-                page.itemInfos.Add(item);
+                page.ItemInfos.Add(item);
                 _itemInfos.Add(item);
                 return;
             }
 
             // 新建一个页面存放数据
             page = customGetPage == null ? PageInfoPool.Get() : customGetPage();
-            page.itemInfos.Add(item);
+            if (customGetPage == null)
+                _pageInfos.AddLast(page);
+            page.ItemInfos.Add(item);
             _itemInfos.Add(item);
         }
 
@@ -660,73 +706,7 @@ namespace XericUI.FlipPage
         /// <returns></returns>
         public bool Contains(ItemInfo item)
             => _itemInfos.Contains(item);
-
-
-        /// <summary>
-        /// 获取备份所有数据项目
-        /// </summary>
-        /// <param name="backupAtLocal">是否在本地备份？（默认启用，启用后返回的枚举器内容来自备份数据，允许推迟处理过程，但也会覆盖上一次备份）</param>
-        /// <typeparam name="T"></typeparam>
-        /// <returns></returns>
-        public IEnumerable<T> BackupItemsFormPages<T>(bool backupAtLocal = true)
-            where T : ItemInfo
-        {
-            if (backupAtLocal)
-            {
-                BackupItemsFormPages();
-                return _backupItemInfos.OfType<T>();
-            }
-
-            return AllItemInfos.OfType<T>();
-        }
-
-        /// <summary>
-        /// 备份所有数据项目
-        /// </summary>
-        public List<ItemInfo> BackupItemsFormPages()
-        {
-            _backupItemInfos = AllItemInfos.ToList();
-            return _backupItemInfos;
-        }
-
-        /// <summary>
-        /// 重排所有数据项目（从备份中恢复数据）
-        /// </summary>
-        public void RestoreItemsToPages()
-            => RestoreItemsToPages(_backupItemInfos);
-
-        /// <summary>
-        /// 重排所有数据项目（基于备份数据应用过滤器的数据）
-        /// </summary>
-        public void RestoreItemsByFilterToPages()
-            => RestoreItemsToPages(_backupItemInfos.Where(a => a.PassFilter(this)).ToList());
-
-        /// <summary>
-        /// 重排所有数据项目（从给定备份中恢复数据）
-        /// </summary>
-        /// <param name="overrideDatas"></param>
-        /// <param name="customGetPage">重新排列涉及页面布局整理</param>
-        /// <param name="allowClear"></param>
-        /// <typeparam name="TItemInfo"></typeparam>
-        public void RestoreItemsToPages<TItemInfo>(List<TItemInfo> overrideDatas, Func<PageInfo> customGetPage = null,
-            bool allowClear = true)
-            where TItemInfo : ItemInfo
-        {
-            var collectionInvalid = overrideDatas is not { Count: > 0 };
-            if (collectionInvalid && !allowClear)
-            {
-                Debug.LogError($"当前重排数据期望使用一个有效的数据对象列表，如希望将数据重置为空，可以使用Clear方法，或重新允许重排操作清空列表。", this);
-                return;
-            }
-
-            // 清空页面
-            ClearPages();
-            if (collectionInvalid) return;
-            AddItems(overrideDatas, customGetPage);
-            FlipPage(0);
-            return;
-        }
-
+        
         #endregion
 
         #region 类内类型
@@ -750,11 +730,18 @@ namespace XericUI.FlipPage
             /// <summary>
             /// 页面内项目列表
             /// </summary>
+            [SerializeField]
 #if ODIN_INSPECTOR
             [LabelText("页面项目信息")]
 #endif
-            public List<ItemInfo> itemInfos;
-
+            private List<ItemInfo> _itemInfos;
+            
+            public List<ItemInfo> ItemInfos
+            {
+                get => _itemInfos ??= ListPool<ItemInfo>.Get();
+                set => _itemInfos = value;
+            }
+            
             /// <summary>
             /// 从零开始计数的页面下标
             /// </summary>
@@ -765,6 +752,11 @@ namespace XericUI.FlipPage
 
             public bool pageActive;
 
+            /// <summary>
+            /// 随生命周期标识当前是否已经被释放
+            /// </summary>
+            public bool IsAlreadyRelease { get; internal set; } = true;
+
             #endregion
 
             #region 生命周期
@@ -774,8 +766,8 @@ namespace XericUI.FlipPage
             /// </summary>
             protected internal virtual void OnPageCreated(XericFlipPageIndexVesselBase parent)
             {
-                // 获取列表
-                itemInfos = ListPool<ItemInfo>.Get();
+                IsAlreadyRelease = false;
+                pageNumber = 0;
             }
 
             /// <summary>
@@ -783,12 +775,16 @@ namespace XericUI.FlipPage
             /// </summary>
             protected internal virtual void OnPageDestroy(XericFlipPageIndexVesselBase parent)
             {
+                IsAlreadyRelease = true;
                 // 从哈希表中移除
-                foreach (var itemInfo in itemInfos)
+                foreach (var itemInfo in ItemInfos)
                     parent._itemInfos.Remove(itemInfo);
                 // 释放列表
-                if (itemInfos != null)
-                    ListPool<ItemInfo>.Release(itemInfos);
+                if (ItemInfos != null)
+                {
+                    ListPool<ItemInfo>.Release(ItemInfos);
+                    ItemInfos = null; 
+                }
             }
 
             /// <summary>
@@ -821,7 +817,7 @@ namespace XericUI.FlipPage
             /// </remarks>
             protected internal virtual void CallChildItemVisible()
             {
-                itemInfos
+                ItemInfos
                     .Where(a => a != null)
                     .ForEachDo(itemInfo => itemInfo.OnItemVisible());
             }
@@ -834,7 +830,7 @@ namespace XericUI.FlipPage
             /// </remarks>
             protected internal virtual void CallChildItemInvisible()
             {
-                itemInfos
+                ItemInfos
                     .Where(a => a != null)
                     .ForEachDo(itemInfo => itemInfo.OnItemInvisible());
             }
@@ -896,18 +892,7 @@ namespace XericUI.FlipPage
             protected internal abstract void OnItemInvisible();
 
             #endregion
-
-
-            /// <summary>
-            /// 是否通过过滤器
-            /// </summary>
-            /// <param name="manager">传入管理器，建议将过滤器放在管理器中，然后具体的通过规则写在这里，根据对象的不同，通过的规则都不一样。</param>
-            /// <returns></returns>
-            public virtual bool PassFilter(XericFlipPageIndexVesselBase manager)
-            {
-                return true;
-            }
-
+            
             public override string ToString()
             {
                 return $"[{nameof(ItemInfo)}] ({name})";

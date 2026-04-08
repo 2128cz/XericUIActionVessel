@@ -217,7 +217,7 @@ namespace XericUI.FlipPage
         protected override void Awake()
         {
             // 使用默认的
-            HowToCreatPageInfo = () => AddPage(new PageComponentInfo());
+            HowToCreatPageInfo = () => AddPage();
             
             base.Awake();
             
@@ -270,6 +270,7 @@ namespace XericUI.FlipPage
             RefreshPageIndeButtonState();
         }
 
+        
         public override PageInfo AddPage(PageInfo pageInfo = null, bool isFirstOtherwiseLast = false)
         {
             if (pageInfo is not PageComponentInfo componentPageInfo)
