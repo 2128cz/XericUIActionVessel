@@ -73,6 +73,9 @@ namespace XericUI.FlipPage
 
         #region 字段属性
 
+        /// <summary>
+        /// 页面对象池，对象池仅管理页面本身，不参与任何数据容器的管理。
+        /// </summary>
         protected ObjectPool<PageInfo> PageInfoPool = null;
         public Func<PageInfo> HowToCreatPageInfo = () => throw new Exception("需要翻页管理器实现相应的页面创建逻辑，并重写添加默认数据方法后才可以使用。");
 
@@ -337,7 +340,7 @@ namespace XericUI.FlipPage
 #endif
         public void FlipPageToEnd()
             => FlipPage(_pageInfos.Count - 1);
-        
+
         /// <summary>
         /// 添加页面在开头
         /// </summary>
@@ -347,17 +350,7 @@ namespace XericUI.FlipPage
         public virtual PageInfo AddPage(PageInfo pageInfo = null, bool isFirstOtherwiseLast = false)
         {
             if (pageInfo == null)
-            {
                 pageInfo = PageInfoPool.Get();
-                // 执行页面生命周期
-                if (!GetPageInfoWithoutCollection(pageInfo))
-                {
-                    Debug.LogError("创建的新页面意外的发生流程错误？");
-                    return pageInfo;
-                }
-            }
-            else
-                GetPageInfo(pageInfo);
             
             if (isFirstOtherwiseLast)
             {
@@ -373,6 +366,9 @@ namespace XericUI.FlipPage
                 // 添加页面
                 _pageInfos.AddLast(pageInfo);
             }
+            // GetPageInfo(pageInfo);
+            // 执行页面生命周期
+            pageInfo.OnPageCreated(this);
             // 刷新页面
             FlipPage(currentPageIndex, true);
             return pageInfo;
@@ -384,10 +380,6 @@ namespace XericUI.FlipPage
         /// <param name="pageInfo"></param>
         public virtual void RemovePage(PageInfo pageInfo)
         {
-            // 释放页面
-            PageInfoPool.Release(pageInfo);
-            // 刷新页面
-            FlipPage(currentPageIndex, true);
             var index = PageInfos.IndexOf(a => a == pageInfo);
             RemovePage(index);
         }
@@ -405,7 +397,7 @@ namespace XericUI.FlipPage
 
             // 获取页面节点
             var page = _pageInfos.GetOrderNode().LandedIndex(pageIndex);
-            // 更新后面页面的索引
+            // 更新删除后页面的索引
             var tempPage = page;
             var tempPageNumber = page.Value.pageNumber;
             while (tempPage.Next != null)
@@ -414,8 +406,6 @@ namespace XericUI.FlipPage
                 tempPage.Value.pageNumber = tempPageNumber++;
             }
             
-            // 释放页面
-            PageInfoPool.Release(page.Value);
             // 刷新页面
             FlipPage(currentPageIndex, true);
         }
@@ -460,10 +450,7 @@ namespace XericUI.FlipPage
             foreach (var pageInfo in tempPageInfo)
             {
                 pageInfo.ItemInfos.Clear();
-                if (!resetPool)
-                    PageInfoPool.Release(pageInfo);
-                else
-                    ReleasePageInfoWithoutCollection(pageInfo); // 直接调用释放事件
+                PageInfoPool.Release(pageInfo);
             }
             ListPool<PageInfo>.Release(tempPageInfo);
             // 清空池
@@ -552,49 +539,29 @@ namespace XericUI.FlipPage
         /// 定义对象池如何执行获取页面后的事件
         /// </summary>
         /// <param name="info"></param>
-        protected void GetPageInfo(PageInfo info)
+        protected virtual void GetPageInfo(PageInfo info)
         {
-            if (!GetPageInfoWithoutCollection(info))
+            // 检查代码中重复调用
+            if (!info.IsAlreadyRelease)
+            {
+                Debug.LogError($"流程错误，页面尝试重复获取，请检查代码流程({info.GetHashCode():X16})\n_>{info.name}");
                 return;
-            _pageInfos.AddLast(info);
+            }
+            info.OnPageCreated(this);
+            return;
         }
 
         /// <summary>
         /// 定义对象池如何执行释放页面后的事件
         /// </summary>
         /// <param name="info"></param>
-        protected void ReleasePageInfo(PageInfo info)
+        protected virtual void ReleasePageInfo(PageInfo info)
         {
-            if (!ReleasePageInfoWithoutCollection(info))
-                return;
-            _pageInfos.Remove(info);
-        }
-
-        /// <summary>
-        /// 定义对象池如何执行获取页面后面的事件，但不包含对集合的操作
-        /// </summary>
-        /// <param name="info"></param>
-        protected virtual bool GetPageInfoWithoutCollection(PageInfo info)
-        {
-            if (!info.IsAlreadyRelease)
-            {
-                Debug.LogError("流程错误，页面尝试重复获取，请检查代码流程");
-                return false;
-            }
-            info.OnPageCreated(this);
-            return true;
-        }
-        
-        /// <summary>
-        /// 定义对象池如何执行释放页面后的事件，但不包含对集合的操作
-        /// </summary>
-        /// <param name="info"></param>
-        protected virtual bool ReleasePageInfoWithoutCollection(PageInfo info)
-        {
+            // 检查代码中重复调用
             if (info.IsAlreadyRelease)
             {
                 Debug.LogError("流程错误，页面尝试重复释放，请检查代码流程");
-                return false;
+                return;
             }
             if (CurrentPageNode != null && Currentpage == info)
             {
@@ -604,7 +571,7 @@ namespace XericUI.FlipPage
 
             info.OnPageDestroy(this);
             _pageInfos.Remove(info);
-            return true;
+            return;
         }
 
         /// <summary>
@@ -623,11 +590,11 @@ namespace XericUI.FlipPage
         /// 添加一组数据项目(方法待优化)
         /// </summary>
         /// <param name="items"></param>
-        /// <param name="customGetPage"></param>
-        public virtual void AddItems(IEnumerable<ItemInfo> items, Func<PageInfo> customGetPage = null)
+        /// <param name="customPage"></param>
+        public virtual void AddItems(IEnumerable<ItemInfo> items, PageInfo customPage = null)
         {
             foreach (var item in items)
-                AddItem(item, customGetPage);
+                AddItem(item, customPage);
         }
 
         /// <summary>
@@ -637,7 +604,7 @@ namespace XericUI.FlipPage
         /// <typeparam name="T">提供一个指定的数据类型，默认添加这个类型的页面</typeparam>
         public virtual void AddItem<T>(ItemInfo item)
             where T : PageInfo, new()
-            => AddItem(item, () => new T());
+            => AddItem(item, new T());
 
         /// <summary>
         /// 添加数据项目
@@ -645,7 +612,7 @@ namespace XericUI.FlipPage
         /// <remarks>
         /// 添加项目到页面中
         /// </remarks>
-        public virtual void AddItem(ItemInfo item, Func<PageInfo> customGetPage = null)
+        public virtual void AddItem(ItemInfo item, PageInfo customPage = null)
         {
             var page = _pageInfos.Count <= 0 ? null : _pageInfos.Last.Value;
             if (page != null &&
@@ -658,9 +625,8 @@ namespace XericUI.FlipPage
             }
 
             // 新建一个页面存放数据
-            page = customGetPage == null ? PageInfoPool.Get() : customGetPage();
-            if (customGetPage == null)
-                _pageInfos.AddLast(page);
+            page = customPage ?? PageInfoPool.Get();
+            AddPage(page);
             page.ItemInfos.Add(item);
             _itemInfos.Add(item);
         }
@@ -767,7 +733,6 @@ namespace XericUI.FlipPage
             protected internal virtual void OnPageCreated(XericFlipPageIndexVesselBase parent)
             {
                 IsAlreadyRelease = false;
-                pageNumber = 0;
             }
 
             /// <summary>

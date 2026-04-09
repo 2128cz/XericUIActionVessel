@@ -217,7 +217,7 @@ namespace XericUI.FlipPage
         protected override void Awake()
         {
             // 使用默认的
-            HowToCreatPageInfo = () => AddPage();
+            HowToCreatPageInfo = () => new PageComponentInfo();
             
             base.Awake();
             
@@ -231,8 +231,13 @@ namespace XericUI.FlipPage
                 buttoneEndPage.Target.onClick.AddListener(FlipPageToEnd);
             if (inputFieldFlipPageIndex.IsValidVessel()) // 翻到指定
                 inputFieldFlipPageIndex.Target.onValueChanged.AddListener(s => FlipPage(s));
-            pageButtonPool.Init();
-
+            pageButtonPool.Initialize();
+            pageButtonPool.joinOnRelease += o =>
+            {
+                SwitchSelectableVesselType(o.GetComponent<Selectable>(), 
+                    button => button.onClick.RemoveAllListeners(),
+                    toggle => toggle.onValueChanged.RemoveAllListeners());
+            };
             // 根据组件类型创建相关内容
             // var prefabSelectable = pageButtonPool.Prefab.GetComponent<Selectable>();
         }
@@ -269,7 +274,6 @@ namespace XericUI.FlipPage
 
             RefreshPageIndeButtonState();
         }
-
         
         public override PageInfo AddPage(PageInfo pageInfo = null, bool isFirstOtherwiseLast = false)
         {
@@ -334,11 +338,16 @@ namespace XericUI.FlipPage
             pageSelectButton.Add(pageIndexSelectable);
 
             SwitchSelectableVesselType(pageIndexSelectable.Target0,
-                button => { button.onClick.AddListener(() => FlipPage(pageInfo.pageNumber)); },
+                button =>
+                {
+                    button.onClick.RemoveAllListeners();
+                    button.onClick.AddListener(() => FlipPage(pageInfo.pageNumber));
+                },
                 toggle =>
                 {
-                    toggle.isOn = pageInfo.pageNumber == currentPageIndex;
+                    toggle.SetIsOnWithoutNotify(pageInfo.pageNumber == currentPageIndex);
                     toggle.group = ToggleGroup;
+                    toggle.onValueChanged.RemoveAllListeners();
                     toggle.onValueChanged.AddListener(b =>
                     {
                         if (b) FlipPage(pageInfo.pageNumber);
@@ -436,6 +445,8 @@ namespace XericUI.FlipPage
             }
         }
 
+        
+        
         /// <summary>
         /// 处理可选对象类型.(如果要支持更多的类型，应优先改此方法，以便获得其他所有位置的编译器提示)
         /// </summary>
@@ -443,7 +454,7 @@ namespace XericUI.FlipPage
         /// <param name="asButton">如果是按钮</param>
         /// <param name="asToggle">如果是单选项</param>
         /// <returns></returns>
-        protected static bool SwitchSelectableVesselType(Selectable selectable, 
+        private static bool SwitchSelectableVesselType(Selectable selectable, 
             Action<Button> asButton = null,
             Action<Toggle> asToggle = null)
         {
