@@ -70,18 +70,19 @@ namespace XericUI
             EditorGUILayout.PropertyField(m_GraphicProperty);
             EditorGUILayout.PropertyField(m_TextProperty);
             EditorGUILayout.PropertyField(m_EnableTextColorTransitionProperty);
-            if (EditorGUILayout.BeginFadeGroup(m_EnableTextColorTransitionProperty.boolValue ? 1 : 0))
+            if (m_EnableTextColorTransitionProperty.boolValue)
             {
+                EditorGUI.indentLevel++;
                 EditorGUILayout.PropertyField(m_TextTransitionColorModeProperty);
+                EditorGUI.indentLevel--;
             }
-            EditorGUILayout.EndFadeGroup();
-
             EditorGUILayout.PropertyField(m_enableTextContextTransitionProperty);
-            if (EditorGUILayout.BeginFadeGroup(m_enableTextContextTransitionProperty.boolValue ? 1 : 0))
+            if (m_enableTextContextTransitionProperty.boolValue)
             {
+                EditorGUI.indentLevel++;
                 EditorGUILayout.PropertyField(m_textTransitionContextModeProperty);
+                EditorGUI.indentLevel--;
             }
-            EditorGUILayout.EndFadeGroup();
 
             EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(m_GroupProperty);
