@@ -125,7 +125,7 @@ namespace XericUI.DynamicActivitiesImpact
                 
             Gizmos.color = Color.yellow;
             MacroGizmosDraw.DrawPolygonLineByPointArray(vertex3);
-            MacroGizmosDraw.DrawGizmosRectLinkLine(vertex1, vertex2, Color.grey, Color.cyan, true);
+            MacroGizmosDraw.DrawGizmos2RectLinkCube(vertex1, vertex2, Color.grey, Color.cyan, true);
 
         }
 #endif

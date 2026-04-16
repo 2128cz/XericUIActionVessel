@@ -4,8 +4,10 @@ using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
+using XericUI.Helper;
 
 #if UNITY_EDITOR
+using UnityEditor;
 using XericLibraryEditor.Debug;
 #endif
 #if ODIN_INSPECTOR
@@ -14,7 +16,7 @@ using Sirenix.OdinInspector;
 
 namespace XericUI.OverrideLayout
 {
-    [AddComponentMenu("Xeric UI Vessel/UI/Xeric Scroll Rect", 50)]
+    [AddComponentMenu("Xeric UI Vessel/ScrollRect", 50)]
     [SelectionBase]
     [ExecuteAlways]
     [DisallowMultipleComponent]
@@ -101,7 +103,8 @@ namespace XericUI.OverrideLayout
             vertex3[3] = new Vector3(rect.max.x + scale.x, rect.min.y - scale.y, vertex2[3].z); 
             
             Gizmos.color = Color.yellow;
-            MacroGizmosDraw.DrawGizmosRectLinkLine(vertex1, vertex3, Color.grey, Color.cyan, true);
+            MacroGizmosDraw.DrawGizmos2RectLinkCube(vertex1, vertex3, Color.grey, Color.cyan, true);
+            
         }
 #endif
 
@@ -208,6 +211,53 @@ namespace XericUI.OverrideLayout
             _lastActiveSet = nowActiveChildrenSet;
         }
 
+        
+        protected override void SetContentAnchoredPosition(Vector2 position)
+        {
+            base.SetContentAnchoredPosition(position);
+            Debug.Log("123");
+        }
+        
+        #endregion
+        
+        #region 组件替换
+#if UNITY_EDITOR
+        [UnityEditor.MenuItem("CONTEXT/ScrollRect/Replace To XericScrollView", true)]
+        private static bool ValidateReplaceToXeric(UnityEditor.MenuCommand command)
+            => command.context is ScrollRect and not XericScrollRect;
+
+        [UnityEditor.MenuItem("CONTEXT/ScrollRect/Replace To XericScrollView", false, 10)]
+        private static void ReplaceToXeric(UnityEditor.MenuCommand command) 
+            => command.ReplaceCommandContext<ScrollRect, XericScrollRect,
+                (RectTransform Viewport, RectTransform Content, Scrollbar HScrollbar, Scrollbar VScrollbar)>(
+                o =>
+                    (o.viewport, o.content, o.horizontalScrollbar, o.verticalScrollbar),
+                (t, d) =>
+                {
+                    t.viewport = d.Viewport;
+                    t.content = d.Content;
+                    t.horizontalScrollbar = d.HScrollbar;
+                    t.verticalScrollbar = d.VScrollbar;
+                });
+
+        [UnityEditor.MenuItem("CONTEXT/ScrollRect/Replace To ScrollView", true)]
+        private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
+            => command.context is XericScrollRect;
+
+        [UnityEditor.MenuItem("CONTEXT/ScrollRect/Replace To ScrollView", false, 10)]
+        private static void ReplaceToUnity(UnityEditor.MenuCommand command) 
+            => command.ReplaceCommandContext<XericScrollRect, ScrollRect,
+                (RectTransform Viewport, RectTransform Content, Scrollbar HScrollbar, Scrollbar VScrollbar)>(
+                o =>
+                    (o.viewport, o.content, o.horizontalScrollbar, o.verticalScrollbar),
+                (t, d) =>
+                {
+                    t.viewport = d.Viewport;
+                    t.content = d.Content;
+                    t.horizontalScrollbar = d.HScrollbar;
+                    t.verticalScrollbar = d.VScrollbar;
+                });
+#endif
         #endregion
     }
 }
