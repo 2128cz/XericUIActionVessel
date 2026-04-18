@@ -6,6 +6,7 @@ namespace XericUI.Helper
 {
     public static class GridLayoutCalculator
     {
+        public static Vector2 Grid;
         public struct LayoutItem
         {
             public Vector2 position; // anchoredPosition
@@ -18,18 +19,8 @@ namespace XericUI.Helper
         /// <summary>
         /// 计算所有项目的布局
         /// </summary>
-        /// <param name="childCount">子项数量</param>
-        /// <param name="containerSize">所需尺寸</param>
-        /// <param name="cellSize">单元尺寸</param>
-        /// <param name="spacing">单元空隙</param>
-        /// <param name="padding">外围空隙</param>
-        /// <param name="startCorner">起始角</param>
-        /// <param name="startAxis">起始轴</param>
-        /// <param name="constraint">容器尺寸</param>
-        /// <param name="constraintCount">需要的列数</param>
-        /// <param name="childAlignment">子项对齐</param>
-        /// <returns></returns>
         public static List<LayoutItem> CalculateGridLayout(
+            List<LayoutItem> layoutItems,
             int childCount,
             Vector2 containerSize,
             Vector2 cellSize,
@@ -41,7 +32,15 @@ namespace XericUI.Helper
             int constraintCount,
             TextAnchor childAlignment = TextAnchor.UpperLeft)
         {
-            List<LayoutItem> layoutItems = new List<LayoutItem>(childCount);
+            if (layoutItems == null)
+                layoutItems = new List<LayoutItem>();
+            else
+                layoutItems.Clear();
+
+            // 边界保护
+            constraintCount = Mathf.Max(1, constraintCount);
+            cellSize = new Vector2(Mathf.Max(0.1f, cellSize.x), Mathf.Max(0.1f, cellSize.y));
+            spacing = new Vector2(Mathf.Max(0f, spacing.x), Mathf.Max(0f, spacing.y));
 
             // 1. 计算行列数
             int cellCountX, cellCountY;
@@ -53,45 +52,44 @@ namespace XericUI.Helper
             CalculateActualGridDimensions(childCount, cellCountX, cellCountY, constraint, constraintCount,
                 startAxis, out actualCellCountX, out actualCellCountY);
 
-            // 3. 计算所需空间和起始偏移
+            Grid = new Vector2(actualCellCountX, actualCellCountY);
+            
+            // 3. 计算所需空间
             Vector2 requiredSpace = new Vector2(
-                actualCellCountX * cellSize.x + (actualCellCountX - 1) * spacing.x,
-                actualCellCountY * cellSize.y + (actualCellCountY - 1) * spacing.y
+                actualCellCountX * cellSize.x + Mathf.Max(0, actualCellCountX - 1) * spacing.x,
+                actualCellCountY * cellSize.y + Mathf.Max(0, actualCellCountY - 1) * spacing.y
             );
 
-            Vector2 startOffset = new Vector2(
-                GetStartOffset(0, requiredSpace.x, containerSize.x, padding, childAlignment),
-                GetStartOffset(1, requiredSpace.y, containerSize.y, padding, childAlignment)
-            );
+            // 4. 计算起始偏移（关键修复：根据startCorner调整基准点）
+            Vector2 startOffset = CalculateStartOffset(
+                requiredSpace, containerSize, padding, childAlignment, startCorner);
 
-            // 4. 处理特殊情况（约束条件下的子项重新排列）
-            int childrenToMove = 0;
-            if (childCount > constraintCount && constraint != GridLayoutGroup.Constraint.Flexible)
-            {
-                int cellsPerMainAxis = startAxis == GridLayoutGroup.Axis.Horizontal ? cellCountX : cellCountY;
-                if (Mathf.CeilToInt((float)childCount / (float)cellsPerMainAxis) < constraintCount)
-                {
-                    childrenToMove = constraintCount - Mathf.CeilToInt((float)childCount / (float)cellsPerMainAxis);
-                    childrenToMove += Mathf.FloorToInt((float)childrenToMove / ((float)cellsPerMainAxis - 1));
-                    if (childCount % cellsPerMainAxis == 1)
-                        childrenToMove += 1;
-                }
-            }
+            // 5. 处理特殊情况
+            
+            int childrenToMove = CalculateChildrenToMove(childCount, cellCountX, cellCountY, 
+                constraint, constraintCount, startAxis);
 
-            // 5. 计算每个子项的位置
-            int cornerX = (int)startCorner % 2;
-            int cornerY = (int)startCorner / 2;
+            // 6. 计算每个子项的位置
+            int cornerX = (int)startCorner % 2;  // 0=左, 1=右
+            int cornerY = (int)startCorner / 2;  // 0=上, 1=下
 
             for (int i = 0; i < childCount; i++)
             {
-                int positionX, positionY;
-                CalculateItemPosition(i, childCount, cellCountX, cellCountY, startAxis, constraint,
-                    constraintCount, childrenToMove, cornerX, cornerY,
-                    actualCellCountX, actualCellCountY, out positionX, out positionY);
+                int gridX, gridY;
+                CalculateItemGridPosition(i, childCount, cellCountX, cellCountY, startAxis, 
+                    constraint, constraintCount, childrenToMove,
+                    actualCellCountX, actualCellCountY, out gridX, out gridY);
 
+                // 应用corner翻转（关键：这决定了索引0的位置）
+                if (cornerX == 1)
+                    gridX = actualCellCountX - 1 - gridX;
+                if (cornerY == 1)
+                    gridY = actualCellCountY - 1 - gridY;
+
+                // 计算最终位置（固定方向：向右下）
                 Vector2 position = new Vector2(
-                    startOffset.x + (cellSize.x + spacing.x) * positionX,
-                    startOffset.y + (cellSize.y + spacing.y) * positionY
+                    startOffset.x + (cellSize.x + spacing.x) * gridX,
+                    startOffset.y + (cellSize.y + spacing.y) * gridY
                 );
 
                 layoutItems.Add(new LayoutItem
@@ -99,12 +97,140 @@ namespace XericUI.Helper
                     position = position,
                     size = cellSize,
                     indexInGrid = i,
-                    rowIndex = positionY,
-                    columnIndex = positionX
+                    rowIndex = gridY,
+                    columnIndex = gridX
                 });
             }
 
             return layoutItems;
+        }
+
+        // ===== 核心修复：根据startCorner计算起始偏移 =====
+        private static Vector2 CalculateStartOffset(
+            Vector2 requiredSpace,
+            Vector2 containerSize,
+            RectOffset padding,
+            TextAnchor childAlignment,
+            GridLayoutGroup.Corner startCorner)
+        {
+            // 计算每个轴的起始偏移
+            float startX = CalculateAxisStartOffset(
+                0, requiredSpace.x, containerSize.x, padding, childAlignment, startCorner);
+            float startY = CalculateAxisStartOffset(
+                1, requiredSpace.y, containerSize.y, padding, childAlignment, startCorner);
+
+            return new Vector2(startX, startY);
+        }
+
+        private static float CalculateAxisStartOffset(
+            int axis,  // 0=X, 1=Y
+            float requiredSpace,
+            float availableSpace,
+            RectOffset padding,
+            TextAnchor childAlignment,
+            GridLayoutGroup.Corner startCorner)
+        {
+            // 计算包含padding的总需求空间
+            float requiredSpaceWithPadding = requiredSpace + (axis == 0 ? padding.horizontal : padding.vertical);
+            
+            // 计算剩余空间
+            float surplusSpace = availableSpace - requiredSpaceWithPadding;
+            
+            // 获取对齐值（0=左/上, 0.5=中, 1=右/下）
+            float alignmentValue = GetAlignmentOnAxis(axis, childAlignment);
+            
+            // 关键：根据startCorner调整基准点
+            float baseOffset;
+            if (axis == 0)  // X轴
+            {
+                // 如果startCorner在右侧，基准点应该是padding.right
+                int cornerX = (int)startCorner % 2;
+                baseOffset = (cornerX == 0) ? padding.left : (availableSpace - padding.right - requiredSpace);
+            }
+            else  // Y轴
+            {
+                // 如果startCorner在底部，基准点应该是padding.bottom
+                int cornerY = (int)startCorner / 2;
+                baseOffset = (cornerY == 0) ? padding.top : (availableSpace - padding.bottom - requiredSpace);
+            }
+            
+            // 应用对齐（在剩余空间内）
+            return baseOffset + surplusSpace * alignmentValue;
+        }
+
+        private static void CalculateItemGridPosition(
+            int index,
+            int childCount,
+            int cellCountX,
+            int cellCountY,
+            GridLayoutGroup.Axis startAxis,
+            GridLayoutGroup.Constraint constraint,
+            int constraintCount,
+            int childrenToMove,
+            int actualCellCountX,
+            int actualCellCountY,
+            out int gridX,
+            out int gridY)
+        {
+            // 计算基础位置（不考虑corner翻转）
+            if (startAxis == GridLayoutGroup.Axis.Horizontal)
+            {
+                if (constraint == GridLayoutGroup.Constraint.FixedRowCount && 
+                    childCount - index <= childrenToMove)
+                {
+                    gridX = 0;
+                    gridY = constraintCount - (childCount - index);
+                }
+                else
+                {
+                    gridX = index % cellCountX;
+                    gridY = index / cellCountX;
+                }
+            }
+            else
+            {
+                if (constraint == GridLayoutGroup.Constraint.FixedColumnCount && 
+                    childCount - index <= childrenToMove)
+                {
+                    gridX = constraintCount - (childCount - index);
+                    gridY = 0;
+                }
+                else
+                {
+                    gridX = index / cellCountY;
+                    gridY = index % cellCountY;
+                }
+            }
+
+        }
+
+        private static int CalculateChildrenToMove(
+            int childCount,
+            int cellCountX,
+            int cellCountY,
+            GridLayoutGroup.Constraint constraint,
+            int constraintCount,
+            GridLayoutGroup.Axis startAxis)
+        {
+            if (constraint == GridLayoutGroup.Constraint.Flexible || childCount <= constraintCount)
+                return 0;
+
+            int cellsPerMainAxis = startAxis == GridLayoutGroup.Axis.Horizontal ? cellCountX : cellCountY;
+            
+            if (cellsPerMainAxis <= 0)
+                return 0;
+
+            float rowsNeeded = Mathf.CeilToInt((float)childCount / (float)cellsPerMainAxis);
+            if (rowsNeeded >= constraintCount)
+                return 0;
+
+            int childrenToMove = constraintCount - (int)rowsNeeded;
+            childrenToMove += Mathf.FloorToInt((float)childrenToMove / Mathf.Max(1f, (float)cellsPerMainAxis - 1));
+            
+            if (childCount % cellsPerMainAxis == 1)
+                childrenToMove += 1;
+
+            return Mathf.Clamp(childrenToMove, 0, childCount);
         }
 
         private static void CalculateGridDimensions(
@@ -136,7 +262,6 @@ namespace XericUI.Helper
             }
             else
             {
-                // Flexible constraint - based on container size
                 float availableWidth = containerSize.x - padding.horizontal;
                 float availableHeight = containerSize.y - padding.vertical;
 
@@ -182,74 +307,15 @@ namespace XericUI.Helper
                 else
                     actualCellCountX = Mathf.Clamp(cellCountX, 1, Mathf.CeilToInt(childCount / (float)cellCountY));
             }
-        }
-
-        private static void CalculateItemPosition(
-            int index,
-            int childCount,
-            int cellCountX,
-            int cellCountY,
-            GridLayoutGroup.Axis startAxis,
-            GridLayoutGroup.Constraint constraint,
-            int constraintCount,
-            int childrenToMove,
-            int cornerX,
-            int cornerY,
-            int actualCellCountX,
-            int actualCellCountY,
-            out int positionX,
-            out int positionY)
-        {
-            if (startAxis == GridLayoutGroup.Axis.Horizontal)
-            {
-                if (constraint == GridLayoutGroup.Constraint.FixedRowCount && childCount - index <= childrenToMove)
-                {
-                    positionX = 0;
-                    positionY = constraintCount - (childCount - index);
-                }
-                else
-                {
-                    positionX = index % cellCountX;
-                    positionY = index / cellCountX;
-                }
-            }
-            else
-            {
-                if (constraint == GridLayoutGroup.Constraint.FixedColumnCount && childCount - index <= childrenToMove)
-                {
-                    positionX = constraintCount - (childCount - index);
-                    positionY = 0;
-                }
-                else
-                {
-                    positionX = index / cellCountY;
-                    positionY = index % cellCountY;
-                }
-            }
-
-            // Apply corner flipping
-            if (cornerX == 1)
-                positionX = actualCellCountX - 1 - positionX;
-            if (cornerY == 1)
-                positionY = actualCellCountY - 1 - positionY;
-        }
-
-        private static float GetStartOffset(int axis, float requiredSpace, float availableSpace,
-            RectOffset padding, TextAnchor childAlignment)
-        {
-            float requiredSpaceWithPadding = requiredSpace + (axis == 0 ? padding.horizontal : padding.vertical);
-            float surplusSpace = availableSpace - requiredSpaceWithPadding;
-            float alignmentOnAxis = GetAlignmentOnAxis(axis, childAlignment);
-
-            return (axis == 0 ? padding.left : padding.top) + surplusSpace * alignmentOnAxis;
+            
         }
 
         private static float GetAlignmentOnAxis(int axis, TextAnchor childAlignment)
         {
             if (axis == 0)
-                return ((int)childAlignment % 3) * 0.5f;
+                return ((int)childAlignment % 3) * (1f / 3f);  // 0, 0.333, 0.666
             else
-                return ((int)childAlignment / 3) * 0.5f;
+                return ((int)childAlignment / 3) * 0.5f;       // 0, 0.5, 1
         }
     }
 }

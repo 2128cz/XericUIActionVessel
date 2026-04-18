@@ -79,8 +79,10 @@ namespace XericUI.OverrideLayout
         private Vector2 _lastContextSize;
         private Vector2 _lastContextAnchoredPosition;
 
+        private List<GridLayoutCalculator.LayoutItem> _layoutItems;
+        
         private Queue<RectTransform> _activeQueue = new Queue<RectTransform>();
-
+        
         #endregion
 
         [Serializable]
@@ -151,7 +153,6 @@ namespace XericUI.OverrideLayout
             MacroGizmosDraw.Label(vertex3[1], "preload Rect");
             MacroGizmosDraw.Label(vertex1[1], "display Rect");
         }
-#endif
 
         protected override void OnValidate()
         {
@@ -165,11 +166,12 @@ namespace XericUI.OverrideLayout
                 var trans = content.transform.GetChild(i) as RectTransform;
                 UpdateChildPivot(layouts[i], trans);
                 trans.anchoredPosition = layouts[i].position;
+                trans.SetDeltaSize(m_cellSize);
             }
 
             RefreshContentSizeByChildrenLayouts(layouts);
         }
-
+#endif
         protected override void Awake()
         {
             base.Awake();
@@ -332,16 +334,16 @@ namespace XericUI.OverrideLayout
 
             var size = first.position - last.position;
             size = size.Abs();
-            var spacing = new Vector2(first.columnIndex - last.columnIndex * m_spacing.x, first.rowIndex - last.rowIndex * m_spacing.y);
+            var spacing = new Vector2(GridLayoutCalculator.Grid.x * m_spacing.x, GridLayoutCalculator.Grid.y * m_spacing.y);
             switch (m_startAxis)
             {
                 case GridLayoutGroup.Axis.Horizontal:
-                    var ySpacing = first.rowIndex - last.rowIndex * m_spacing.y;
+                    var ySpacing = GridLayoutCalculator.Grid.y * m_spacing.y;
                     size.x = Mathf.Max(size.x, viewport.rect.width);
                     size.y = Mathf.Max(size.y + spacing.y, m_cellSize.y);
                     break;
                 case GridLayoutGroup.Axis.Vertical:
-                    var xSpacing = last.columnIndex * m_spacing.x;
+                    var xSpacing = GridLayoutCalculator.Grid.x * m_spacing.x;
                     size.x = Mathf.Max(size.x + spacing.x, m_cellSize.x);
                     size.y = Mathf.Max(size.y, viewport.rect.height); 
                     break;
@@ -385,6 +387,7 @@ namespace XericUI.OverrideLayout
         
         private List<GridLayoutCalculator.LayoutItem> GetChildrenLayout(int childrenCount)
             => GridLayoutCalculator.CalculateGridLayout(
+                _layoutItems,
                 childCount: childrenCount,
                 containerSize: ContextSize,
                 cellSize: m_cellSize,
@@ -399,12 +402,12 @@ namespace XericUI.OverrideLayout
 
         public void RefreshChildrenLayout()
         {
-            var layoutItems = GetChildrenLayout(_childrenDatas.Count);
-            RefreshContentSizeByChildrenLayouts(layoutItems);
+            GetChildrenLayout(_childrenDatas.Count);
+            RefreshContentSizeByChildrenLayouts(_layoutItems);
             // 应用计算结果
-            for (int i = 0; i < layoutItems.Count; i++)
+            for (int i = 0; i < _layoutItems.Count; i++)
             {
-                var item = layoutItems[i];
+                var item = _layoutItems[i];
                 _childrenDatas[i].UpdateLayout(item);
                 Debug.Log($"Item {i}: Position{item.position}, Row{item.rowIndex}, Column{item.columnIndex}");
             }
