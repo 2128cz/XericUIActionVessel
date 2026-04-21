@@ -3,8 +3,9 @@ using UnityEditor.SceneManagement;
 using UnityEditor.UI;
 using UnityEngine;
 using UnityEngine.UI;
+using XericUI;
 
-namespace XericUI
+namespace XericUIEditor.OverrideUI
 {
     [CustomEditor(typeof(XericToggle))]
     internal class XericToggleEditor : SelectableEditor
@@ -68,6 +69,7 @@ namespace XericUI
 
             EditorGUILayout.PropertyField(m_TransitionProperty);
             EditorGUILayout.PropertyField(m_GraphicProperty);
+            
             EditorGUILayout.PropertyField(m_TextProperty);
             EditorGUILayout.PropertyField(m_EnableTextColorTransitionProperty);
             if (m_EnableTextColorTransitionProperty.boolValue)

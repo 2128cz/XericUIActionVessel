@@ -5,7 +5,7 @@ using XericUI.Core.Vessel;
 
 namespace XericUIEditor.Core.Vessel
 {
-    public class ObjectVesselPropertyBase : PropertyDrawer
+    internal class ObjectVesselPropertyBase : PropertyDrawer
     {
         /// <summary>
         /// 递归获取实际的泛型类型（处理嵌套情况）

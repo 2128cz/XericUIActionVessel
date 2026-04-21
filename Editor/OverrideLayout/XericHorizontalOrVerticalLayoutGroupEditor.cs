@@ -7,7 +7,7 @@ namespace XericUIEditor.OverrideLayout
 {
     [CustomEditor(typeof(XericHorizontalOrVerticalLayoutGroup), true)]
     [CanEditMultipleObjects]
-    public class XericHorizontalOrVerticalLayoutGroupEditor : HorizontalOrVerticalLayoutGroupEditor
+    internal class XericHorizontalOrVerticalLayoutGroupEditor : HorizontalOrVerticalLayoutGroupEditor
     {
         SerializedProperty ignoreInvisible;
         SerializedProperty enableListScreening;

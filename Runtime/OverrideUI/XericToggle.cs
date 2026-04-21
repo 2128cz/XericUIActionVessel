@@ -77,6 +77,7 @@ namespace XericUI
             Sprite transitionSprite;
             string triggerName;
             Color textColor;
+            string transitionName;
 
             switch (state)
             {
@@ -85,36 +86,42 @@ namespace XericUI
                     textColor = m_textTransitionColorMode.normalColor;
                     transitionSprite = null;
                     triggerName = animationTriggers.normalTrigger;
+                    transitionName = m_textTransitionContextMode.normalTrigger;
                     break;
                 case SelectionState.Highlighted:
                     tintColor = colors.highlightedColor;
                     textColor = m_textTransitionColorMode.highlightedColor;
                     transitionSprite = spriteState.highlightedSprite;
                     triggerName = animationTriggers.highlightedTrigger;
+                    transitionName = m_textTransitionContextMode.highlightedTrigger;
                     break;
                 case SelectionState.Pressed:
                     tintColor = colors.pressedColor;
                     textColor = m_textTransitionColorMode.pressedColor;
                     transitionSprite = spriteState.pressedSprite;
                     triggerName = animationTriggers.pressedTrigger;
+                    transitionName = m_textTransitionContextMode.pressedTrigger;
                     break;
                 case SelectionState.Selected:
                     tintColor = colors.selectedColor;
                     textColor = m_textTransitionColorMode.selectedColor;
                     transitionSprite = spriteState.selectedSprite;
                     triggerName = animationTriggers.selectedTrigger;
+                    transitionName = m_textTransitionContextMode.selectedTrigger;
                     break;
                 case SelectionState.Disabled:
                     tintColor = colors.disabledColor;
                     textColor = m_textTransitionColorMode.disabledColor;
                     transitionSprite = spriteState.disabledSprite;
                     triggerName = animationTriggers.disabledTrigger;
+                    transitionName = m_textTransitionContextMode.disabledTrigger;
                     break;
                 default:
                     tintColor = Color.black;
-                    textColor = Color.black;
+                    textColor = Color.white;
                     transitionSprite = null;
                     triggerName = string.Empty;
+                    transitionName = m_textTransitionContextMode.normalTrigger;
                     break;
             }
             
@@ -133,6 +140,8 @@ namespace XericUI
 
             if (m_enableTextColorTransition)
                 TextColor = isOn ? m_textTransitionColorMode.selectedColor : textColor;
+            if (m_enableTextContextTransition)
+                TextContent = transitionName;
         }
         
         

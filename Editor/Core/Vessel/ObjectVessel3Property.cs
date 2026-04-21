@@ -8,7 +8,7 @@ using Object = UnityEngine.Object;
 namespace XericUIEditor.Core.Vessel
 {
     [CustomPropertyDrawer(typeof(ObjectVessel<,,>))]
-    public class ObjectVessel3Property : ObjectVesselPropertyBase
+    internal class ObjectVessel3Property : ObjectVesselPropertyBase
     {
         private Type property0Type = typeof(Object);
         private Type property1Type = typeof(Object);

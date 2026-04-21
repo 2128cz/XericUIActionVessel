@@ -7,7 +7,7 @@ using Object = UnityEngine.Object;
 namespace XericUIEditor.Core.Vessel
 {
     [CustomPropertyDrawer(typeof(ObjectVessel<>))]
-    public class ObjectVesselProperty : ObjectVesselPropertyBase
+    internal class ObjectVesselProperty : ObjectVesselPropertyBase
     {
         private Type property0Type = typeof(Object);
         private string originTooltip = null;

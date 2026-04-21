@@ -7,7 +7,7 @@ namespace XericUIEditor.OverrideLayout
 {
     [CustomEditor(typeof(XericScrollRect), true)]
     [CanEditMultipleObjects]
-    public class XericScrollRectEditor : ScrollRectEditor
+    internal class XericScrollRectEditor : ScrollRectEditor
     {
         SerializedProperty m_EnableAutoActiveByMaskVisible;
         SerializedProperty m_layoutGroup;
