@@ -82,6 +82,8 @@ namespace XericUI.OverrideLayout
         private List<GridLayoutCalculator.LayoutItem> _layoutItems;
         
         private Queue<RectTransform> _activeQueue = new Queue<RectTransform>();
+
+        private bool layoutDirty;
         
         #endregion
 
@@ -159,17 +161,7 @@ namespace XericUI.OverrideLayout
             base.OnValidate();
             if (childrenPool.Parent == null)
                 childrenPool.Parent = content;
-
-            var layouts = GetChildrenLayout(content.transform.childCount);
-            for (int i = 0; i < layouts.Count; i++)
-            {
-                var trans = content.transform.GetChild(i) as RectTransform;
-                UpdateChildPivot(layouts[i], trans);
-                trans.anchoredPosition = layouts[i].position;
-                trans.SetDeltaSize(m_cellSize);
-            }
-
-            RefreshContentSizeByChildrenLayouts(layouts);
+            RefreshLayout();
         }
 #endif
         protected override void Awake()
@@ -220,6 +212,16 @@ namespace XericUI.OverrideLayout
                     _lastContextAnchoredPosition = position;
                     UpdateAAMVSVisibleStatus(position);
                 }
+            }
+        }
+
+        protected override void LateUpdate()
+        {
+            base.LateUpdate();
+            if (layoutDirty)
+            {
+                layoutDirty = false;
+                RefreshLayout();
             }
         }
 
@@ -299,15 +301,20 @@ namespace XericUI.OverrideLayout
 
         public void AddChildData(ScrollItemData Data)
         {
+            layoutDirty = true;
             _childrenDatas.Add(Data);
         }
 
         public void RemoveChildData(int index)
         {
+            layoutDirty = true;
+            _childrenDatas.RemoveAt(index);
         }
 
         public void RemoveChildData(ScrollItemData index)
         {
+            layoutDirty = true;
+            _childrenDatas.Remove(index);
         }
 
         public ScrollItemData GetChildData(int index)
@@ -319,6 +326,20 @@ namespace XericUI.OverrideLayout
 
         #region 布局计算
 
+        private void RefreshLayout()
+        {
+            var layouts = GetChildrenLayout(content.transform.childCount);
+            for (int i = 0; i < layouts.Count; i++)
+            {
+                var trans = content.transform.GetChild(i) as RectTransform;
+                UpdateChildPivot(layouts[i], trans);
+                trans.anchoredPosition = layouts[i].position;
+                trans.SetDeltaSize(m_cellSize);
+            }
+
+            RefreshContentSizeByChildrenLayouts(layouts);
+        }
+        
         private void UpdateContentLayout(int axis, float overrideSize)
         {
             content.SetSizeWithCurrentAnchors((RectTransform.Axis)axis, overrideSize);
