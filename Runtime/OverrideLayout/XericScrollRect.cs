@@ -84,6 +84,7 @@ namespace XericUI.OverrideLayout
         private Queue<RectTransform> _activeQueue = new Queue<RectTransform>();
 
         private bool layoutDirty;
+        private bool indexMapDirty;
         
         #endregion
 
@@ -91,7 +92,7 @@ namespace XericUI.OverrideLayout
         public class ScrollItemData : IUIVesselVisibalControl
         {
             public GridLayoutCalculator.LayoutItem layout;
-
+            public int index { get; internal set; }
             protected internal XericScrollRect parentScrollRect;
             private bool _uiVisibal;
 
@@ -218,10 +219,18 @@ namespace XericUI.OverrideLayout
         protected override void LateUpdate()
         {
             base.LateUpdate();
+            // 布局刷新
             if (layoutDirty)
             {
                 layoutDirty = false;
                 RefreshLayout();
+            }
+            // 全部索引刷新
+            if (indexMapDirty)
+            {
+                indexMapDirty = false;
+                for (int i = 0; i < _childrenDatas.Count; i++)
+                    _childrenDatas[i].index = i;
             }
         }
 
@@ -302,21 +311,41 @@ namespace XericUI.OverrideLayout
         public void AddChildData(ScrollItemData Data)
         {
             layoutDirty = true;
+            Data.index = _childrenDatas.Count;
             _childrenDatas.Add(Data);
         }
 
         public void RemoveChildData(int index)
         {
             layoutDirty = true;
+            indexMapDirty = true;
+            // 如果可见，先移除可见性
+            if (_childrenDatas[index].GetUIVisibal)
+                _childrenDatas[index].OutOfVisibal();
             _childrenDatas.RemoveAt(index);
         }
 
         public void RemoveChildData(ScrollItemData index)
         {
             layoutDirty = true;
+            indexMapDirty = true;
+            // 如果可见，先移除可见性
+            if (index.GetUIVisibal)
+                index.OutOfVisibal();
             _childrenDatas.Remove(index);
         }
 
+        public void ClearChildData()
+        {
+            layoutDirty = true;
+            indexMapDirty = true;
+            // 如果可见，先移除可见性
+            foreach (var data in _childrenDatas)
+                if (data.GetUIVisibal)
+                    data.OutOfVisibal();
+            _childrenDatas.Clear();
+        }
+        
         public ScrollItemData GetChildData(int index)
         {
             return _childrenDatas[index];
@@ -383,19 +412,19 @@ namespace XericUI.OverrideLayout
                 GridLayoutGroup.Corner.LowerRight => new Vector2(1, 0),
                 _ => throw new ArgumentOutOfRangeException()
             };
-            // rectTransform.pivot = m_childAlignment switch
-            // {
-            //     TextAnchor.UpperLeft => new Vector2(0, 1),
-            //     TextAnchor.UpperCenter => new Vector2(.5f, 1),
-            //     TextAnchor.UpperRight => new Vector2(1, 1),
-            //     TextAnchor.MiddleLeft => new Vector2(0, .5f),
-            //     TextAnchor.MiddleCenter => new Vector2(.5f, .5f),
-            //     TextAnchor.MiddleRight => new Vector2(1, .5f),
-            //     TextAnchor.LowerLeft => new Vector2(0, 0),
-            //     TextAnchor.LowerCenter => new Vector2(.5f, 0),
-            //     TextAnchor.LowerRight => new Vector2(1, 0),
-            //     _ => throw new ArgumentOutOfRangeException()
-            // };
+            rectTransform.pivot = m_childAlignment switch
+            {
+                TextAnchor.UpperLeft => new Vector2(0, 1),
+                TextAnchor.UpperCenter => new Vector2(.5f, 1),
+                TextAnchor.UpperRight => new Vector2(1, 1),
+                TextAnchor.MiddleLeft => new Vector2(0, .5f),
+                TextAnchor.MiddleCenter => new Vector2(.5f, .5f),
+                TextAnchor.MiddleRight => new Vector2(1, .5f),
+                TextAnchor.LowerLeft => new Vector2(0, 0),
+                TextAnchor.LowerCenter => new Vector2(.5f, 0),
+                TextAnchor.LowerRight => new Vector2(1, 0),
+                _ => throw new ArgumentOutOfRangeException()
+            };
         }
 
         private void GetOffset(List<GridLayoutCalculator.LayoutItem> layoutItems)
