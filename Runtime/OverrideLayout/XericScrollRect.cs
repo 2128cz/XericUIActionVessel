@@ -56,7 +56,7 @@ namespace XericUI.OverrideLayout
         /// <summary>
         /// 对象数据
         /// </summary>
-        [SerializeField] private readonly List<ScrollItemData> _childrenDatas = ListPool<ScrollItemData>.Get();
+        [SerializeField] private readonly List<ScrollItemData> _childrenDatas = new List<ScrollItemData>();
 
         public Vector2 ContextSize
         {
@@ -83,6 +83,7 @@ namespace XericUI.OverrideLayout
         
         private Queue<RectTransform> _activeQueue = new Queue<RectTransform>();
 
+        private bool layoutHasRebuildAtThisFrame;
         private bool layoutDirty;
         private bool indexMapDirty;
         
@@ -97,20 +98,21 @@ namespace XericUI.OverrideLayout
             private bool _uiVisibal;
 
             protected GameObject item;
-            
+            public RectTransform itemRectTransform => item ? item.RectTransform() : null;
+            public IUIVesselVisibalControl ItemUIVesselVisibalControlComponent => item ? itemRectTransform.GetComponent<IUIVesselVisibalControl>() : null;
             public bool GetUIVisibal => _uiVisibal;
 
             public virtual void UnderVisibal()
             {
                 item = parentScrollRect.childrenPool.Get();
-                var rectTransform = item.RectTransform();
                 parentScrollRect.UpdateChildPivot(layout, item.RectTransform());
-                rectTransform.anchoredPosition = layout.position;
+                itemRectTransform.anchoredPosition = layout.position;
             }
 
             public virtual void OutOfVisibal()
             { 
                 parentScrollRect.childrenPool.DirectlyRelease(item);
+                item = null;
             }
 
             public void UpdateLayout(GridLayoutCalculator.LayoutItem layoutData)
@@ -211,18 +213,22 @@ namespace XericUI.OverrideLayout
                 {
                     // 只有距离大于这个才会触发更新
                     _lastContextAnchoredPosition = position;
-                    UpdateAAMVSVisibleStatus(position);
+                    UpdateAAMVSVisibleStatus();
                 }
             }
         }
 
         protected override void LateUpdate()
         {
+            layoutHasRebuildAtThisFrame = false;
             base.LateUpdate();
             // 布局刷新
             if (layoutDirty)
             {
                 layoutDirty = false;
+                // 常规的刷新依赖视图的更新，如果这一帧只增删了对象，但是视图没有移动，那么这里就会执行更新
+                if (layoutHasRebuildAtThisFrame)
+                    UpdateAAMVSVisibleStatus();
                 RefreshLayout();
             }
             // 全部索引刷新
@@ -239,8 +245,9 @@ namespace XericUI.OverrideLayout
         /// <summary>
         /// 自动剔除更新标记
         /// </summary>
-        protected void UpdateAAMVSVisibleStatus(Vector2 position)
+        protected void UpdateAAMVSVisibleStatus()
         {
+            layoutHasRebuildAtThisFrame = true;
             // 将视口尺寸转换到content本地空间
             // 手动计算视口在content空间的矩形
             viewport.GetWorldCorners(viewportVertex);
@@ -261,57 +268,68 @@ namespace XericUI.OverrideLayout
             //     horizontal ? horizontalScrollbar?.value ?? 0 : 0,
             //     vertical ? 1 - (verticalScrollbar?.value ?? 1) : 0);
 
-            // ReSharper disable once PossibleInvalidCastExceptionInForeachLoop
-            foreach (RectTransform child in content.GetChildren())
+            foreach (var childData in _childrenDatas)
             {
-                var visControl = child.GetComponent<IUIVesselVisibalControl>();
-                var isVisControlValid = visControl != null;
+                var childRectTransform = childData.itemRectTransform;
+                if (childRectTransform)
+                {
+                    var visControl = childData.ItemUIVesselVisibalControlComponent;
+                    var isVisControlValid = visControl != null;
+                    
+                    // 直接使用anchoredPosition进行边界检测
+                    var childPos = childRectTransform.anchoredPosition;
+                    var isVisible = CheckIsVisibal(childPos);
+                    var nowActive = childRectTransform.GetActivity();
 
-                var rectTransform = child.RectTransform();
-                // 直接使用anchoredPosition进行边界检测
-                var childPos = rectTransform.anchoredPosition;
-                var isVisible =
-                    childPos.x >= visibleMin.x &&
-                    childPos.x <= visibleMax.x &&
-                    childPos.y >= visibleMin.y &&
-                    childPos.y <= visibleMax.y;
+                    // 以接口为准
+                    if (isVisControlValid)
+                        nowActive = visControl.GetUIVisibal;
 
-                var nowActive = child.GetActivity();
+                    // 现在的状态与实际一致，跳过
+                    if (isVisible == nowActive)
+                        continue;
 
-                // 以接口为准
-                if (isVisControlValid)
-                    nowActive = visControl.GetUIVisibal;
-
-                // 现在的状态与实际一致，跳过
-                if (isVisible == nowActive)
-                    continue;
-
-                // 向成员发送状态(如果成员没有实现接口，就直接通过可见性控制)
-                if (isVisControlValid)
-                    visControl.CallVisibal(isVisible);
+                    // 向成员发送状态(如果成员没有实现接口，就直接通过可见性控制)
+                    if (isVisControlValid)
+                        visControl.CallVisibal(isVisible);
+                    else
+                        childRectTransform.gameObject.SetActive(isVisible);
+                }
                 else
-                    child.gameObject.SetActive(isVisible);
+                {
+                    var isVisible = CheckIsVisibal(childData.layout.position);
+                    if (isVisible)
+                    {
+                        childData.UnderVisibal();
+                    }
+                }                
+            }
+            
+            bool CheckIsVisibal(Vector2 pos)
+            {
+                return 
+                    pos.x >= visibleMin.x &&
+                    pos.x <= visibleMax.x &&
+                    pos.y >= visibleMin.y &&
+                    pos.y <= visibleMax.y;
             }
         }
+
+        
 
         #endregion
 
         #region 数据管理
 
-        public T GetScrollItemData<T>()
-            where T : ScrollItemData, new()
-        {
-            var result = new T
-            {
-                parentScrollRect = this
-            };
-            return result;
-        }
-
+        /// <summary>
+        /// 添加一个子项（自行重写这个子项类型数据结构，基于其中的生命周期函数完成内容的更新）
+        /// </summary>
+        /// <param name="Data"></param>
         public void AddChildData(ScrollItemData Data)
         {
             layoutDirty = true;
             Data.index = _childrenDatas.Count;
+            Data.parentScrollRect = this;
             _childrenDatas.Add(Data);
         }
 

@@ -18,9 +18,11 @@ namespace XericUIEditor.OverrideUI
 
         SerializedProperty m_TextProperty;
         SerializedProperty m_EnableTextColorTransitionProperty;
+        SerializedProperty m_isonStatusColor;
         SerializedProperty m_TextTransitionColorModeProperty;
         SerializedProperty m_enableTextContextTransitionProperty;
         SerializedProperty m_textTransitionContextModeProperty;
+        SerializedProperty m_isonStatusTextContext;
 
         protected override void OnEnable()
         {
@@ -34,9 +36,11 @@ namespace XericUIEditor.OverrideUI
 
             m_TextProperty = serializedObject.FindProperty("m_text");
             m_EnableTextColorTransitionProperty = serializedObject.FindProperty("m_enableTextColorTransition");
+            m_isonStatusColor = serializedObject.FindProperty("m_isonStatusColor");
             m_TextTransitionColorModeProperty = serializedObject.FindProperty("m_textTransitionColorMode");
             m_enableTextContextTransitionProperty = serializedObject.FindProperty("m_enableTextContextTransition");
             m_textTransitionContextModeProperty = serializedObject.FindProperty("m_textTransitionContextMode");
+            m_isonStatusTextContext = serializedObject.FindProperty("m_isonStatusTextContext");
         }
 
         public override void OnInspectorGUI()
@@ -76,6 +80,7 @@ namespace XericUIEditor.OverrideUI
             {
                 EditorGUI.indentLevel++;
                 EditorGUILayout.PropertyField(m_TextTransitionColorModeProperty);
+                EditorGUILayout.PropertyField(m_isonStatusColor);
                 EditorGUI.indentLevel--;
             }
             EditorGUILayout.PropertyField(m_enableTextContextTransitionProperty);
@@ -83,6 +88,7 @@ namespace XericUIEditor.OverrideUI
             {
                 EditorGUI.indentLevel++;
                 EditorGUILayout.PropertyField(m_textTransitionContextModeProperty);
+                EditorGUILayout.PropertyField(m_isonStatusTextContext);
                 EditorGUI.indentLevel--;
             }
 

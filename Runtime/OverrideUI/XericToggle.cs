@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
 using XericUI.Helper;
+using XericUI.OverrideUI;
 
 namespace XericUI
 {
@@ -46,6 +47,7 @@ namespace XericUI
         
         public bool m_enableTextColorTransition = true;
         public ColorBlock m_textTransitionColorMode = ColorBlock.defaultColorBlock;
+        public Color m_isonStatusColor = Color.white;
         public bool m_enableTextContextTransition = false;
         public AnimationTriggers m_textTransitionContextMode = new AnimationTriggers()
         {
@@ -55,6 +57,9 @@ namespace XericUI
             selectedTrigger = "toggle_selected",
             disabledTrigger = "toggle_disabled",
         };
+
+        public string m_isonStatusTextContext = "toggle_ison";
+        
         
         public bool EnableTextColorTransition
         {
@@ -67,7 +72,39 @@ namespace XericUI
             get => m_textTransitionColorMode;
             set => m_textTransitionColorMode = value;
         }
-        
+
+
+        private XericImage m_ximage;
+
+        protected XericImage ximage
+        {
+            get
+            {
+                if (m_ximage)
+                    return m_ximage;
+#if UNITY_EDITOR
+                if (!graphic)
+                    return null;
+#endif
+                m_ximage = graphic.GetComponent<XericImage>();
+                if (m_ximage)
+                    return m_ximage;
+                Debug.Log("注意替换toggle的checkmark为XericImage以支持完整的功能");
+                return null;
+            }
+        }
+
+        private bool bindXImage;
+
+        protected override void InstantClearState()
+        {
+            base.InstantClearState();
+            
+            if (m_enableTextColorTransition)
+                TextColor = colors.normalColor;
+            if (m_enableTextContextTransition)
+                TextContent = m_textTransitionContextMode.normalTrigger;
+        }
         protected override void DoStateTransition(SelectionState state, bool instant)
         {
             if (!gameObject.activeInHierarchy)
@@ -117,8 +154,8 @@ namespace XericUI
                     transitionName = m_textTransitionContextMode.disabledTrigger;
                     break;
                 default:
-                    tintColor = Color.black;
-                    textColor = Color.white;
+                    tintColor = colors.normalColor;
+                    textColor = m_textTransitionColorMode.normalColor;
                     transitionSprite = null;
                     triggerName = string.Empty;
                     transitionName = m_textTransitionContextMode.normalTrigger;
@@ -138,13 +175,25 @@ namespace XericUI
                     break;
             }
 
+            if (!bindXImage && ximage != null)
+            {
+                bindXImage = true;
+                ximage.OnToggleCrossFadeCall = b =>
+                {
+                    if (m_enableTextColorTransition)
+                        TextColor = b ? m_textTransitionColorMode.pressedColor : m_textTransitionColorMode.normalColor;
+                    if (m_enableTextContextTransition)
+                        TextContent = b ? m_textTransitionContextMode.pressedTrigger : m_textTransitionContextMode.normalTrigger;
+                };
+            }
+            
+            
             if (m_enableTextColorTransition)
-                TextColor = isOn ? m_textTransitionColorMode.selectedColor : textColor;
+                TextColor = isOn ? m_isonStatusColor : textColor;
             if (m_enableTextContextTransition)
                 TextContent = transitionName;
         }
-        
-        
+
         void StartColorTween(Color targetColor, bool instant)
         {
             if (targetGraphic == null)
@@ -184,8 +233,9 @@ namespace XericUI
             => command.context is Toggle and not XericToggle;
 
         [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To XericToggle", false, 10)]
-        private static void ReplaceToXeric(UnityEditor.MenuCommand command) 
-            => command.ReplaceCommandContext<Toggle, XericToggle,
+        private static void ReplaceToXeric(UnityEditor.MenuCommand command)
+        {
+            command.ReplaceCommandContext<Toggle, XericToggle,
                 (Graphic graphic, ToggleGroup group, ToggleEvent onValueChanged)>(
                 o =>
                     (o.graphic, o.group, o.onValueChanged),
@@ -195,6 +245,8 @@ namespace XericUI
                     t.group = d.group;
                     t.onValueChanged = d.onValueChanged;
                 });
+            Debug.Log("请手动替换toggle下的Checkmark Image组件为XericImage，否则Toggle工作时取消选择的状态会保持为ison状态。");
+        }
 
         [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To Toggle", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
@@ -214,5 +266,6 @@ namespace XericUI
                 });
 #endif
         #endregion
+        
     }
 }
