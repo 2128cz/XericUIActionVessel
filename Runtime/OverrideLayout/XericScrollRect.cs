@@ -33,11 +33,11 @@ namespace XericUI.OverrideLayout
         [Tooltip("容器预加载像素范围")] [SerializeField]
         protected float m_preloadMargin = 200f;
 
-        [Tooltip("容器加载响应可被察觉的变化长度")] [SerializeField]
+        [Tooltip("容器加载响应可被察觉的变化长度(建议设置为子项的二维最小的尺寸)")] [SerializeField]
         protected float m_discernibleDistance = 10f;
 
         [Tooltip("自动剔除更新速率，当设定趋近零时，实际上是期望每帧执行更新")] [SerializeField]
-        protected float m_AAMVUpdateRate = .5f;
+        protected float m_AAMVUpdateRate = .1f;
 
         // grid布局组件
         [SerializeField] protected Vector2 m_cellSize = new Vector2(100, 100);
@@ -261,7 +261,7 @@ namespace XericUI.OverrideLayout
 
             // 扩展可见区域边界
             var visibleMin = viewportRect.min - new Vector2(m_preloadMargin, m_preloadMargin);
-            var visibleMax = viewportRect.max + new Vector2(m_preloadMargin, m_preloadMargin);
+            var visibleMax = viewportRect.max + new Vector2(m_preloadMargin, -m_preloadMargin);
 
             // 获取当前滚动归一化位置
             // var scrollPos = new Vector2(
@@ -397,22 +397,34 @@ namespace XericUI.OverrideLayout
 
         private void RefreshContentSizeByChildrenLayouts(List<GridLayoutCalculator.LayoutItem> layoutItems)
         {
+            if (layoutItems.Count == 0) return;
+            
             var first = layoutItems[0];
             var last = layoutItems[^1];
 
             var size = first.position - last.position;
             size = size.Abs();
-            var spacing = new Vector2(GridLayoutCalculator.Grid.x * m_spacing.x, GridLayoutCalculator.Grid.y * m_spacing.y);
+            
+            // 计算实际使用的行列数
+            int maxRow = 0;
+            int maxColumn = 0;
+            foreach (var item in layoutItems)
+            {
+                maxRow = Mathf.Max(maxRow, item.rowIndex);
+                maxColumn = Mathf.Max(maxColumn, item.columnIndex);
+            }
+            int actualCellCountX = maxColumn + 1;
+            int actualCellCountY = maxRow + 1;
+            
+            var spacing = new Vector2((actualCellCountX - 1) * m_spacing.x, (actualCellCountY - 1) * m_spacing.y);
             switch (m_startAxis)
             {
                 case GridLayoutGroup.Axis.Horizontal:
-                    var ySpacing = GridLayoutCalculator.Grid.y * m_spacing.y;
                     size.x = Mathf.Max(size.x, viewport.rect.width);
-                    size.y = Mathf.Max(size.y + spacing.y, m_cellSize.y);
+                    size.y = Mathf.Max(size.y + m_spacing.y, m_cellSize.y);
                     break;
                 case GridLayoutGroup.Axis.Vertical:
-                    var xSpacing = GridLayoutCalculator.Grid.x * m_spacing.x;
-                    size.x = Mathf.Max(size.x + spacing.x, m_cellSize.x);
+                    size.x = Mathf.Max(size.x + m_spacing.x, m_cellSize.x);
                     size.y = Mathf.Max(size.y, viewport.rect.height); 
                     break;
             }
@@ -454,7 +466,17 @@ namespace XericUI.OverrideLayout
         }
         
         private List<GridLayoutCalculator.LayoutItem> GetChildrenLayout(int childrenCount)
-            => GridLayoutCalculator.CalculateGridLayout(
+        {
+            // 根据约束类型设置合适的 constraintCount
+            int constraintCount = 0;
+            if (m_constraint == GridLayoutGroup.Constraint.FixedColumnCount || m_constraint == GridLayoutGroup.Constraint.FixedRowCount)
+            {
+                // 这里可以根据实际需求设置合适的约束数量
+                // 暂时使用一个默认值，实际项目中可能需要从外部传入或通过其他方式计算
+                constraintCount = 3;
+            }
+            
+            return GridLayoutCalculator.CalculateGridLayout(
                 _layoutItems,
                 childCount: childrenCount,
                 containerSize: ContextSize,
@@ -464,9 +486,10 @@ namespace XericUI.OverrideLayout
                 startCorner: m_startCorner,
                 startAxis: m_startAxis,
                 constraint: m_constraint,
-                constraintCount: 0,
+                constraintCount: constraintCount,
                 childAlignment: m_childAlignment
             );
+        }
 
         public void RefreshChildrenLayout()
         {

@@ -19,6 +19,17 @@ namespace XericUI.Helper
         /// <summary>
         /// 计算所有项目的布局
         /// </summary>
+        /// <param name="childCount">子项数量</param>
+        /// <param name="containerSize">所需尺寸</param>
+        /// <param name="cellSize">单元尺寸</param>
+        /// <param name="spacing">单元空隙</param>
+        /// <param name="padding">外围空隙</param>
+        /// <param name="startCorner">起始角</param>
+        /// <param name="startAxis">起始轴</param>
+        /// <param name="constraint">容器尺寸</param>
+        /// <param name="constraintCount">需要的列数</param>
+        /// <param name="childAlignment">子项对齐</param>
+        /// <returns></returns>
         public static List<LayoutItem> CalculateGridLayout(
             List<LayoutItem> layoutItems,
             int childCount,
@@ -143,13 +154,13 @@ namespace XericUI.Helper
             float baseOffset;
             if (axis == 0)  // X轴
             {
-                // 如果startCorner在右侧，基准点应该是padding.right
+                // 如果startCorner在右侧，基准点应该是availableSpace - padding.right - requiredSpace
                 int cornerX = (int)startCorner % 2;
                 baseOffset = (cornerX == 0) ? padding.left : (availableSpace - padding.right - requiredSpace);
             }
             else  // Y轴
             {
-                // 如果startCorner在底部，基准点应该是padding.bottom
+                // 如果startCorner在底部，基准点应该是availableSpace - padding.bottom - requiredSpace
                 int cornerY = (int)startCorner / 2;
                 baseOffset = (cornerY == 0) ? padding.top : (availableSpace - padding.bottom - requiredSpace);
             }
@@ -176,10 +187,12 @@ namespace XericUI.Helper
             if (startAxis == GridLayoutGroup.Axis.Horizontal)
             {
                 if (constraint == GridLayoutGroup.Constraint.FixedRowCount && 
-                    childCount - index <= childrenToMove)
+                    childrenToMove > 0 && childCount - index <= childrenToMove)
                 {
+                    // 计算偏移量，确保gridY不会为负数
+                    int offset = childCount - index - 1;
                     gridX = 0;
-                    gridY = constraintCount - (childCount - index);
+                    gridY = Mathf.Min(offset, constraintCount - 1);
                 }
                 else
                 {
@@ -190,9 +203,11 @@ namespace XericUI.Helper
             else
             {
                 if (constraint == GridLayoutGroup.Constraint.FixedColumnCount && 
-                    childCount - index <= childrenToMove)
+                    childrenToMove > 0 && childCount - index <= childrenToMove)
                 {
-                    gridX = constraintCount - (childCount - index);
+                    // 计算偏移量，确保gridX不会为负数
+                    int offset = childCount - index - 1;
+                    gridX = Mathf.Min(offset, constraintCount - 1);
                     gridY = 0;
                 }
                 else
@@ -201,7 +216,6 @@ namespace XericUI.Helper
                     gridY = index % cellCountY;
                 }
             }
-
         }
 
         private static int CalculateChildrenToMove(
