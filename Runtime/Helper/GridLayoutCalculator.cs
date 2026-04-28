@@ -32,7 +32,7 @@ namespace XericUI.Helper
         /// <param name="childAlignment">子项对齐</param>
         /// <returns></returns>
         public static List<LayoutItem> CalculateGridLayout(
-            List<LayoutItem> layoutItems,
+            ref List<LayoutItem> layoutItems,
             int childCount,
             Vector2 containerSize,
             Vector2 cellSize,

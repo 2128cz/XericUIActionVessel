@@ -136,13 +136,15 @@ namespace XericUI.OverrideLayout
 
             protected void RefreshPivot()
             {
-                if (!item)
+                var itemRect = itemRectTransform;
+                if (!itemRect)
                 {
                     Debug.LogError($"滚动视图的实体对象在刷新前并未指定，请先指定{nameof(item)}后再调用{nameof(RefreshPivot)}");
                 }
 
-                parentScrollRect.UpdateChildPivot(layout, item.RectTransform());
-                itemRectTransform.anchoredPosition = layout.position;
+                parentScrollRect.UpdateChildPivot(layout, itemRect);
+                itemRect.anchoredPosition = layout.position;
+                itemRect.SetDeltaSize(layout.size);
             }
 
             public void UpdateLayout(GridLayoutCalculator.LayoutItem layoutData)
@@ -311,18 +313,18 @@ namespace XericUI.OverrideLayout
             // 将视口尺寸转换到content本地空间
             // 手动计算视口在content空间的矩形
             viewport.GetWorldCorners(viewportVertex);
+            var preloadMarginVec2 = new Vector3(m_preloadMargin, m_preloadMargin);
             var viewportRect = new Rect(
-                viewportVertex[0],
-                viewportVertex[2] - viewportVertex[0]);
+                viewportVertex[0] - preloadMarginVec2,
+                viewportVertex[2] - viewportVertex[0] + preloadMarginVec2 + preloadMarginVec2);
+
+            // 扩展可见区域边界
+            visibleMin = viewportRect.min;
+            visibleMax = viewportRect.max;
 
             var contentRect = content.rect;
             // 计算预加载边距（考虑content缩放）
             // var scaledMargin = preloadMargin / ((content.lossyScale.x + content.lossyScale.y) * 0.5f);
-
-            // 扩展可见区域边界
-            var preloadMarginVec2 = new Vector2(m_preloadMargin, m_preloadMargin);
-            visibleMin = viewportRect.min - preloadMarginVec2;
-            visibleMax = viewportRect.max + preloadMarginVec2;
 
             // 获取当前滚动归一化位置
             // var scrollPos = new Vector2(
@@ -363,14 +365,7 @@ namespace XericUI.OverrideLayout
                 }
             }
 
-            bool CheckIsVisibal(Vector2 pos)
-            {
-                return
-                    pos.x >= visibleMin.x &&
-                    pos.x <= visibleMax.x &&
-                    pos.y >= visibleMin.y &&
-                    pos.y <= visibleMax.y;
-            }
+            bool CheckIsVisibal(Vector2 pos) => viewportRect.Contains(pos);
         }
 
         #endregion
@@ -485,35 +480,19 @@ namespace XericUI.OverrideLayout
         private void RefreshContentSizeByChildrenLayouts(List<GridLayoutCalculator.LayoutItem> layoutItems)
         {
             if (layoutItems.Count == 0) return;
-
-            var first = layoutItems[0];
-            var last = layoutItems[^1];
-
-            var size = first.position - last.position;
-            size = size.Abs();
-
-            // 计算实际使用的行列数
-            int maxRow = (int)GridLayoutCalculator.Grid.x;
-            int maxColumn = (int)GridLayoutCalculator.Grid.y;
-            foreach (var item in layoutItems)
-            {
-                maxRow = Mathf.Max(maxRow, item.rowIndex);
-                maxColumn = Mathf.Max(maxColumn, item.columnIndex);
-            }
-
-            int actualCellCountX = maxColumn + 1;
-            int actualCellCountY = maxRow + 1;
-
-            var spacing = new Vector2((actualCellCountX - 1) * m_spacing.x, (actualCellCountY - 1) * m_spacing.y);
+            var size = Vector2.zero;
+            var spacing = new Vector2(
+                GridLayoutCalculator.Grid.y * m_spacing.x, 
+                GridLayoutCalculator.Grid.x * m_spacing.y);
             switch (m_startAxis)
             {
                 case GridLayoutGroup.Axis.Horizontal:
-                    size.x = Mathf.Max(size.x, viewport.rect.width);
-                    size.y = Mathf.Max(size.y + m_spacing.y, m_cellSize.y);
+                    size.x = Mathf.Max(spacing.x, viewport.rect.width);
+                    size.y = Mathf.Max(spacing.y, m_cellSize.y);
                     break;
                 case GridLayoutGroup.Axis.Vertical:
-                    size.x = Mathf.Max(size.x + m_spacing.x, m_cellSize.x);
-                    size.y = Mathf.Max(size.y, viewport.rect.height);
+                    size.x = Mathf.Max(spacing.x, m_cellSize.x);
+                    size.y = Mathf.Max(spacing.y, viewport.rect.height);
                     break;
             }
 
@@ -568,7 +547,7 @@ namespace XericUI.OverrideLayout
                 constraintCount = m_constraintCount;
 
             return GridLayoutCalculator.CalculateGridLayout(
-                _layoutItems,
+                ref _layoutItems,
                 childCount: childrenCount,
                 containerSize: ContextSize,
                 cellSize: m_cellSize,

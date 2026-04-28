@@ -13,7 +13,6 @@ namespace XericUI.ReflectionUIGenerator
         public readonly string LabelName;
         public readonly string UIPropertyName;
         public readonly string UnitLabelName;
-        public readonly bool MustFillIn;
         public readonly int InspectorOrder;
         public readonly string GroupName;
         public readonly string OnTriggerCall;
@@ -30,13 +29,12 @@ namespace XericUI.ReflectionUIGenerator
         /// <param name="groupName">属性组名称（可以是以/&\分割的路径）</param>
         /// <param name="onTriggerCall">属性附加的动作，调用此内联反射调用的函数</param>
         /// <param name="size">属性组名称（可以是以/&\分割的路径）</param>
-        public XuiavrgAttribute(string labelName, string uiPropertyName, string unitLabelName, bool mustFillin,
+        public XuiavrgAttribute(string labelName, string uiPropertyName, string unitLabelName, 
             int inspectorOrder = 0, string groupName = null, string onTriggerCall = "", XuiavrgSize size = XuiavrgSize.Normal)
         {
             LabelName = labelName;
             UIPropertyName = uiPropertyName;
             UnitLabelName = unitLabelName;
-            MustFillIn = mustFillin;
             InspectorOrder = inspectorOrder;
             GroupName = groupName;
             OnTriggerCall = onTriggerCall;
@@ -52,7 +50,6 @@ namespace XericUI.ReflectionUIGenerator
             property.labelName = LabelName;
             property.uiPropertyName = UIPropertyName;
             property.unitLabelName = UnitLabelName;
-            property.mustFillIn = MustFillIn;
             property.inspectorOrder = InspectorOrder;
             property.groupName = GroupName;
             property.onTriggerCall = OnTriggerCall;

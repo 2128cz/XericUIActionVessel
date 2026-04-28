@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Reflection;
+using UnityEngine;
 using UnityEngine.Serialization;
 
 namespace XericUI.ReflectionUIGenerator
@@ -10,22 +11,48 @@ namespace XericUI.ReflectionUIGenerator
     [Serializable]
     public class XuiavrgInspectorProperty
     {
+        #region 字段属性
+        
         public object valueTarget;
         public bool isProperty;
         public PropertyInfo propertyInfo;
         public FieldInfo fieldInfo;
 
-        public string labelName;
-        public string uiPropertyName;
-        public string unitLabelName;
-        public bool mustFillIn;
-        public int inspectorOrder;
-        public string groupName;
-        public string onTriggerCall;
-        public XuiavrgSize argumentSize;
-        public bool hideInInspector;
+        // 基本信息
+        public string labelName;                        // 字段名称
+        public string uiPropertyName;                   // ui属性名称
+        public string unitLabelName;                    // 单位名称
+        public bool required;                           // 项目必填
+        public bool notEmpty;                           // 不可为空
+        public int inspectorOrder;                      // 显示在检查器上的顺序
+        public string groupName;                        // 编组名称
+        public string onTriggerCall;                    // 值变更时触发的反射
+        public XuiavrgSize argumentSize;                // 属性尺寸
+        public bool hideInInspector;                    // 在检查器上隐藏显示
+        
+        // 字符串检查
+        public int stringMinLength;                     // 最小长度 
+        public int stringMaxLength = int.MaxValue;      // 最大长度
+        public string stringRegexPattern = "";          // 正则检查
+        public bool stringOnlyLetters;                  // 允许字符
+        public bool stringOnlyNumber;                   // 允许数字
+        public bool stringOnlyEmail = true;             // 允许邮箱
+        public bool stringOnlyPhone = true;             // 允许电话号码
+        public bool stringOnlyUrl = true;               // 允许网址
 
+        // 数值检查
+        public float numberMinValue;                    // 最小值
+        public float numberMaxValue;                    // 最大值
+        
+        // 集合检查
+        public int collectionMinCount;                  // 集合的最小尺寸
+        public int collectionMaxCount = int.MaxValue;   // 集合的最大尺寸
+        public bool collectionNotEmpty;                 // 集合不可为空
+        
+        #endregion
 
+        #region 检查方法
+        
         /// <summary>
         /// 绑定到数据端
         /// </summary>
@@ -138,5 +165,7 @@ namespace XericUI.ReflectionUIGenerator
         public void Clear()
         {
         }
+        
+        #endregion
     }
 }
