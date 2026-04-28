@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
+using XericLibrary.Runtime.Debuger;
 using XericLibrary.Runtime.MacroLibrary;
 using XericUI.Core.Interface;
 using XericUI.Helper;
@@ -27,8 +29,7 @@ namespace XericUI.OverrideLayout
     {
         #region 字段属性
 
-        [Tooltip("启用自动剔除功能")] [SerializeField] 
-        protected bool m_enableAdvancedFunc = true;
+        [Tooltip("启用自动剔除功能")] [SerializeField] protected bool m_enableAdvancedFunc = true;
 
         [Tooltip("容器预加载像素范围")] [SerializeField]
         protected float m_preloadMargin = 200f;
@@ -46,7 +47,11 @@ namespace XericUI.OverrideLayout
         [SerializeField] protected GridLayoutGroup.Corner m_startCorner = GridLayoutGroup.Corner.UpperLeft;
         [SerializeField] protected GridLayoutGroup.Axis m_startAxis = GridLayoutGroup.Axis.Horizontal;
         [SerializeField] protected TextAnchor m_childAlignment = TextAnchor.UpperLeft;
-        [SerializeField] protected GridLayoutGroup.Constraint m_constraint = GridLayoutGroup.Constraint.Flexible;
+
+        [SerializeField]
+        protected GridLayoutGroup.Constraint m_constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+
+        [SerializeField] protected int m_constraintCount = -1;
 
         /// <summary>
         /// 对象池
@@ -67,7 +72,7 @@ namespace XericUI.OverrideLayout
                 UpdateContentLayout(1, value.y);
             }
         }
-        
+
         #endregion
 
         #region 布局参考
@@ -80,13 +85,16 @@ namespace XericUI.OverrideLayout
         private Vector2 _lastContextAnchoredPosition;
 
         private List<GridLayoutCalculator.LayoutItem> _layoutItems;
-        
+
         private Queue<RectTransform> _activeQueue = new Queue<RectTransform>();
 
         private bool layoutHasRebuildAtThisFrame;
         private bool layoutDirty;
         private bool indexMapDirty;
-        
+
+        private Vector2 visibleMin;
+        private Vector2 visibleMax;
+
         #endregion
 
         [Serializable]
@@ -95,30 +103,55 @@ namespace XericUI.OverrideLayout
             public GridLayoutCalculator.LayoutItem layout;
             public int index { get; internal set; }
             protected internal XericScrollRect parentScrollRect;
-            private bool _uiVisibal;
+            protected bool _uiVisibal;
 
             protected GameObject item;
             public RectTransform itemRectTransform => item ? item.RectTransform() : null;
-            public IUIVesselVisibalControl ItemUIVesselVisibalControlComponent => item ? itemRectTransform.GetComponent<IUIVesselVisibalControl>() : null;
+
+            /// <summary>
+            /// 滚动框如何定位到接口（此接口返回的对象将用于生命周期管理，否则退化成简单的组件显影）
+            /// </summary>
+            public virtual IUIVesselVisibalControl ItemUIVesselVisibalControlComponent => this;
+
             public bool GetUIVisibal => _uiVisibal;
 
-            public virtual void UnderVisibal()
+            public virtual void UnderVisible()
             {
+                SetIsVisible(true);
                 item = parentScrollRect.childrenPool.Get();
-                parentScrollRect.UpdateChildPivot(layout, item.RectTransform());
-                itemRectTransform.anchoredPosition = layout.position;
+                RefreshPivot();
             }
 
-            public virtual void OutOfVisibal()
-            { 
+            public virtual void OutOfVisible()
+            {
+                SetIsVisible(false);
                 parentScrollRect.childrenPool.DirectlyRelease(item);
                 item = null;
+            }
+
+            protected void SetIsVisible(bool visible)
+            {
+                _uiVisibal = visible;
+            }
+
+            protected void RefreshPivot()
+            {
+                if (!item)
+                {
+                    Debug.LogError($"滚动视图的实体对象在刷新前并未指定，请先指定{nameof(item)}后再调用{nameof(RefreshPivot)}");
+                }
+
+                parentScrollRect.UpdateChildPivot(layout, item.RectTransform());
+                itemRectTransform.anchoredPosition = layout.position;
             }
 
             public void UpdateLayout(GridLayoutCalculator.LayoutItem layoutData)
             {
                 layout = layoutData;
             }
+
+            public Vector2 WorldAnchoredPosition(RectTransform parentContent)
+                => parentContent.TransformPoint(itemRectTransform.anchoredPosition);
         }
 
         #region 生命周期
@@ -127,6 +160,7 @@ namespace XericUI.OverrideLayout
         private Vector3[] vertex1 = new Vector3[4];
         private Vector3[] vertex2 = new Vector3[4];
         private Vector3[] vertex3 = new Vector3[4];
+
         private void OnDrawGizmosSelected()
         {
             var lossyScale = transform.lossyScale;
@@ -157,6 +191,29 @@ namespace XericUI.OverrideLayout
             MacroGizmosDraw.DrawGizmos2RectLinkCube(vertex3, vertex1, Color.cyan, Color.red, true);
             MacroGizmosDraw.Label(vertex3[1], "preload Rect");
             MacroGizmosDraw.Label(vertex1[1], "display Rect");
+
+            if (!Application.isPlaying) return;
+
+            Gizmos.color = Color.magenta;
+            MacroGizmosDraw.DrawGizmosRectLine(visibleMin - Vector2.one, visibleMax - Vector2.one);
+
+            var corners = new Vector3[4];
+            foreach (var data in _childrenDatas)
+            {
+                if (data.GetUIVisibal)
+                {
+                    Gizmos.color = Color.green;
+                    data.itemRectTransform.GetWorldCorners(corners);
+                    MacroGizmosDraw.DrawPolygonLineByPointArray(corners);
+                    MacroGizmosDraw.Label(corners[0], $"[{data.index}] 使用中");
+                }
+                else
+                {
+                    Gizmos.color = Color.red;
+                    MacroGizmosDraw.DrawGizmosRectAtPoint(data.layout.position, data.layout.size);
+                    MacroGizmosDraw.Label(data.layout.position, $"[{data.index}] 已回收");
+                }
+            }
         }
 
         protected override void OnValidate()
@@ -221,22 +278,25 @@ namespace XericUI.OverrideLayout
         protected override void LateUpdate()
         {
             layoutHasRebuildAtThisFrame = false;
-            base.LateUpdate();
-            // 布局刷新
-            if (layoutDirty)
-            {
-                layoutDirty = false;
-                // 常规的刷新依赖视图的更新，如果这一帧只增删了对象，但是视图没有移动，那么这里就会执行更新
-                if (layoutHasRebuildAtThisFrame)
-                    UpdateAAMVSVisibleStatus();
-                RefreshLayout();
-            }
             // 全部索引刷新
             if (indexMapDirty)
             {
                 indexMapDirty = false;
                 for (int i = 0; i < _childrenDatas.Count; i++)
                     _childrenDatas[i].index = i;
+            }
+
+            // 重新计算布局
+            if (layoutDirty)
+                RefreshLayout();
+            base.LateUpdate();
+            // 布局刷新
+            if (layoutDirty)
+            {
+                layoutDirty = false;
+                // 常规的刷新依赖视图的更新，如果这一帧只增删了对象，但是视图没有移动，那么这里就会执行更新
+                if (!layoutHasRebuildAtThisFrame)
+                    UpdateAAMVSVisibleStatus();
             }
         }
 
@@ -252,16 +312,17 @@ namespace XericUI.OverrideLayout
             // 手动计算视口在content空间的矩形
             viewport.GetWorldCorners(viewportVertex);
             var viewportRect = new Rect(
-                content.InverseTransformPoint(viewportVertex[0]),
-                content.InverseTransformPoint(viewportVertex[2]) - content.InverseTransformPoint(viewportVertex[0]));
+                viewportVertex[0],
+                viewportVertex[2] - viewportVertex[0]);
 
             var contentRect = content.rect;
             // 计算预加载边距（考虑content缩放）
             // var scaledMargin = preloadMargin / ((content.lossyScale.x + content.lossyScale.y) * 0.5f);
 
             // 扩展可见区域边界
-            var visibleMin = viewportRect.min - new Vector2(m_preloadMargin, m_preloadMargin);
-            var visibleMax = viewportRect.max + new Vector2(m_preloadMargin, -m_preloadMargin);
+            var preloadMarginVec2 = new Vector2(m_preloadMargin, m_preloadMargin);
+            visibleMin = viewportRect.min - preloadMarginVec2;
+            visibleMax = viewportRect.max + preloadMarginVec2;
 
             // 获取当前滚动归一化位置
             // var scrollPos = new Vector2(
@@ -275,9 +336,9 @@ namespace XericUI.OverrideLayout
                 {
                     var visControl = childData.ItemUIVesselVisibalControlComponent;
                     var isVisControlValid = visControl != null;
-                    
+
                     // 直接使用anchoredPosition进行边界检测
-                    var childPos = childRectTransform.anchoredPosition;
+                    var childPos = childData.WorldAnchoredPosition(content);
                     var isVisible = CheckIsVisibal(childPos);
                     var nowActive = childRectTransform.GetActivity();
 
@@ -291,31 +352,26 @@ namespace XericUI.OverrideLayout
 
                     // 向成员发送状态(如果成员没有实现接口，就直接通过可见性控制)
                     if (isVisControlValid)
-                        visControl.CallVisibal(isVisible);
+                        visControl.CallVisible(isVisible);
                     else
                         childRectTransform.gameObject.SetActive(isVisible);
                 }
                 else
                 {
-                    var isVisible = CheckIsVisibal(childData.layout.position);
-                    if (isVisible)
-                    {
-                        childData.UnderVisibal();
-                    }
-                }                
+                    if (!CheckIsVisibal(childData.layout.position))
+                        childData.UnderVisible();
+                }
             }
-            
+
             bool CheckIsVisibal(Vector2 pos)
             {
-                return 
+                return
                     pos.x >= visibleMin.x &&
                     pos.x <= visibleMax.x &&
                     pos.y >= visibleMin.y &&
                     pos.y <= visibleMax.y;
             }
         }
-
-        
 
         #endregion
 
@@ -324,13 +380,34 @@ namespace XericUI.OverrideLayout
         /// <summary>
         /// 添加一个子项（自行重写这个子项类型数据结构，基于其中的生命周期函数完成内容的更新）
         /// </summary>
-        /// <param name="Data"></param>
-        public void AddChildData(ScrollItemData Data)
+        /// <param name="data"></param>
+        public void AddChildData(ScrollItemData data)
         {
             layoutDirty = true;
-            Data.index = _childrenDatas.Count;
-            Data.parentScrollRect = this;
-            _childrenDatas.Add(Data);
+            data.index = _childrenDatas.Count;
+            data.parentScrollRect = this;
+            _childrenDatas.Add(data);
+        }
+
+        /// <summary>
+        /// 添加一个子项在倒序的多少项之前
+        /// </summary>
+        /// <param name="data"></param>
+        /// <param name="invertedOrder">指定这个项目插入在倒序的第几位</param>
+        /// <remarks>
+        /// 比如一个视图中有不同的几种对象，如常规对象和新建对象按钮，将这个对象插入在新建对象之前
+        /// </remarks>
+        public void AddChildData(ScrollItemData data, int invertedOrder)
+        {
+            layoutDirty = true;
+            indexMapDirty = true;
+            data.parentScrollRect = this;
+
+            var insertIndex = _childrenDatas.Count - invertedOrder;
+            insertIndex = Mathf.Clamp(insertIndex, 0, _childrenDatas.Count);
+            _childrenDatas.Insert(insertIndex, data);
+            // for (int i = 0; i < _childrenDatas.Count; i++)
+            //     _childrenDatas[i].index = i;
         }
 
         public void RemoveChildData(int index)
@@ -339,7 +416,7 @@ namespace XericUI.OverrideLayout
             indexMapDirty = true;
             // 如果可见，先移除可见性
             if (_childrenDatas[index].GetUIVisibal)
-                _childrenDatas[index].OutOfVisibal();
+                _childrenDatas[index].OutOfVisible();
             _childrenDatas.RemoveAt(index);
         }
 
@@ -349,7 +426,7 @@ namespace XericUI.OverrideLayout
             indexMapDirty = true;
             // 如果可见，先移除可见性
             if (index.GetUIVisibal)
-                index.OutOfVisibal();
+                index.OutOfVisible();
             _childrenDatas.Remove(index);
         }
 
@@ -360,10 +437,10 @@ namespace XericUI.OverrideLayout
             // 如果可见，先移除可见性
             foreach (var data in _childrenDatas)
                 if (data.GetUIVisibal)
-                    data.OutOfVisibal();
+                    data.OutOfVisible();
             _childrenDatas.Clear();
         }
-        
+
         public ScrollItemData GetChildData(int index)
         {
             return _childrenDatas[index];
@@ -375,18 +452,28 @@ namespace XericUI.OverrideLayout
 
         private void RefreshLayout()
         {
-            var layouts = GetChildrenLayout(content.transform.childCount);
+            Debug.Log("刷新");
+            var layouts = GetChildrenLayout(_childrenDatas.Count);
             for (int i = 0; i < layouts.Count; i++)
             {
-                var trans = content.transform.GetChild(i) as RectTransform;
-                UpdateChildPivot(layouts[i], trans);
-                trans.anchoredPosition = layouts[i].position;
-                trans.SetDeltaSize(m_cellSize);
+                var childData = _childrenDatas[i];
+                childData.UpdateLayout(layouts[i]);
+
+                var trans = childData.itemRectTransform;
+                if (trans)
+                {
+                    UpdateChildPivot(layouts[i], trans); // 先更新枢轴
+                    if (trans != null)
+                    {
+                        trans.anchoredPosition = layouts[i].position;
+                        trans.SetDeltaSize(m_cellSize);
+                    }
+                }
             }
 
             RefreshContentSizeByChildrenLayouts(layouts);
         }
-        
+
         private void UpdateContentLayout(int axis, float overrideSize)
         {
             content.SetSizeWithCurrentAnchors((RectTransform.Axis)axis, overrideSize);
@@ -398,24 +485,25 @@ namespace XericUI.OverrideLayout
         private void RefreshContentSizeByChildrenLayouts(List<GridLayoutCalculator.LayoutItem> layoutItems)
         {
             if (layoutItems.Count == 0) return;
-            
+
             var first = layoutItems[0];
             var last = layoutItems[^1];
 
             var size = first.position - last.position;
             size = size.Abs();
-            
+
             // 计算实际使用的行列数
-            int maxRow = 0;
-            int maxColumn = 0;
+            int maxRow = (int)GridLayoutCalculator.Grid.x;
+            int maxColumn = (int)GridLayoutCalculator.Grid.y;
             foreach (var item in layoutItems)
             {
                 maxRow = Mathf.Max(maxRow, item.rowIndex);
                 maxColumn = Mathf.Max(maxColumn, item.columnIndex);
             }
+
             int actualCellCountX = maxColumn + 1;
             int actualCellCountY = maxRow + 1;
-            
+
             var spacing = new Vector2((actualCellCountX - 1) * m_spacing.x, (actualCellCountY - 1) * m_spacing.y);
             switch (m_startAxis)
             {
@@ -425,9 +513,10 @@ namespace XericUI.OverrideLayout
                     break;
                 case GridLayoutGroup.Axis.Vertical:
                     size.x = Mathf.Max(size.x + m_spacing.x, m_cellSize.x);
-                    size.y = Mathf.Max(size.y, viewport.rect.height); 
+                    size.y = Mathf.Max(size.y, viewport.rect.height);
                     break;
             }
+
             ContextSize = size;
         }
 
@@ -437,7 +526,7 @@ namespace XericUI.OverrideLayout
             {
                 // todo 对齐算法总的方向应该是写错了，找找
                 GridLayoutGroup.Corner.UpperLeft => new Vector2(0, 1),
-                GridLayoutGroup.Corner.UpperRight =>  new Vector2(1, 1),
+                GridLayoutGroup.Corner.UpperRight => new Vector2(1, 1),
                 GridLayoutGroup.Corner.LowerLeft => new Vector2(0, 0),
                 GridLayoutGroup.Corner.LowerRight => new Vector2(1, 0),
                 _ => throw new ArgumentOutOfRangeException()
@@ -461,21 +550,23 @@ namespace XericUI.OverrideLayout
         {
             var first = layoutItems[0];
             var last = layoutItems[^1];
-            
+
             // first.position
         }
-        
+
         private List<GridLayoutCalculator.LayoutItem> GetChildrenLayout(int childrenCount)
         {
             // 根据约束类型设置合适的 constraintCount
-            int constraintCount = 0;
-            if (m_constraint == GridLayoutGroup.Constraint.FixedColumnCount || m_constraint == GridLayoutGroup.Constraint.FixedRowCount)
+            int constraintCount = m_constraint switch
             {
-                // 这里可以根据实际需求设置合适的约束数量
-                // 暂时使用一个默认值，实际项目中可能需要从外部传入或通过其他方式计算
-                constraintCount = 3;
-            }
-            
+                GridLayoutGroup.Constraint.FixedColumnCount => Mathf.CeilToInt(m_cellSize.x / ContextSize.x),
+                GridLayoutGroup.Constraint.FixedRowCount => Mathf.CeilToInt(m_cellSize.y / ContextSize.y),
+                _ => 0,
+            };
+
+            if (m_constraintCount > 0)
+                constraintCount = m_constraintCount;
+
             return GridLayoutCalculator.CalculateGridLayout(
                 _layoutItems,
                 childCount: childrenCount,

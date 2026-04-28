@@ -23,6 +23,7 @@ namespace XericUIEditor.OverrideLayout
         SerializedProperty m_startAxis;
         SerializedProperty m_childAlignment;
         SerializedProperty m_constraint;
+        SerializedProperty m_constraintCount;
 
         protected override void OnEnable()
         {
@@ -41,6 +42,7 @@ namespace XericUIEditor.OverrideLayout
             m_startAxis = serializedObject.FindProperty("m_startAxis");
             m_childAlignment = serializedObject.FindProperty("m_childAlignment");
             m_constraint = serializedObject.FindProperty("m_constraint");
+            m_constraintCount = serializedObject.FindProperty("m_constraintCount");
         }
 
         public override void OnInspectorGUI()
@@ -68,6 +70,8 @@ namespace XericUIEditor.OverrideLayout
                 EditorGUILayout.PropertyField(m_startAxis);
                 EditorGUILayout.PropertyField(m_childAlignment);
                 EditorGUILayout.PropertyField(m_constraint);
+                if (m_constraint.enumValueIndex != (int)UnityEngine.UI.GridLayoutGroup.Constraint.Flexible)
+                    EditorGUILayout.PropertyField(m_constraintCount);
                 EditorGUI.indentLevel--;
             }
 

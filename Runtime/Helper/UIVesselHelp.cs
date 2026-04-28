@@ -4,15 +4,15 @@ namespace XericUI.Helper
 {
     public static class UIVesselHelper
     {
-        public static void CallVisibal(this IUIVesselVisibalControl control, bool underVisible)
+        public static void CallVisible(this IUIVesselVisibalControl control, bool underVisible)
         {
             if (underVisible)
             {
-                control.UnderVisibal();
+                control.UnderVisible();
             }
             else
             {
-                control.OutOfVisibal();
+                control.OutOfVisible();
             }
         }
     }

@@ -1,4 +1,6 @@
-﻿namespace XericUI.Core.Interface
+﻿using XericUI.Helper;
+
+namespace XericUI.Core.Interface
 {
     /// <summary>
     /// Xeric UI Vessel容器控制接口
@@ -12,11 +14,12 @@
         /// <summary>
         /// 当前元素处于可见范围时（预载范围）
         /// </summary>
-        public void UnderVisibal();
+        public void UnderVisible();
         /// <summary>
         /// 当前元素离开可见范围时（预载范围）
         /// </summary>
-
-        public void OutOfVisibal();
+        public void OutOfVisible();
+                
+        public void UpdateLayout(GridLayoutCalculator.LayoutItem layoutData);
     }
 }
