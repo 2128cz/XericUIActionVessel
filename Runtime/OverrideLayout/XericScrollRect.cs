@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -153,7 +153,11 @@ namespace XericUI.OverrideLayout
             }
 
             public Vector2 WorldAnchoredPosition(RectTransform parentContent)
-                => parentContent.TransformPoint(itemRectTransform.anchoredPosition);
+            {
+                // 获取对象的世界坐标位置
+                var worldPos = itemRectTransform.TransformPoint(Vector3.zero);
+                return worldPos;
+            }
         }
 
         #region 生命周期
@@ -212,8 +216,9 @@ namespace XericUI.OverrideLayout
                 else
                 {
                     Gizmos.color = Color.red;
-                    MacroGizmosDraw.DrawGizmosRectAtPoint(data.layout.position, data.layout.size);
-                    MacroGizmosDraw.Label(data.layout.position, $"[{data.index}] 已回收");
+                    var worldPos = (Vector2)content.TransformPoint(data.layout.position);
+                    MacroGizmosDraw.DrawGizmosRectLine(new Vector2(worldPos.x, worldPos.y - data.layout.size.y) , new Vector2(worldPos.x + data.layout.size.x, worldPos.y));
+                    MacroGizmosDraw.Label(worldPos, $"[{data.index}] 已回收");
                 }
             }
         }
@@ -360,7 +365,9 @@ namespace XericUI.OverrideLayout
                 }
                 else
                 {
-                    if (!CheckIsVisibal(childData.layout.position))
+                    // 将本地坐标转换为世界坐标进行比较
+                    var worldPos = content.TransformPoint(childData.layout.position);
+                    if (CheckIsVisibal(worldPos))
                         childData.UnderVisible();
                 }
             }
@@ -536,10 +543,14 @@ namespace XericUI.OverrideLayout
         private List<GridLayoutCalculator.LayoutItem> GetChildrenLayout(int childrenCount)
         {
             // 根据约束类型设置合适的 constraintCount
+            // FixedColumnCount: 计算容器能容纳多少列 = 容器宽度 / (单元格宽度 + 间距)
+            // FixedRowCount: 计算容器能容纳多少行 = 容器高度 / (单元格高度 + 间距)
             int constraintCount = m_constraint switch
             {
-                GridLayoutGroup.Constraint.FixedColumnCount => Mathf.CeilToInt(m_cellSize.x / ContextSize.x),
-                GridLayoutGroup.Constraint.FixedRowCount => Mathf.CeilToInt(m_cellSize.y / ContextSize.y),
+                GridLayoutGroup.Constraint.FixedColumnCount => 
+                    Mathf.CeilToInt((ContextSize.x - m_padding.horizontal) / (m_cellSize.x + m_spacing.x)),
+                GridLayoutGroup.Constraint.FixedRowCount => 
+                    Mathf.CeilToInt((ContextSize.y - m_padding.vertical) / (m_cellSize.y + m_spacing.y)),
                 _ => 0,
             };
 

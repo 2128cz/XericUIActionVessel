@@ -1,4 +1,4 @@
-﻿﻿using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -99,10 +99,18 @@ namespace XericUI.Helper
                 if (cornerY == 1)
                     gridY = actualCellCountY - 1 - gridY;
 
-                // 计算最终位置（固定方向：向右下）
+                // 计算最终位置（根据startCorner决定方向）
+                // 在Unity UI坐标系中：左下角是(0,0)，向右X增加，向上Y增加
+                // UpperLeft (0): 起点左上，向右(+)填充，向下(-)排列
+                // UpperRight (1): 起点右上，向左(-)填充，向下(-)排列
+                // LowerLeft (2): 起点左下，向右(+)填充，向上(+)排列
+                // LowerRight (3): 起点右下，向左(-)填充，向上(+)排列
+                float xDir = cornerX == 0 ? 1f : -1f;  // 左边开始向右，右边开始向左
+                float yDir = cornerY == 0 ? -1f : 1f;  // 上边开始向下，下边开始向上
+                
                 Vector2 position = new Vector2(
-                    startOffset.x + (cellSize.x + spacing.x) * gridX,
-                    startOffset.y + (cellSize.y + spacing.y) * gridY
+                    startOffset.x + (cellSize.x + spacing.x) * gridX * xDir,
+                    startOffset.y + (cellSize.y + spacing.y) * gridY * yDir
                 );
 
                 layoutItems.Add(new LayoutItem
