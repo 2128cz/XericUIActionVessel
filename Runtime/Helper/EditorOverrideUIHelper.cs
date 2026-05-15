@@ -2,7 +2,7 @@
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
-using Action = Unity.Plastic.Antlr3.Runtime.Misc.Action;
+// using Action = Unity.Plastic.Antlr3.Runtime.Misc.Action;
 using Object = UnityEngine.Object;
 
 #if UNITY_EDITOR
@@ -81,7 +81,7 @@ namespace XericUI.Helper
         }
 #else
         private static void ReplaceCommandContext<T1, T2, T3>(this Object command, 
-            Func<TSource, object> referenceExtractor, Action<TTarget, object> referenceApplier) 
+            Func<T1, T3> referenceExtractor, Action<T2, T3> referenceApplier) 
             => throw new Exception("不能在运行时使用XericUIActionVessel编辑器功能");
 #endif
     }
