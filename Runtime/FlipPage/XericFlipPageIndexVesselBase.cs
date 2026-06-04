@@ -76,8 +76,20 @@ namespace XericUI.FlipPage
         /// <summary>
         /// 页面对象池，对象池仅管理页面本身，不参与任何数据容器的管理。
         /// </summary>
-        protected ObjectPool<PageInfo> PageInfoPool = null;
-        public Func<PageInfo> HowToCreatPageInfo = () => throw new Exception("需要翻页管理器实现相应的页面创建逻辑，并重写添加默认数据方法后才可以使用。");
+        private ObjectPool<PageInfo> _pageInfoPool = null;
+
+        protected ObjectPool<PageInfo> PageInfoPool
+        {
+            get
+            {
+                if (_pageInfoPool != null)
+                    return _pageInfoPool;
+                _pageInfoPool = new ObjectPool<PageInfo>(CreatPageInfo, GetPageInfo, ReleasePageInfo, DestroyPageInfo);
+                return _pageInfoPool;
+            }
+        }
+
+        protected virtual Func<PageInfo> HowToCreatPageInfo => () => throw new Exception("需要翻页管理器实现相应的页面创建逻辑，并重写添加默认数据方法后才可以使用。");
 
         /// <summary>
         /// 当前选中的页面索引
@@ -148,7 +160,6 @@ namespace XericUI.FlipPage
         protected override void Awake()
         {
             base.Awake();
-            PageInfoPool = new ObjectPool<PageInfo>(CreatPageInfo, GetPageInfo, ReleasePageInfo, DestroyPageInfo);
         }
 
         protected override void Start()
@@ -277,6 +288,7 @@ namespace XericUI.FlipPage
                     CurrentPageNode = null;
                     return;
                 }
+
                 CurrentPageNode = nextPage;
             }
         }
@@ -351,7 +363,7 @@ namespace XericUI.FlipPage
         {
             if (pageInfo == null)
                 pageInfo = PageInfoPool.Get();
-            
+
             if (isFirstOtherwiseLast)
             {
                 // 添加页面(页面下标默认0)
@@ -366,6 +378,7 @@ namespace XericUI.FlipPage
                 // 添加页面
                 _pageInfos.AddLast(pageInfo);
             }
+
             // GetPageInfo(pageInfo);
             // 执行页面生命周期
             pageInfo.OnPageCreated(this);
@@ -405,7 +418,7 @@ namespace XericUI.FlipPage
                 tempPage = tempPage.Next;
                 tempPage.Value.pageNumber = tempPageNumber++;
             }
-            
+
             // 刷新页面
             FlipPage(currentPageIndex, true);
         }
@@ -452,10 +465,11 @@ namespace XericUI.FlipPage
                 pageInfo.ItemInfos.Clear();
                 PageInfoPool.Release(pageInfo);
             }
+
             ListPool<PageInfo>.Release(tempPageInfo);
             // 清空池
             if (resetPool)
-                PageInfoPool.Clear();
+                PageInfoPool?.Clear();
             // 重置当前页面
             CurrentPageNode = null;
             currentPageIndex = 0;
@@ -547,6 +561,7 @@ namespace XericUI.FlipPage
                 Debug.LogError($"流程错误，页面尝试重复获取，请检查代码流程({info.GetHashCode():X16})\n_>{info.name}");
                 return;
             }
+
             info.OnPageCreated(this);
             return;
         }
@@ -563,6 +578,7 @@ namespace XericUI.FlipPage
                 Debug.LogError("流程错误，页面尝试重复释放，请检查代码流程");
                 return;
             }
+
             if (CurrentPageNode != null && Currentpage == info)
             {
                 info.OnPageInvisible(true);
@@ -672,7 +688,7 @@ namespace XericUI.FlipPage
         /// <returns></returns>
         public bool Contains(ItemInfo item)
             => _itemInfos.Contains(item);
-        
+
         #endregion
 
         #region 类内类型
@@ -701,13 +717,13 @@ namespace XericUI.FlipPage
             [LabelText("页面项目信息")]
 #endif
             private List<ItemInfo> _itemInfos;
-            
+
             public List<ItemInfo> ItemInfos
             {
                 get => _itemInfos ??= ListPool<ItemInfo>.Get();
                 set => _itemInfos = value;
             }
-            
+
             /// <summary>
             /// 从零开始计数的页面下标
             /// </summary>
@@ -748,7 +764,7 @@ namespace XericUI.FlipPage
                 if (ItemInfos != null)
                 {
                     ListPool<ItemInfo>.Release(ItemInfos);
-                    ItemInfos = null; 
+                    ItemInfos = null;
                 }
             }
 
@@ -857,7 +873,7 @@ namespace XericUI.FlipPage
             protected internal abstract void OnItemInvisible();
 
             #endregion
-            
+
             public override string ToString()
             {
                 return $"[{nameof(ItemInfo)}] ({name})";

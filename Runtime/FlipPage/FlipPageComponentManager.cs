@@ -149,6 +149,8 @@ namespace XericUI.FlipPage
             }
         }
 
+        protected override Func<PageInfo> HowToCreatPageInfo => () => new PageComponentInfo();
+        
         #endregion
 
         #region 类内类型
@@ -217,7 +219,7 @@ namespace XericUI.FlipPage
         protected override void Awake()
         {
             // 使用默认的
-            HowToCreatPageInfo = () => new PageComponentInfo();
+            
             
             base.Awake();
             
