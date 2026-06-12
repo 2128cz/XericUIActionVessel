@@ -66,7 +66,6 @@ namespace XericUI.BubbleLayout
 		[Tooltip("是否启用插件系统")]
 		[SerializeField] private bool m_EnablePlugins = true;
 
-		[Header("物理参数")]
 		[Tooltip("速度阻尼系数 (0=无阻尼, 1=完全停止)")]
 		[SerializeField] private float m_PhysicsDamping = 0.9f;
 
@@ -79,7 +78,6 @@ namespace XericUI.BubbleLayout
 		[Tooltip("物理时间步长（0表示使用Time.deltaTime）")]
 		[SerializeField] private float m_PhysicsDeltaTime = 0f;
 
-		[Header("碰撞排挤")]
 		[Tooltip("最大迭代次数")]
 		[SerializeField] private int m_MaxIterations = 10;
 
@@ -394,12 +392,15 @@ namespace XericUI.BubbleLayout
 		}
 
 		/// <summary>
-		/// 获取布局中心点
+		/// 获取布局中心点（localPosition 空间）
+		/// localPosition (0,0) = pivot 位置，此方法返回 rect 中心相对 pivot 的偏移
 		/// </summary>
 		private Vector2 GetLayoutCenter()
 		{
 			var rt = rectTransform;
-			return new Vector2(rt.rect.width * 0.5f, rt.rect.height * 0.5f);
+			return new Vector2(
+				rt.rect.width  * (0.5f - rt.pivot.x),
+				rt.rect.height * (0.5f - rt.pivot.y));
 		}
 
 		/// <summary>

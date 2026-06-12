@@ -9,13 +9,13 @@ namespace XericUI.BubbleLayout
 	public abstract class BubbleLayoutPluginBase : MonoBehaviour, IBubbleLayoutPlugin
 	{
 		[Tooltip("是否启用此插件")]
-		[SerializeField] protected bool m_Enabled = true;
+		[SerializeField] private bool m_PluginEnabled = true;
 
 		[Tooltip("执行优先级，值越大越靠后执行")]
-		[SerializeField] protected int m_Order = 10;
+		[SerializeField] private int m_PluginOrder = 10;
 
-		public bool Enabled => m_Enabled;
-		public int Order => m_Order;
+		public bool Enabled => m_PluginEnabled;
+		public int Order => m_PluginOrder;
 
 #if UNITY_EDITOR
 		/// <summary>
@@ -25,8 +25,8 @@ namespace XericUI.BubbleLayout
 
 		protected virtual void Reset()
 		{
-			m_Order = EditorDefaultOrder;
-			m_Enabled = true;
+			m_PluginOrder = EditorDefaultOrder;
+			m_PluginEnabled = true;
 		}
 #endif
 	}

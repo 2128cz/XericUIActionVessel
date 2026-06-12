@@ -25,7 +25,6 @@ namespace XericUIEditor.BubbleLayout
 		private SerializedProperty m_LayoutIgnoreInactive;
 
 		// ── 样式 ──
-		private static GUIStyle s_BoxStyle;
 		private static GUIStyle s_PerfHeaderStyle;
 		private static GUIStyle s_PerfLabelStyle;
 		private static GUIStyle s_PerfValueStyle;
@@ -35,17 +34,6 @@ namespace XericUIEditor.BubbleLayout
 		{
 			if (s_StylesInitialized)
 				return;
-
-			s_BoxStyle = new GUIStyle(GUI.skin.box)
-			{
-				padding = new RectOffset(12, 12, 10, 10),
-				margin = new RectOffset(4, 4, 4, 4),
-			};
-
-			var bgTex = new Texture2D(1, 1);
-			bgTex.SetPixel(0, 0, new Color(0.18f, 0.18f, 0.18f, 1f));
-			bgTex.Apply();
-			s_BoxStyle.normal.background = bgTex;
 
 			s_PerfHeaderStyle = new GUIStyle(EditorStyles.boldLabel)
 			{
@@ -93,7 +81,7 @@ namespace XericUIEditor.BubbleLayout
 			EnsureStyles();
 
 			// ── 白色圆角边框 + 深色底 ──
-			EditorGUILayout.BeginVertical(s_BoxStyle);
+			EditorGUILayout.BeginVertical(BubbleLayoutEditorStyles.BoxStyle);
 
 			serializedObject.Update();
 
@@ -147,7 +135,7 @@ namespace XericUIEditor.BubbleLayout
 
 			EditorGUILayout.Space(6);
 
-			EditorGUILayout.BeginVertical(s_BoxStyle);
+			EditorGUILayout.BeginVertical(BubbleLayoutEditorStyles.BoxStyle);
 
 			EditorGUILayout.LabelField("性能指标", s_PerfHeaderStyle);
 			EditorGUILayout.Space(2);

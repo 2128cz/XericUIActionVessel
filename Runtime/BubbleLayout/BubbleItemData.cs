@@ -75,7 +75,7 @@ namespace XericUI.BubbleLayout
 			{
 				rectTransform = rt,
 				Key = $"{rt.name}_{rt.GetInstanceID()}",
-				position = rt.anchoredPosition,
+				position = rt.localPosition,
 				size = rt.rect.size,
 				rotation = rt.localEulerAngles.z,
 				velocity = Vector2.zero,
@@ -96,7 +96,7 @@ namespace XericUI.BubbleLayout
 		{
 			if (rectTransform != null)
 			{
-				rectTransform.anchoredPosition = position;
+				rectTransform.localPosition = new Vector3(position.x, position.y, rectTransform.localPosition.z);
 			}
 		}
 	}

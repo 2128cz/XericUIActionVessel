@@ -113,5 +113,111 @@ namespace XericUI.BubbleLayout
 					break;
 			}
 		}
+
+#if UNITY_EDITOR
+		private struct GizmoSlot
+		{
+			public RectTransform rectTransform;
+			public Vector2 size;
+			public int index;
+		}
+
+		private void OnDrawGizmosSelected()
+		{
+			if (!isActiveAndEnabled || transform.childCount == 0)
+				return;
+
+			var slots = new List<GizmoSlot>();
+			for (int i = 0; i < transform.childCount; i++)
+			{
+				var rt = transform.GetChild(i) as RectTransform;
+				if (rt == null || !rt.gameObject.activeInHierarchy)
+					continue;
+				slots.Add(new GizmoSlot { rectTransform = rt, size = rt.rect.size, index = i });
+			}
+			if (slots.Count == 0) return;
+
+			switch (m_SortMode)
+			{
+				case LayoutSortMode.PositionX:
+					slots.Sort((a, b) => a.rectTransform.localPosition.x.CompareTo(b.rectTransform.localPosition.x));
+					break;
+				case LayoutSortMode.PositionY:
+					slots.Sort((a, b) => b.rectTransform.localPosition.y.CompareTo(a.rectTransform.localPosition.y));
+					break;
+				case LayoutSortMode.Size:
+					slots.Sort((a, b) => (b.size.x * b.size.y).CompareTo(a.size.x * a.size.y));
+					break;
+			}
+
+			var parentRT = (RectTransform)transform;
+			Vector2 center = new Vector2(
+				parentRT.rect.width  * (0.5f - parentRT.pivot.x),
+				parentRT.rect.height * (0.5f - parentRT.pivot.y));
+
+			// 计算角度步长
+			float angleStep;
+			if (m_AngleMode == AngleMode.Auto)
+			{
+				angleStep = slots.Count > 1 ? 360f / slots.Count : 0f;
+				if (slots.Count > 1)
+				{
+					float minRequired = m_MinAngle;
+					for (int i = 0; i < slots.Count; i++)
+					{
+						float arc = Mathf.Atan2(slots[i].size.x * 0.5f, m_Radius) * 2f * Mathf.Rad2Deg;
+						minRequired = Mathf.Max(minRequired, arc);
+					}
+					angleStep = Mathf.Max(angleStep, minRequired);
+				}
+			}
+			else
+			{
+				angleStep = m_AngleStep;
+			}
+
+			Vector3 worldCenter = transform.TransformPoint(new Vector3(center.x, center.y, 0));
+
+			// 绘制环绕参考圆
+			Color circleColor = new Color(0.2f, 1f, 0.5f, 0.4f);
+			Gizmos.color = circleColor;
+			DrawWireCircle(worldCenter, m_Radius, 64);
+
+			// 绘制元素目标位置标记
+			Color slotColor = new Color(0.2f, 1f, 0.5f, 0.7f);
+
+			for (int i = 0; i < slots.Count; i++)
+			{
+				var slot = slots[i];
+				float angle = m_StartAngle + (m_Clockwise ? -1f : 1f) * angleStep * i;
+				float rad = angle * Mathf.Deg2Rad;
+
+				Vector2 targetLocal = center + new Vector2(Mathf.Cos(rad) * m_Radius, Mathf.Sin(rad) * m_Radius);
+				Vector3 targetWorld = transform.TransformPoint(new Vector3(targetLocal.x, targetLocal.y, 0));
+
+				// 小方框标记
+				Vector3 slotScale = transform.TransformVector(new Vector3(slot.size.x * 0.3f, slot.size.y * 0.3f, 0));
+				Gizmos.color = slotColor;
+				Gizmos.DrawWireCube(targetWorld, slotScale);
+
+				// 从圆心到目标的连线
+				Gizmos.color = circleColor;
+				Gizmos.DrawLine(worldCenter, targetWorld);
+			}
+		}
+
+		private static void DrawWireCircle(Vector3 center, float radius, int segments)
+		{
+			float anglePerSegment = 360f / segments * Mathf.Deg2Rad;
+			Vector3 prevPoint = center + new Vector3(Mathf.Cos(0) * radius, Mathf.Sin(0) * radius, 0);
+			for (int i = 1; i <= segments; i++)
+			{
+				float a = anglePerSegment * i;
+				Vector3 nextPoint = center + new Vector3(Mathf.Cos(a) * radius, Mathf.Sin(a) * radius, 0);
+				Gizmos.DrawLine(prevPoint, nextPoint);
+				prevPoint = nextPoint;
+			}
+		}
+#endif
 	}
 }
