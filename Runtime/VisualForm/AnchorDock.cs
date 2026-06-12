@@ -436,26 +436,33 @@ namespace XericUI.VisualForm
         }
 
         /// <summary>
-        /// 更新指定中间类的屏幕坐标
+        /// 更新指定中间类中所有窗口条目的屏幕坐标（基础位置 + 条目偏移量）
         /// </summary>
         private void UpdateStatePosition(WindowState state)
         {
             if (state.Anchor == null || _worldCamera == null || _canvas == null) return;
-
-            var target = state.GetTargetTransform();
-            if (target == null) return;
+            if (state.Entries.Count == 0) return;
 
             Vector3 worldPos = state.Anchor.CachedTransform.position;
 
-            if (TryWorldToScreenPoint(worldPos, _worldCamera, _uiCamera, _canvas, RectTransform, out Vector2 localPoint))
-            {
-                if (target is RectTransform rectTarget)
-                    rectTarget.anchoredPosition = localPoint;
-                else
-                    target.localPosition = new Vector3(localPoint.x, localPoint.y, target.localPosition.z);
+            if (!TryWorldToScreenPoint(worldPos, _worldCamera, _uiCamera, _canvas, RectTransform, out Vector2 basePoint))
+                return;
 
-                state.CoordinateDirty = false;
+            // 为每个窗口条目设置位置：基础坐标 + 条目自身偏移量
+            foreach (var entry in state.Entries)
+            {
+                if (entry.Instance == null) continue;
+
+                Vector2 finalPoint = basePoint + entry.ScreenOffset;
+                var target = entry.Instance.transform;
+
+                if (target is RectTransform rectTarget)
+                    rectTarget.anchoredPosition = finalPoint;
+                else
+                    target.localPosition = new Vector3(finalPoint.x, finalPoint.y, target.localPosition.z);
             }
+
+            state.CoordinateDirty = false;
         }
 
         #endregion
