@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using XericLibrary.Runtime.MacroLibrary;
 
 namespace XericUI.VisualForm
 {
@@ -9,6 +10,7 @@ namespace XericUI.VisualForm
     /// 负责收集所有世界锚点，每帧将世界坐标转换到屏幕坐标，并管理中间窗口状态。
     /// </summary>
     [AddComponentMenu("Xeric UI Vessel/AnchorWindow/AnchorDock")]
+    [DefaultExecutionOrder(31000)]
     public class AnchorDock : MonoBehaviour
     {
         [Header("配置")]
@@ -44,7 +46,8 @@ namespace XericUI.VisualForm
         #region 内部状态
 
         private Canvas _canvas;
-        private Camera _renderCamera;
+        private Camera _worldCamera;
+        private Camera _uiCamera;
         private RectTransform _rectTransform;
 
         /// <summary>
@@ -93,23 +96,38 @@ namespace XericUI.VisualForm
         private bool _cameraDirty;
 
         /// <summary>
-        /// 上帧摄像机世界坐标
+        /// 上帧世界摄像机坐标
         /// </summary>
-        private Vector3 _lastCameraPosition;
+        private Vector3 _lastWorldCameraPosition;
 
         /// <summary>
-        /// 上帧摄像机世界旋转
+        /// 上帧世界摄像机旋转
         /// </summary>
-        private Quaternion _lastCameraRotation;
+        private Quaternion _lastWorldCameraRotation;
+
+        /// <summary>
+        /// 上帧UI摄像机坐标
+        /// </summary>
+        private Vector3 _lastUICameraPosition;
+
+        /// <summary>
+        /// 上帧UI摄像机旋转
+        /// </summary>
+        private Quaternion _lastUICameraRotation;
 
         #endregion
 
         #region 公开属性
 
         /// <summary>
-        /// 当前使用的渲染摄像机
+        /// 世界摄像机（用于 World→Screen 转换，通常是 MainCamera）
         /// </summary>
-        public Camera RenderCamera => _renderCamera;
+        public Camera WorldCamera => _worldCamera;
+
+        /// <summary>
+        /// UI摄像机（用于 Screen→Canvas 转换，Overlay时为null，Camera时为canvas.worldCamera）
+        /// </summary>
+        public Camera UICamera => _uiCamera;
 
         /// <summary>
         /// Canvas组件引用
@@ -173,8 +191,10 @@ namespace XericUI.VisualForm
 
             // 初始化摄像机引用
             RefreshCameraReference();
-            _lastCameraPosition = _renderCamera ? _renderCamera.transform.position : Vector3.zero;
-            _lastCameraRotation = _renderCamera ? _renderCamera.transform.rotation : Quaternion.identity;
+            _lastWorldCameraPosition = _worldCamera ? _worldCamera.transform.position : Vector3.zero;
+            _lastWorldCameraRotation = _worldCamera ? _worldCamera.transform.rotation : Quaternion.identity;
+            _lastUICameraPosition = _uiCamera ? _uiCamera.transform.position : Vector3.zero;
+            _lastUICameraRotation = _uiCamera ? _uiCamera.transform.rotation : Quaternion.identity;
 
             // 标记需要重建子对象哈希集
             MarkChildrenSetDirty();
@@ -348,54 +368,71 @@ namespace XericUI.VisualForm
         #region 坐标更新
 
         /// <summary>
-        /// 刷新摄像机引用：检查Canvas的renderMode，选择合适的摄像机
+        /// 刷新摄像机引用：分离世界摄像机（观察3D场景）和UI摄像机（渲染Canvas）
         /// </summary>
         public void RefreshCameraReference()
         {
+            // 世界摄像机：用于 World→Screen 转换
+            _worldCamera = Camera.main;
+
+            // UI摄像机：用于 Screen→Canvas 转换
             if (m_OverrideCamera != null)
             {
-                _renderCamera = m_OverrideCamera;
-                return;
+                _uiCamera = m_OverrideCamera;
             }
-
-            if (_canvas == null)
+            else
             {
-                _canvas = GetComponent<Canvas>();
                 if (_canvas == null)
-                    _canvas = GetComponentInParent<Canvas>();
-            }
+                {
+                    _canvas = GetComponent<Canvas>();
+                    if (_canvas == null)
+                        _canvas = GetComponentInParent<Canvas>();
+                }
 
-            if (_canvas != null && _canvas.renderMode == RenderMode.ScreenSpaceCamera)
-            {
-                _renderCamera = _canvas.worldCamera;
+                _uiCamera = (_canvas != null && _canvas.renderMode == RenderMode.ScreenSpaceCamera)
+                    ? _canvas.worldCamera : null;
             }
-
-            // ScreenSpaceOverlay 或找不到摄像机时使用MainCamera
-            if (_renderCamera == null)
-                _renderCamera = Camera.main;
         }
 
         /// <summary>
-        /// 检查摄像机变换是否发生变化
+        /// 检查世界摄像机和UI摄像机是否发生变换，任意一个变化即标记脏
         /// </summary>
         private void CheckCameraDirty()
         {
-            if (_renderCamera == null)
+            if (_worldCamera == null)
             {
                 RefreshCameraReference();
                 return;
             }
 
-            var camTransform = _renderCamera.transform;
-            var currentPos = camTransform.position;
-            var currentRot = camTransform.rotation;
+            bool dirty = false;
 
-            if (currentPos != _lastCameraPosition || currentRot != _lastCameraRotation)
+            // 检查世界摄像机变换
+            var wcTransform = _worldCamera.transform;
+            Vector3 wcPos = wcTransform.position;
+            Quaternion wcRot = wcTransform.rotation;
+            if (wcPos != _lastWorldCameraPosition || wcRot != _lastWorldCameraRotation)
             {
-                _cameraDirty = true;
-                _lastCameraPosition = currentPos;
-                _lastCameraRotation = currentRot;
+                dirty = true;
+                _lastWorldCameraPosition = wcPos;
+                _lastWorldCameraRotation = wcRot;
             }
+
+            // 检查UI摄像机变换
+            if (_uiCamera != null && _uiCamera != _worldCamera)
+            {
+                var uiTransform = _uiCamera.transform;
+                Vector3 uiPos = uiTransform.position;
+                Quaternion uiRot = uiTransform.rotation;
+                if (uiPos != _lastUICameraPosition || uiRot != _lastUICameraRotation)
+                {
+                    dirty = true;
+                    _lastUICameraPosition = uiPos;
+                    _lastUICameraRotation = uiRot;
+                }
+            }
+
+            _cameraDirty = dirty;
         }
 
         /// <summary>
@@ -403,25 +440,22 @@ namespace XericUI.VisualForm
         /// </summary>
         private void UpdateStatePosition(WindowState state)
         {
-            if (state.Anchor == null || _renderCamera == null) return;
+            if (state.Anchor == null || _worldCamera == null || _canvas == null) return;
 
             var target = state.GetTargetTransform();
             if (target == null) return;
 
             Vector3 worldPos = state.Anchor.CachedTransform.position;
-            Vector2 localPoint = WorldToScreenPoint(worldPos, _renderCamera, RectTransform);
 
-            // target是容器的子对象，设置localPosition
-            if (target is RectTransform rectTarget)
+            if (TryWorldToScreenPoint(worldPos, _worldCamera, _uiCamera, _canvas, RectTransform, out Vector2 localPoint))
             {
-                rectTarget.localPosition = new Vector3(localPoint.x, localPoint.y, rectTarget.localPosition.z);
-            }
-            else
-            {
-                target.localPosition = new Vector3(localPoint.x, localPoint.y, target.localPosition.z);
-            }
+                if (target is RectTransform rectTarget)
+                    rectTarget.anchoredPosition = localPoint;
+                else
+                    target.localPosition = new Vector3(localPoint.x, localPoint.y, target.localPosition.z);
 
-            state.CoordinateDirty = false;
+                state.CoordinateDirty = false;
+            }
         }
 
         #endregion
@@ -487,32 +521,68 @@ namespace XericUI.VisualForm
         #region 静态工具方法
 
         /// <summary>
-        /// 将世界空间坐标转换到Canvas容器内的本地坐标
+        /// 尝试将世界空间坐标转换到目标RectTransform容器内的本地坐标。
+        /// 世界摄像机负责 World→Screen，UI摄像机负责 Screen→Canvas 本地。
         /// </summary>
-        /// <param name="worldPos">世界空间坐标</param>
-        /// <param name="camera">使用的摄像机</param>
-        /// <param name="container">目标Canvas容器的RectTransform</param>
-        /// <returns>容器内的本地坐标</returns>
-        public static Vector2 WorldToScreenPoint(Vector3 worldPos, Camera camera, RectTransform container)
+        /// <param name="worldPos">世界坐标</param>
+        /// <param name="worldCamera">世界摄像机（用于 WorldToScreenPoint，通常为MainCamera）</param>
+        /// <param name="uiCamera">UI摄像机（用于 ScreenPointToLocalPointInRectangle，Overlay时为null）</param>
+        /// <param name="canvas">所属Canvas</param>
+        /// <param name="container">目标容器的RectTransform</param>
+        /// <param name="localPoint">输出的本地坐标</param>
+        /// <returns>坐标是否有效</returns>
+        public static bool TryWorldToScreenPoint(Vector3 worldPos, Camera worldCamera, Camera uiCamera,
+            Canvas canvas, RectTransform container, out Vector2 localPoint)
         {
-            if (camera == null || container == null)
-                return Vector2.zero;
+            localPoint = Vector2.zero;
 
-            Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(camera, worldPos);
+            if (worldCamera == null || container == null || canvas == null)
+                return false;
 
-            if (container.TryGetComponent<Canvas>(out var canvas))
+            // 1. 世界坐标 → 屏幕像素（使用世界摄像机）
+            Vector3 screenPos = worldCamera.WorldToScreenPoint(worldPos);
+
+            if (screenPos.IsNaN() || screenPos.IsInfinity() || screenPos.z < 0f)
+                return false;
+
+            // 2. Canvas RectTransform参数
+            RectTransform canvasRect = (RectTransform)canvas.transform;
+            Vector2 canvasSize = canvasRect.rect.size;
+            Vector2 canvasPivot = canvasRect.pivot;
+
+            // 3. 屏幕像素 → Canvas本地坐标
+            Vector2 canvasLocal;
+            if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
             {
-                if (canvas.renderMode != RenderMode.ScreenSpaceOverlay && camera != null)
-                {
-                    RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                        container, screenPoint, camera, out Vector2 localPoint);
-                    return localPoint;
-                }
+                // Overlay：屏幕即Canvas
+                canvasLocal = new Vector2(
+                    screenPos.x - canvasSize.x * canvasPivot.x,
+                    screenPos.y - canvasSize.y * canvasPivot.y
+                );
+            }
+            else
+            {
+                // Camera模式：用UI摄像机做 Screen→Canvas 转换
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    canvasRect, (Vector2)screenPos, uiCamera, out canvasLocal);
             }
 
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                container, screenPoint, null, out Vector2 overlayPoint);
-            return overlayPoint;
+            if (canvasLocal.IsNaN() || canvasLocal.IsInfinity())
+                return false;
+
+            // 4. 如果container不是Canvas自身，从Canvas空间变换到container本地空间
+            if (container != canvasRect)
+            {
+                Vector3 worldInCanvas = canvasRect.TransformPoint(new Vector3(canvasLocal.x, canvasLocal.y, 0f));
+                Vector3 localInContainer = container.InverseTransformPoint(worldInCanvas);
+                localPoint = new Vector2(localInContainer.x, localInContainer.y);
+            }
+            else
+            {
+                localPoint = canvasLocal;
+            }
+
+            return true;
         }
 
         /// <summary>
