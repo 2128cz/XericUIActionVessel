@@ -11,7 +11,7 @@ using XericUI.OverrideUI;
 namespace XericUI
 {
     
-    [AddComponentMenu("Xeric UI Vessel/Toggle", 31)]
+    [AddComponentMenu("Xeric UI Vessel/UI/Toggle", 31)]
     [DisallowMultipleComponent]
     public class XericToggle : Toggle
     {

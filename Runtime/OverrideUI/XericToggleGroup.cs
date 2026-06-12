@@ -5,7 +5,7 @@ using XericUI.Helper;
 
 namespace XericUI.OverrideUI
 {
-    [AddComponentMenu("Xeric UI Vessel/ToggleGroup", 31)]
+    [AddComponentMenu("Xeric UI Vessel/UI/ToggleGroup", 31)]
     [DisallowMultipleComponent]
     public class XericToggleGroup : ToggleGroup
     {

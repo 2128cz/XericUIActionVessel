@@ -5,6 +5,7 @@ using XericUI.Helper;
 
 namespace XericUI.OverrideUI
 {
+    [AddComponentMenu("Xeric UI Vessel/UI/Button", 50)]
     public class XericButton : Button
     {
         

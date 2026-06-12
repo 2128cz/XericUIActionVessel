@@ -12,6 +12,7 @@ namespace XericUI.OverrideUI
     /// <remarks>
     /// 这个组件主要为了提供graphic层的事件，用于应对部分无法重写的ui组件事件
     /// </remarks>
+    [AddComponentMenu("Xeric UI Vessel/UI/Image", 50)]
     public class XericImage : Image
     {
         /// <summary>
