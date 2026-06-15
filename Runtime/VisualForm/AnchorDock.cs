@@ -29,10 +29,13 @@ namespace XericUI.VisualForm
 
         [Header("安全区")]
         [SerializeField, Tooltip("安全区矩形（Canvas本地空间），窗口超出此区域视为超出安全区")]
-        private Rect m_SafeZone = new Rect(-800f, -450f, 1600f, 900f);
+        private Rect m_SafeZone = new Rect(.1f, .05f, .8f, .8f);
 
         [SerializeField, Tooltip("安全区检测模式")]
         private SafeZoneMode m_SafeZoneMode = SafeZoneMode.Rect;
+
+        [SerializeField, Tooltip("安全区坐标单位")]
+        private SafeZoneUnit m_SafeZoneUnit = SafeZoneUnit.Ratio;
 
         #region 静态单例
 
@@ -461,12 +464,17 @@ namespace XericUI.VisualForm
             bool hasClamp = state.HasAnyClamp;
             var anchorWindow = state.Anchor as IAnchorWindowEntry;
 
+            // 将安全区从当前单位转为像素坐标
+            Rect pixelSafeZone = m_SafeZoneUnit == SafeZoneUnit.Ratio
+                ? RatioSafeZoneToPixel(m_SafeZone, canvasLocalRect)
+                : m_SafeZone;
+
             // 计算基础坐标的溢出状态
-            OverflowState baseOverflow = CheckOverflow(basePoint, m_SafeZone, m_SafeZoneMode, canvasLocalRect);
+            OverflowState baseOverflow = CheckOverflow(basePoint, pixelSafeZone, m_SafeZoneMode, canvasLocalRect);
             state.Overflow = baseOverflow;
 
             // 为基础坐标计算钳制位置（仅在需要钳制的条目上使用）
-            Vector2 clampedBase = hasClamp ? ClampToSafeZone(basePoint, m_SafeZone, m_SafeZoneMode) : basePoint;
+            Vector2 clampedBase = hasClamp ? ClampToSafeZone(basePoint, pixelSafeZone, m_SafeZoneMode) : basePoint;
 
             for (int i = 0; i < state.Entries.Count; i++)
             {
@@ -487,7 +495,7 @@ namespace XericUI.VisualForm
                 }
 
                 // 检测逐条目溢出状态变化，触发生命周期事件
-                OverflowState entryOverflow = CheckOverflow(finalPoint, m_SafeZone, m_SafeZoneMode, canvasLocalRect);
+                OverflowState entryOverflow = CheckOverflow(finalPoint, pixelSafeZone, m_SafeZoneMode, canvasLocalRect);
                 if (entryOverflow != entry.CurrentOverflow)
                 {
                     entry.CurrentOverflow = entryOverflow;
@@ -735,6 +743,53 @@ namespace XericUI.VisualForm
             }
         }
 
+        /// <summary>
+        /// 将比例安全区（0-1）转换为像素安全区。
+        /// </summary>
+        /// <param name="ratioSafeZone">比例安全区（x,y,width,height均为0-1）</param>
+        /// <param name="canvasLocalRect">Canvas本地空间矩形</param>
+        /// <returns>像素安全区</returns>
+        public static Rect RatioSafeZoneToPixel(Rect ratioSafeZone, Rect canvasLocalRect)
+        {
+            float w = canvasLocalRect.width;
+            float h = canvasLocalRect.height;
+            return new Rect(
+                canvasLocalRect.x + ratioSafeZone.x * w,
+                canvasLocalRect.y + ratioSafeZone.y * h,
+                ratioSafeZone.width * w,
+                ratioSafeZone.height * h
+            );
+        }
+
         #endregion
+
+#if UNITY_EDITOR
+        private void OnDrawGizmosSelected()
+        {
+            Canvas canvas = _canvas;
+            if (canvas == null)
+                canvas = GetComponentInParent<Canvas>() ?? GetComponent<Canvas>();
+            if (canvas == null) return;
+
+            Rect canvasRect = ((RectTransform)canvas.transform).rect;
+            Rect pixelSafeZone = m_SafeZoneUnit == SafeZoneUnit.Ratio
+                ? RatioSafeZoneToPixel(m_SafeZone, canvasRect)
+                : m_SafeZone;
+
+            Vector2 center = pixelSafeZone.center;
+            Vector3 size = new Vector3(pixelSafeZone.width, pixelSafeZone.height, 0.001f);
+
+            // 填充 — 橘黄色半透明
+            Gizmos.color = new Color(1f, 0.65f, 0.15f, 0.25f);
+            Gizmos.matrix = canvas.transform.localToWorldMatrix;
+            Gizmos.DrawCube(center, size);
+
+            // 边框 — 橘红色
+            Gizmos.color = new Color(1f, 0.35f, 0.05f, 0.9f);
+            Gizmos.DrawWireCube(center, size);
+
+            Gizmos.matrix = Matrix4x4.identity;
+        }
+#endif
     }
 }
