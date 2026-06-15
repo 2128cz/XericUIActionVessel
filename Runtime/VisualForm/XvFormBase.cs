@@ -5,8 +5,8 @@ namespace XericUI.VisualForm
     /// <summary>
     /// 虚拟窗体基类，提供基础的窗体标记功能
     /// </summary>
-    [AddComponentMenu("Xeric UI Vessel/AnchorWindow/XVFormBase")]
-    public class XVFormBase : MonoBehaviour
+    [AddComponentMenu("Xeric UI Vessel/AnchorWindow/XvFormBase")]
+    public class XvFormBase : MonoBehaviour
     {
         [SerializeField]
         private string m_FormID;

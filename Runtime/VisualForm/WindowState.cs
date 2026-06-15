@@ -38,6 +38,21 @@ namespace XericUI.VisualForm
         public bool IsEnabled { get; private set; }
 
         /// <summary>
+        /// 当前窗口溢出状态（由坞每帧更新）
+        /// </summary>
+        public OverflowState Overflow { get; set; }
+
+        /// <summary>
+        /// 是否存在至少一个需要钳制在安全区内的条目
+        /// </summary>
+        public bool HasAnyClamp { get; private set; }
+
+        /// <summary>
+        /// 是否存在至少一个启用的条目
+        /// </summary>
+        public bool HasAnyEnabled { get; private set; }
+
+        /// <summary>
         /// 坐标脏标记 - 当锚点世界坐标发生变化时标记
         /// </summary>
         public bool CoordinateDirty { get; set; }
@@ -80,13 +95,12 @@ namespace XericUI.VisualForm
         {
             if (Dock == null || Anchor == null) return;
 
-            var anchorWindow = Anchor as AnchorWindow;
-            if (anchorWindow == null || anchorWindow.WindowEntries.Count == 0)
+            if (Anchor is not IAnchorWindowEntry { DefaultTypeWindowEntriesCount: > 0 } anchorWindow)
                 return;
 
             Entries.Clear();
 
-            foreach (var srcEntry in anchorWindow.WindowEntries)
+            foreach (var srcEntry in anchorWindow.DefaultTypeWindowEntries)
             {
                 if (srcEntry == null || srcEntry.WindowObject == null)
                     continue;
@@ -109,6 +123,8 @@ namespace XericUI.VisualForm
 
                 Entries.Add(entry);
             }
+
+            RefreshFlags();
         }
 
         /// <summary>
@@ -178,8 +194,30 @@ namespace XericUI.VisualForm
             Anchor = null;
             Dock = null;
             IsEnabled = false;
+            Overflow = OverflowState.InRange;
+            HasAnyClamp = false;
+            HasAnyEnabled = false;
             CoordinateDirty = false;
             _lastPosition = Vector3.zero;
+        }
+
+        /// <summary>
+        /// 刷新聚合标记：遍历所有条目，更新 HasAnyClamp 和 HasAnyEnabled。
+        /// 由 AnchorWindow 的 SetEntryXxx 方法或 ResolveWindowEntries 调用。
+        /// </summary>
+        public void RefreshFlags()
+        {
+            bool anyClamp = false;
+            bool anyEnabled = false;
+
+            foreach (var entry in Entries)
+            {
+                if (entry.ClampToSafeZone) anyClamp = true;
+                if (entry.Enabled) anyEnabled = true;
+            }
+
+            HasAnyClamp = anyClamp;
+            HasAnyEnabled = anyEnabled;
         }
 
         /// <summary>
@@ -221,6 +259,50 @@ namespace XericUI.VisualForm
             foreach (var entry in Entries)
                 if (entry.Instance != null)
                     yield return entry.Instance.transform;
+        }
+
+        #endregion
+
+        #region 静态工具方法 — 指向示意旋转计算
+
+        /// <summary>
+        /// 计算从钳制位置指向屏幕中心的方向矢量。
+        /// </summary>
+        /// <param name="clampedPosition">钳制后的屏幕坐标</param>
+        /// <param name="screenCenter">屏幕中心坐标</param>
+        /// <returns>归一化方向矢量（从clampedPosition指向screenCenter）</returns>
+        public static Vector2 GetLookAtDirection(Vector2 clampedPosition, Vector2 screenCenter)
+        {
+            Vector2 dir = screenCenter - clampedPosition;
+            return dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector2.up;
+        }
+
+        /// <summary>
+        /// 计算Z轴旋转角度，使初始指向矢量旋转后对准从钳制位置到屏幕中心的方向。
+        /// 典型用法：传入 Vector2.up 作为初始指向，得到 transform.eulerAngles.z 的值。
+        /// </summary>
+        /// <param name="clampedPosition">钳制后的屏幕坐标</param>
+        /// <param name="screenCenter">屏幕中心坐标</param>
+        /// <param name="initialDirection">初始指向矢量（如 Vector2.up 表示默认向上）</param>
+        /// <returns>Z轴旋转角度（度），可直接赋给 transform.eulerAngles.z</returns>
+        public static float GetLookAtAngle(Vector2 clampedPosition, Vector2 screenCenter, Vector2 initialDirection)
+        {
+            Vector2 dir = GetLookAtDirection(clampedPosition, screenCenter);
+            return Vector2.SignedAngle(initialDirection, dir);
+        }
+
+        /// <summary>
+        /// 计算旋转四元数，使初始指向矢量旋转后对准从钳制位置到屏幕中心的方向。
+        /// 典型用法：传入 Vector2.up 作为初始指向，得到 transform.rotation 的值。
+        /// </summary>
+        /// <param name="clampedPosition">钳制后的屏幕坐标</param>
+        /// <param name="screenCenter">屏幕中心坐标</param>
+        /// <param name="initialDirection">初始指向矢量（如 Vector2.up 表示默认向上）</param>
+        /// <returns>Z轴旋转四元数，可直接赋给 transform.rotation</returns>
+        public static Quaternion GetLookAtRotation(Vector2 clampedPosition, Vector2 screenCenter, Vector2 initialDirection)
+        {
+            float angle = GetLookAtAngle(clampedPosition, screenCenter, initialDirection);
+            return Quaternion.Euler(0f, 0f, angle);
         }
 
         #endregion

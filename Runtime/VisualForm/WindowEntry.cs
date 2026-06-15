@@ -6,6 +6,7 @@ namespace XericUI.VisualForm
     /// 窗口条目数据 — 锚点窗口上每个窗口对象的配置集合。
     /// 包含窗口对象引用、屏幕二维偏移量和激活状态。
     /// 支持一个锚点同时生成多个定位窗口。
+    /// 运行时修改通过 AnchorWindow 的 SetEntryXxx 方法，自动同步到 WindowState。
     /// </summary>
     [System.Serializable]
     public class WindowEntry
@@ -18,6 +19,9 @@ namespace XericUI.VisualForm
 
         [SerializeField, Tooltip("是否启用此窗口")]
         private bool m_Enabled = true;
+
+        [SerializeField, Tooltip("超出安全区后是否钳制在安全区内")]
+        private bool m_ClampToSafeZone;
 
         /// <summary>
         /// 窗口对象引用（实例或预制体）
@@ -38,13 +42,14 @@ namespace XericUI.VisualForm
         }
 
         /// <summary>
-        /// 是否启用此窗口
+        /// 是否启用此窗口。代码修改请通过 AnchorWindow.SetEntryEnabled()
         /// </summary>
-        public bool Enabled
-        {
-            get => m_Enabled;
-            set => m_Enabled = value;
-        }
+        public bool Enabled => m_Enabled;
+
+        /// <summary>
+        /// 超出安全区后是否钳制在安全区内。代码修改请通过 AnchorWindow.SetEntryClampToSafeZone()
+        /// </summary>
+        public bool ClampToSafeZone => m_ClampToSafeZone;
 
         // --- 运行时状态（非序列化） ---
 
@@ -59,5 +64,16 @@ namespace XericUI.VisualForm
         /// </summary>
         [System.NonSerialized]
         public bool IsPrefab;
+
+        /// <summary>
+        /// 当前帧的溢出状态（逐条目跟踪，用于检测变化触发事件）
+        /// </summary>
+        [System.NonSerialized]
+        public OverflowState CurrentOverflow;
+
+        // --- 内部方法（供 AnchorWindow 调用） ---
+
+        internal void SetEnabledInternal(bool value) => m_Enabled = value;
+        internal void SetClampToSafeZoneInternal(bool value) => m_ClampToSafeZone = value;
     }
 }

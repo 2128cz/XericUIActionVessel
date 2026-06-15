@@ -27,6 +27,13 @@ namespace XericUI.VisualForm
         [SerializeField, Tooltip("预分配的中间类对象池容量")]
         private int m_StatePoolPreallocate = 16;
 
+        [Header("安全区")]
+        [SerializeField, Tooltip("安全区矩形（Canvas本地空间），窗口超出此区域视为超出安全区")]
+        private Rect m_SafeZone = new Rect(-800f, -450f, 1600f, 900f);
+
+        [SerializeField, Tooltip("安全区检测模式")]
+        private SafeZoneMode m_SafeZoneMode = SafeZoneMode.Rect;
+
         #region 静态单例
 
         private static AnchorDock s_Main;
@@ -243,11 +250,12 @@ namespace XericUI.VisualForm
                 state.CheckPositionDirty(m_PositionThreshold);
             }
 
-            // 4. 遍历所有中间类，根据脏标记更新坐标
+            // 4. 遍历所有中间类，根据脏标记更新坐标（跳过无启用条目的状态）
             foreach (var kvp in _activeStates)
             {
                 var state = kvp.Value;
                 if (state == null || !state.IsEnabled) continue;
+                if (!state.HasAnyEnabled) continue;
 
                 bool needUpdate = _cameraDirty || state.CoordinateDirty;
                 if (needUpdate)
@@ -436,7 +444,8 @@ namespace XericUI.VisualForm
         }
 
         /// <summary>
-        /// 更新指定中间类中所有窗口条目的屏幕坐标（基础位置 + 条目偏移量）
+        /// 更新指定中间类中所有窗口条目的屏幕坐标。
+        /// 流程：计算基础坐标 → 检测溢出 → 钳制需要安全区约束的条目 → 逐个设置位置。
         /// </summary>
         private void UpdateStatePosition(WindowState state)
         {
@@ -448,14 +457,44 @@ namespace XericUI.VisualForm
             if (!TryWorldToScreenPoint(worldPos, _worldCamera, _uiCamera, _canvas, RectTransform, out Vector2 basePoint))
                 return;
 
-            // 为每个窗口条目设置位置：基础坐标 + 条目自身偏移量
-            foreach (var entry in state.Entries)
+            Rect canvasLocalRect = ((RectTransform)_canvas.transform).rect;
+            bool hasClamp = state.HasAnyClamp;
+            var anchorWindow = state.Anchor as IAnchorWindowEntry;
+
+            // 计算基础坐标的溢出状态
+            OverflowState baseOverflow = CheckOverflow(basePoint, m_SafeZone, m_SafeZoneMode, canvasLocalRect);
+            state.Overflow = baseOverflow;
+
+            // 为基础坐标计算钳制位置（仅在需要钳制的条目上使用）
+            Vector2 clampedBase = hasClamp ? ClampToSafeZone(basePoint, m_SafeZone, m_SafeZoneMode) : basePoint;
+
+            for (int i = 0; i < state.Entries.Count; i++)
             {
+                var entry = state.Entries[i];
                 if (entry.Instance == null) continue;
+                if (!entry.Enabled) continue;
 
-                Vector2 finalPoint = basePoint + entry.ScreenOffset;
+                Vector2 rawPoint = basePoint + entry.ScreenOffset;
+                Vector2 finalPoint;
+
+                if (entry.ClampToSafeZone && baseOverflow != OverflowState.InRange)
+                {
+                    finalPoint = clampedBase + entry.ScreenOffset;
+                }
+                else
+                {
+                    finalPoint = rawPoint;
+                }
+
+                // 检测逐条目溢出状态变化，触发生命周期事件
+                OverflowState entryOverflow = CheckOverflow(finalPoint, m_SafeZone, m_SafeZoneMode, canvasLocalRect);
+                if (entryOverflow != entry.CurrentOverflow)
+                {
+                    entry.CurrentOverflow = entryOverflow;
+                    anchorWindow?.OnWindowLevelChange(i, entryOverflow);
+                }
+
                 var target = entry.Instance.transform;
-
                 if (target is RectTransform rectTarget)
                     rectTarget.anchoredPosition = finalPoint;
                 else
@@ -605,6 +644,95 @@ namespace XericUI.VisualForm
                 return canvas.worldCamera;
 
             return Camera.main;
+        }
+
+        /// <summary>
+        /// 检查本地坐标是否超出安全区。
+        /// 矩形模式：检查点是否在Rect范围内。
+        /// 椭圆模式：检查点到中心的归一化距离是否超过各轴半径。
+        /// </summary>
+        /// <param name="localPoint">Canvas本地坐标</param>
+        /// <param name="safeZone">安全区矩形</param>
+        /// <param name="mode">检测模式</param>
+        /// <param name="canvasLocalRect">Canvas本地空间矩形（用于判断是否超出屏幕）</param>
+        /// <returns>溢出状态（Flags可叠加）</returns>
+        public static OverflowState CheckOverflow(Vector2 localPoint, Rect safeZone, SafeZoneMode mode, Rect canvasLocalRect)
+        {
+            OverflowState result = OverflowState.InRange;
+
+            // 检查是否超出安全区
+            bool outOfSafeZone;
+            if (mode == SafeZoneMode.Ellipse)
+            {
+                // 椭圆：(px/rx)² + (py/ry)² > 1
+                Vector2 center = safeZone.center;
+                float rx = safeZone.width * 0.5f;
+                float ry = safeZone.height * 0.5f;
+                if (rx <= 0f || ry <= 0f)
+                {
+                    outOfSafeZone = false;
+                }
+                else
+                {
+                    float nx = (localPoint.x - center.x) / rx;
+                    float ny = (localPoint.y - center.y) / ry;
+                    outOfSafeZone = (nx * nx + ny * ny) > 1f;
+                }
+            }
+            else
+            {
+                outOfSafeZone = !safeZone.Contains(localPoint);
+            }
+
+            if (outOfSafeZone)
+                result |= OverflowState.OutOfSafeZone;
+
+            // 检查是否超出屏幕
+            if (!canvasLocalRect.Contains(localPoint))
+                result |= OverflowState.OutOfScreen;
+
+            return result;
+        }
+
+        /// <summary>
+        /// 将本地坐标钳制到安全区边界内。
+        /// 矩形模式：clamp x到[minX, maxX]，y到[minY, maxY]。
+        /// 椭圆模式：沿中心方向投影到椭圆边界上。
+        /// </summary>
+        /// <param name="localPoint">Canvas本地坐标</param>
+        /// <param name="safeZone">安全区矩形</param>
+        /// <param name="mode">检测模式</param>
+        /// <returns>钳制后的坐标</returns>
+        public static Vector2 ClampToSafeZone(Vector2 localPoint, Rect safeZone, SafeZoneMode mode)
+        {
+            if (mode == SafeZoneMode.Ellipse)
+            {
+                Vector2 center = safeZone.center;
+                float rx = safeZone.width * 0.5f;
+                float ry = safeZone.height * 0.5f;
+
+                if (rx <= 0f || ry <= 0f)
+                    return center;
+
+                Vector2 delta = localPoint - center;
+                float nx = delta.x / rx;
+                float ny = delta.y / ry;
+                float dist = Mathf.Sqrt(nx * nx + ny * ny);
+
+                if (dist <= 1f)
+                    return localPoint; // 已在椭圆内
+
+                // 投影到椭圆边界
+                return center + delta / dist;
+            }
+            else
+            {
+                // 矩形钳制
+                return new Vector2(
+                    Mathf.Clamp(localPoint.x, safeZone.xMin, safeZone.xMax),
+                    Mathf.Clamp(localPoint.y, safeZone.yMin, safeZone.yMax)
+                );
+            }
         }
 
         #endregion

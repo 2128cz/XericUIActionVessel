@@ -6,7 +6,7 @@ namespace XericUI.VisualForm
     /// 世界对象锚点 - 挂载在场景对象上，将世界空间位置传递给锚点坞进行屏幕空间定位
     /// </summary>
     [AddComponentMenu("Xeric UI Vessel/AnchorWindow/WorldAnchor")]
-    public class WorldAnchor : XVFormBase
+    public class WorldAnchor : XvFormBase
     {
         [SerializeField, Tooltip("目标锚点坞，不填则自动在父级中查找")]
         private AnchorDock m_TargetDock;
