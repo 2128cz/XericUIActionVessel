@@ -121,6 +121,9 @@ namespace XericUI.VisualForm
                     entry.Instance = entry.WindowObject;
                 }
 
+                // 通知条目实例已创建（无论是新实例化还是从池中复用的）
+                entry.OnInstanceCreated(this, entry.Instance);
+
                 Entries.Add(entry);
             }
 
@@ -142,7 +145,10 @@ namespace XericUI.VisualForm
             foreach (var entry in Entries)
             {
                 if (entry.Instance != null && entry.Enabled)
+                {
                     entry.Instance.SetActive(true);
+                    entry.OnInstanceEnable(this, entry.Instance);
+                }
             }
 
             // 激活时强制标记坐标脏，确保下一帧更新位置
@@ -159,7 +165,10 @@ namespace XericUI.VisualForm
             foreach (var entry in Entries)
             {
                 if (entry.Instance != null)
+                {
                     entry.Instance.SetActive(false);
+                    entry.OnInstanceDisable(this, entry.Instance);
+                }
             }
         }
 
@@ -172,7 +181,10 @@ namespace XericUI.VisualForm
             foreach (var entry in Entries)
             {
                 if (entry.IsPrefab && entry.Instance != null)
+                {
+                    entry.OnInstanceRecycle(this, entry.Instance);
                     WindowPool.Release(entry.WindowObject, entry.Instance);
+                }
 
                 entry.Instance = null;
                 entry.IsPrefab = false;

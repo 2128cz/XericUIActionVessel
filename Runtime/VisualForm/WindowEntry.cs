@@ -75,5 +75,47 @@ namespace XericUI.VisualForm
 
         internal void SetEnabledInternal(bool value) => m_Enabled = value;
         internal void SetClampToSafeZoneInternal(bool value) => m_ClampToSafeZone = value;
+
+        // --- 实例生命周期虚方法（重写以自定义窗口行为） ---
+
+        /// <summary>
+        /// 实例创建后回调 — 在实例从对象池取出或新实例化后调用。
+        /// 可重写以执行额外初始化（如获取组件引用、注册事件）。
+        /// </summary>
+        /// <param name="state">当前的WindowState中间类（提供锚点、坞、溢出状态等上下文）</param>
+        /// <param name="instance">新创建/复用的GameObject实例</param>
+        public virtual void OnInstanceCreated(WindowState state, GameObject instance) { }
+
+        /// <summary>
+        /// 实例激活回调 — 在锚点Enable、窗口条目应当显示时调用。
+        /// 可重写以实现自定义激活逻辑。
+        /// </summary>
+        /// <param name="state">当前的WindowState中间类</param>
+        /// <param name="instance">当前的实例GameObject（可能是原型对象或预制体实例）</param>
+        public virtual void OnInstanceEnable(WindowState state, GameObject instance) { }
+
+        /// <summary>
+        /// 实例隐藏回调 — 在锚点Disable、窗口条目应当隐藏时调用。
+        /// 可重写以实现自定义隐藏逻辑。
+        /// </summary>
+        /// <param name="state">当前的WindowState中间类</param>
+        /// <param name="instance">当前的实例GameObject</param>
+        public virtual void OnInstanceDisable(WindowState state, GameObject instance) { }
+
+        /// <summary>
+        /// 实例回收回调 — 在实例回收到对象池时调用。
+        /// 可重写以清理状态、移除事件监听等。
+        /// </summary>
+        /// <param name="state">当前的WindowState中间类</param>
+        /// <param name="instance">即将被回收的实例GameObject</param>
+        public virtual void OnInstanceRecycle(WindowState state, GameObject instance) { }
+
+        /// <summary>
+        /// 实例销毁回调 — 在实例即将被Destroy时调用。
+        /// 可重写以执行最终清理（通常情况下回收到对象池足矣）。
+        /// </summary>
+        /// <param name="state">当前的WindowState中间类</param>
+        /// <param name="instance">即将被销毁的实例GameObject</param>
+        public virtual void OnInstanceDestroy(WindowState state, GameObject instance) { }
     }
 }
