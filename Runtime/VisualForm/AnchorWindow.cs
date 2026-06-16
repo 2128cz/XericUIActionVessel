@@ -105,6 +105,25 @@ namespace XericUI.VisualForm
         }
 
         /// <summary>
+        /// 设置指定索引条目的碰撞参与标记。写入后自动同步 WindowState 的 HasAnyCollisionEntry。
+        /// 锚点坞在启用碰撞计算时会对标记为参与碰撞的条目进行屏幕空间碰撞分离。
+        /// </summary>
+        /// <param name="index">条目索引</param>
+        /// <param name="enable">是否参与碰撞</param>
+        public void SetEntryEnableCollision(int index, bool enable)
+        {
+            if (index < 0 || index >= m_WindowEntries.Count) return;
+
+            var entry = m_WindowEntries[index];
+            if (entry == null) return;
+
+            entry.SetEnableCollisionInternal(enable);
+
+            // 同步到WindowState
+            GetWindowState()?.RefreshFlags();
+        }
+
+        /// <summary>
         /// 从所属锚点坞获取自己的中间窗口状态类
         /// </summary>
         public WindowState GetWindowState()

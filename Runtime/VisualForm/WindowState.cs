@@ -53,6 +53,11 @@ namespace XericUI.VisualForm
         public bool HasAnyEnabled { get; private set; }
 
         /// <summary>
+        /// 是否存在至少一个参与碰撞的条目
+        /// </summary>
+        public bool HasAnyCollisionEntry { get; private set; }
+
+        /// <summary>
         /// 坐标脏标记 - 当锚点世界坐标发生变化时标记
         /// </summary>
         public bool CoordinateDirty { get; set; }
@@ -123,6 +128,9 @@ namespace XericUI.VisualForm
 
                 // 通知条目实例已创建（无论是新实例化还是从池中复用的）
                 entry.OnInstanceCreated(this, entry.Instance);
+
+                // 将WindowState引用注入条目，使其能通过MarkDirty通知坞
+                entry.State = this;
 
                 Entries.Add(entry);
             }
@@ -209,6 +217,7 @@ namespace XericUI.VisualForm
             Overflow = OverflowState.InRange;
             HasAnyClamp = false;
             HasAnyEnabled = false;
+            HasAnyCollisionEntry = false;
             CoordinateDirty = false;
             _lastPosition = Vector3.zero;
         }
@@ -221,15 +230,18 @@ namespace XericUI.VisualForm
         {
             bool anyClamp = false;
             bool anyEnabled = false;
+            bool anyCollision = false;
 
             foreach (var entry in Entries)
             {
                 if (entry.ClampToSafeZone) anyClamp = true;
                 if (entry.Enabled) anyEnabled = true;
+                if (entry.EnableCollision) anyCollision = true;
             }
 
             HasAnyClamp = anyClamp;
             HasAnyEnabled = anyEnabled;
+            HasAnyCollisionEntry = anyCollision;
         }
 
         /// <summary>

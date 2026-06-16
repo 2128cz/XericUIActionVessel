@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
+using XericLibraryEditor.Debug;
 
 namespace XericUI.VisualForm
 {
@@ -36,6 +37,19 @@ namespace XericUI.VisualForm
 
         [SerializeField, Tooltip("安全区坐标单位")]
         private SafeZoneUnit m_SafeZoneUnit = SafeZoneUnit.Ratio;
+
+        [Header("碰撞分离")]
+        [SerializeField, Tooltip("启用屏幕空间碰撞分离计算")]
+        private bool m_EnableCollision = false;
+
+        [SerializeField, Tooltip("碰撞计算执行间隔（秒），值越小越频繁，0为每帧计算")]
+        private float m_CollisionInterval = 0.04f;
+
+        [SerializeField, Tooltip("碰撞分离最大迭代次数")]
+        private int m_CollisionIterations = 10;
+
+        [SerializeField, Tooltip("碰撞分离推力系数")]
+        private float m_CollisionPushForce = 0.5f;
 
         #region 静态单例
 
@@ -124,6 +138,11 @@ namespace XericUI.VisualForm
         /// 上帧UI摄像机旋转
         /// </summary>
         private Quaternion _lastUICameraRotation;
+
+        /// <summary>
+        /// 碰撞计算计时器（每帧累加deltaTime，超过CollisionInterval时触发计算）
+        /// </summary>
+        private float _collisionTimer;
 
         #endregion
 
@@ -253,7 +272,18 @@ namespace XericUI.VisualForm
                 state.CheckPositionDirty(m_PositionThreshold);
             }
 
-            // 4. 遍历所有中间类，根据脏标记更新坐标（跳过无启用条目的状态）
+            // 4. 碰撞分离计算（按时间间隔执行，必须在位置更新之前，确保同帧生效）
+            if (m_EnableCollision)
+            {
+                _collisionTimer += Time.unscaledDeltaTime;
+                if (_collisionTimer >= m_CollisionInterval)
+                {
+                    _collisionTimer %= m_CollisionInterval;
+                    ComputeCollisionSeparation();
+                }
+            }
+
+            // 5. 遍历所有中间类，根据脏标记更新坐标（跳过无启用条目的状态）
             foreach (var kvp in _activeStates)
             {
                 var state = kvp.Value;
@@ -267,7 +297,7 @@ namespace XericUI.VisualForm
                 }
             }
 
-            // 5. 复位脏标记
+            // 6. 复位脏标记
             _cameraDirty = false;
         }
 
@@ -485,9 +515,13 @@ namespace XericUI.VisualForm
                 Vector2 rawPoint = basePoint + entry.ScreenOffset;
                 Vector2 finalPoint;
 
+                // 碰撞偏移：条目参与碰撞且有碰撞偏移时，叠加 CollisionOffset
+                Vector2 collisionOffset = (entry.EnableCollision && entry.IsColliding) ? entry.CollisionOffset : Vector2.zero;
+                rawPoint += collisionOffset;
+
                 if (entry.ClampToSafeZone && baseOverflow != OverflowState.InRange)
                 {
-                    finalPoint = clampedBase + entry.ScreenOffset;
+                    finalPoint = clampedBase + entry.ScreenOffset + collisionOffset;
                 }
                 else
                 {
@@ -510,6 +544,159 @@ namespace XericUI.VisualForm
             }
 
             state.CoordinateDirty = false;
+        }
+
+        #endregion
+
+        #region 碰撞分离计算
+
+        /// <summary>
+        /// 碰撞条目数据结构（用于碰撞分离计算时的临时存储）
+        /// </summary>
+        private struct CollisionItem
+        {
+            public WindowEntry Entry;
+            public Rect Rect;
+            public int StateIndex; // 所属WindowState在列表中的索引
+        }
+
+        /// <summary>
+        /// 屏幕空间碰撞分离计算。
+        /// 收集所有启用了碰撞的条目，通过迭代推挤算法将它们分开，避免重叠。
+        /// 结果写入各条目的 CollisionOffset（相对 ScreenOffset 的偏移量）。
+        /// </summary>
+        private void ComputeCollisionSeparation()
+        {
+            // 0. 重置所有条目的碰撞状态（上一帧的碰撞数据需要清零）
+            foreach (var kvp in _activeStates)
+            {
+                var state = kvp.Value;
+                if (state == null) continue;
+                foreach (var entry in state.Entries)
+                {
+                    entry.CollisionOffset = Vector2.zero;
+                    entry.IsColliding = false;
+                }
+            }
+
+            // 1. 收集所有参与碰撞的条目及其屏幕Rect
+            var items = new List<CollisionItem>();
+            foreach (var kvp in _activeStates)
+            {
+                var state = kvp.Value;
+                if (state == null || !state.IsEnabled || !state.HasAnyEnabled) continue;
+
+                var anchor = state.Anchor;
+                if (anchor == null) continue;
+
+                foreach (var entry in state.Entries)
+                {
+                    if (!entry.EnableCollision || !entry.Enabled || entry.Instance == null) continue;
+
+                    // 获取条目当前屏幕Rect
+                    Rect entryRect = GetEntryScreenRect(entry);
+                    if (entryRect.width <= 0 || entryRect.height <= 0) continue;
+
+                    items.Add(new CollisionItem { Entry = entry, Rect = entryRect });
+                }
+            }
+
+            if (items.Count < 2) return;
+
+            // 2. 迭代推挤分离
+            int iterations = Mathf.Clamp(m_CollisionIterations, 1, 50);
+            for (int iter = 0; iter < iterations; iter++)
+            {
+                bool anyOverlap = false;
+
+                for (int i = 0; i < items.Count; i++)
+                {
+                    for (int j = i + 1; j < items.Count; j++)
+                    {
+                        var itemA = items[i];
+                        var itemB = items[j];
+
+                        Rect rectA = OffsetRect(itemA.Rect, itemA.Entry.CollisionOffset);
+                        Rect rectB = OffsetRect(itemB.Rect, itemB.Entry.CollisionOffset);
+
+                        if (!rectA.Overlaps(rectB)) continue;
+
+                        anyOverlap = true;
+
+                        // 计算推挤方向
+                        Vector2 centerA = rectA.center;
+                        Vector2 centerB = rectB.center;
+                        Vector2 delta = centerA - centerB;
+                        float halfW = (rectA.width + rectB.width) * 0.5f;
+                        float halfH = (rectA.height + rectB.height) * 0.5f;
+
+                        float overlapX = halfW - Mathf.Abs(delta.x);
+                        float overlapY = halfH - Mathf.Abs(delta.y);
+
+                        if (overlapX <= 0 || overlapY <= 0) continue;
+
+                        Vector2 push;
+                        if (overlapX < overlapY)
+                        {
+                            push = new Vector2(Mathf.Sign(delta.x) * overlapX * m_CollisionPushForce, 0f);
+                        }
+                        else
+                        {
+                            push = new Vector2(0f, Mathf.Sign(delta.y) * overlapY * m_CollisionPushForce);
+                        }
+
+                        itemA.Entry.CollisionOffset += push;
+                        itemB.Entry.CollisionOffset -= push;
+
+                        items[i] = itemA;
+                        items[j] = itemB;
+                    }
+                }
+
+                if (!anyOverlap) break;
+            }
+
+            // 3. 标记参与碰撞的条目
+            for (int i = 0; i < items.Count; i++)
+            {
+                if (items[i].Entry.CollisionOffset != Vector2.zero)
+                {
+                    items[i].Entry.IsColliding = true;
+                    items[i].Entry.State.CoordinateDirty = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 获取条目的屏幕矩形（基于其WorldAnchor的世界坐标 + ScreenOffset 换算到Canvas本地空间）。
+        /// 矩形中心 = World→Canvas坐标 + ScreenOffset，尺寸 = Instance的RectTransform.rect.size。
+        /// </summary>
+        private Rect GetEntryScreenRect(WindowEntry entry)
+        {
+            if (entry == null || entry.Instance == null) return Rect.zero;
+
+            var state = entry.State;
+            if (state?.Anchor == null) return Rect.zero;
+
+            Vector3 worldPos = state.Anchor.CachedTransform.position;
+            if (!TryWorldToScreenPoint(worldPos, _worldCamera, _uiCamera, _canvas, RectTransform, out Vector2 canvasPos))
+                return Rect.zero;
+
+            Vector2 center = canvasPos + entry.ScreenOffset;
+
+            // 获取实例的RectTransform尺寸
+            RectTransform rt = entry.Instance.transform as RectTransform;
+            if (rt == null) return new Rect(center, Vector2.one * 10f);
+            return new Rect(center - rt.rect.size * 0.5f, rt.rect.size);
+        }
+
+        /// <summary>
+        /// 将Rect按偏移量平移
+        /// </summary>
+        private static Rect OffsetRect(Rect r, Vector2 offset)
+        {
+            r.position += offset;
+            return r;
         }
 
         #endregion
@@ -764,7 +951,7 @@ namespace XericUI.VisualForm
         #endregion
 
 #if UNITY_EDITOR
-        private void OnDrawGizmosSelected()
+        protected virtual void OnDrawGizmosSelected()
         {
             Canvas canvas = _canvas;
             if (canvas == null)
@@ -779,17 +966,9 @@ namespace XericUI.VisualForm
             Vector2 center = pixelSafeZone.center;
             Vector3 size = new Vector3(pixelSafeZone.width, pixelSafeZone.height, 0.001f);
 
-            // 填充 — 橘黄色半透明
-            Gizmos.color = new Color(1f, 0.65f, 0.15f, 0.25f);
-            Gizmos.matrix = canvas.transform.localToWorldMatrix;
-            Gizmos.DrawCube(center, size);
-
-            // 边框 — 橘红色
-            Gizmos.color = new Color(1f, 0.35f, 0.05f, 0.9f);
-            Gizmos.DrawWireCube(center, size);
-
-            Gizmos.matrix = Matrix4x4.identity;
+            canvas.DrawGizmosCanvasRect_Warn(pixelSafeZone);
         }
+        
 #endif
     }
 }

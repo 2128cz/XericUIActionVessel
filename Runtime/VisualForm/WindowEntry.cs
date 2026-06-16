@@ -23,6 +23,9 @@ namespace XericUI.VisualForm
         [SerializeField, Tooltip("超出安全区后是否钳制在安全区内")]
         private bool m_ClampToSafeZone;
 
+        [SerializeField, Tooltip("是否参与屏幕空间碰撞分离计算")]
+        private bool m_EnableCollision;
+
         /// <summary>
         /// 窗口对象引用（实例或预制体）
         /// </summary>
@@ -38,7 +41,11 @@ namespace XericUI.VisualForm
         public Vector2 ScreenOffset
         {
             get => m_ScreenOffset;
-            set => m_ScreenOffset = value;
+            set
+            {
+                m_ScreenOffset = value;
+                MarkDirty();
+            }
         }
 
         /// <summary>
@@ -50,6 +57,11 @@ namespace XericUI.VisualForm
         /// 超出安全区后是否钳制在安全区内。代码修改请通过 AnchorWindow.SetEntryClampToSafeZone()
         /// </summary>
         public bool ClampToSafeZone => m_ClampToSafeZone;
+
+        /// <summary>
+        /// 是否参与屏幕空间碰撞分离计算。代码修改请通过 AnchorWindow.SetEntryEnableCollision()
+        /// </summary>
+        public bool EnableCollision => m_EnableCollision;
 
         // --- 运行时状态（非序列化） ---
 
@@ -71,10 +83,43 @@ namespace XericUI.VisualForm
         [System.NonSerialized]
         public OverflowState CurrentOverflow;
 
+        /// <summary>
+        /// 碰撞偏移量 — 由高级锚点坞碰撞计算后写入，与 ScreenOffset 在同一坐标空间。
+        /// 当 EnableCollision 为 true 且存在重叠时，坞用 (ScreenOffset + CollisionOffset) 作为最终偏移。
+        /// </summary>
+        [System.NonSerialized]
+        public Vector2 CollisionOffset;
+
+        /// <summary>
+        /// 是否正在参与碰撞（由锚点坞标记，当前帧存在重叠时为true）
+        /// </summary>
+        [System.NonSerialized]
+        public bool IsColliding;
+
         // --- 内部方法（供 AnchorWindow 调用） ---
 
-        internal void SetEnabledInternal(bool value) => m_Enabled = value;
-        internal void SetClampToSafeZoneInternal(bool value) => m_ClampToSafeZone = value;
+        internal void SetEnabledInternal(bool value) { m_Enabled = value; MarkDirty(); }
+        internal void SetClampToSafeZoneInternal(bool value) { m_ClampToSafeZone = value; MarkDirty(); }
+        internal void SetEnableCollisionInternal(bool value) { m_EnableCollision = value; MarkDirty(); }
+
+        // --- 依赖脏标记 ---
+
+        /// <summary>
+        /// 关联的WindowState（由WindowState在初始化时设置）
+        /// </summary>
+        internal WindowState State { get; set; }
+
+        /// <summary>
+        /// 标记此条目为脏，通知锚点坞在下一帧更新中处理此条目。
+        /// 在运行时修改ScreenOffset、Enabled、ClampToSafeZone等属性时自动调用。
+        /// </summary>
+        public void MarkDirty()
+        {
+            if (State != null)
+            {
+                State.CoordinateDirty = true;
+            }
+        }
 
         // --- 实例生命周期虚方法（重写以自定义窗口行为） ---
 
