@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using System;
 
 namespace XericUI.VisualForm
 {
@@ -141,16 +142,11 @@ namespace XericUI.VisualForm
                 }
 
                 // 通知条目实例已创建（无论是新实例化还是从池中复用的）
-                entry.OnInstanceCreated(this, entry.Instance);
+                try { entry.OnInstanceCreated(this, entry.Instance); }
+                catch (Exception ex) { Debug.LogException(ex); }
 
                 // 将WindowState引用注入条目，使其能通过MarkDirty通知坞
                 entry.State = this;
-
-                // 立即按entry配置的Enabled决定实例的active状态。
-                // OnInstanceCreated可能已修改Enabled为false，必须在此处应用，
-                // 避免实例在后续OnEnable中被跳过激活但保持active的问题。
-                if (entry.Instance != null)
-                    entry.Instance.SetActive(entry.Enabled);
 
                 Entries.Add(entry);
             }
@@ -177,7 +173,10 @@ namespace XericUI.VisualForm
                     bool shouldActive = entry.Enabled;
                     entry.Instance.SetActive(shouldActive);
                     if (shouldActive)
-                        entry.OnInstanceEnable(this, entry.Instance);
+                    {
+                        try { entry.OnInstanceEnable(this, entry.Instance); }
+                        catch (Exception ex) { Debug.LogException(ex); }
+                    }
                 }
             }
 
@@ -198,7 +197,8 @@ namespace XericUI.VisualForm
                 if (entry.Instance != null)
                 {
                     entry.Instance.SetActive(false);
-                    entry.OnInstanceDisable(this, entry.Instance);
+                    try { entry.OnInstanceDisable(this, entry.Instance); }
+                    catch (Exception ex) { Debug.LogException(ex); }
                 }
             }
         }
@@ -213,7 +213,8 @@ namespace XericUI.VisualForm
             {
                 if (entry.IsPrefab && entry.Instance != null)
                 {
-                    entry.OnInstanceRecycle(this, entry.Instance);
+                    try { entry.OnInstanceRecycle(this, entry.Instance); }
+                    catch (Exception ex) { Debug.LogException(ex); }
                     WindowPool.Release(entry.WindowObject, entry.Instance);
                 }
 
@@ -281,9 +282,15 @@ namespace XericUI.VisualForm
             entry.Instance.SetActive(enabled);
 
             if (enabled && !wasActive)
-                entry.OnInstanceEnable(this, entry.Instance);
+            {
+                try { entry.OnInstanceEnable(this, entry.Instance); }
+                catch (Exception ex) { Debug.LogException(ex); }
+            }
             else if (!enabled && wasActive)
-                entry.OnInstanceDisable(this, entry.Instance);
+            {
+                try { entry.OnInstanceDisable(this, entry.Instance); }
+                catch (Exception ex) { Debug.LogException(ex); }
+            }
         }
 
         #region 碰撞偏移管理

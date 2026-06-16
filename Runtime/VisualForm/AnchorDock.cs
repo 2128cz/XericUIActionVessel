@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
 using XericLibraryEditor.Debug;
+using System;
 
 namespace XericUI.VisualForm
 {
@@ -271,27 +272,36 @@ namespace XericUI.VisualForm
         protected virtual void LateUpdate()
         {
             // 0. 处理待注册锚点（在OnEnable阶段未找到坞的锚点）
-            ProcessPendingAnchors();
+            try { ProcessPendingAnchors(); }
+            catch (Exception ex) { Debug.LogException(ex); }
 
             // 1. 处理锚点脏更新（新增/移除窗口）
-            ProcessDirtyAnchors();
+            try { ProcessDirtyAnchors(); }
+            catch (Exception ex) { Debug.LogException(ex); }
 
             // 2. 检查摄像机变化
-            CheckCameraDirty();
+            try { CheckCameraDirty(); }
+            catch (Exception ex) { Debug.LogException(ex); }
 
             // 3. 检查所有中间类的位置脏（必须在碰撞钩子之前，供碰撞判断是否需要计算）
-            foreach (var kvp in _activeStates)
+            try
             {
-                var state = kvp.Value;
-                if (state == null || !state.IsEnabled) continue;
-                state.CheckPositionDirty(m_PositionThreshold);
+                foreach (var kvp in _activeStates)
+                {
+                    var state = kvp.Value;
+                    if (state == null || !state.IsEnabled) continue;
+                    state.CheckPositionDirty(m_PositionThreshold);
+                }
             }
+            catch (Exception ex) { Debug.LogException(ex); }
 
             // 4. 碰撞分离计算（子类重写钩子，基类为空）
-            OnBeforePositionUpdates();
+            try { OnBeforePositionUpdates(); }
+            catch (Exception ex) { Debug.LogException(ex); }
 
             // 5. 遍历所有中间类，更新坐标
-            UpdateAllStatePositions();
+            try { UpdateAllStatePositions(); }
+            catch (Exception ex) { Debug.LogException(ex); }
 
             // 6. 复位脏标记
             _cameraDirty = false;
@@ -318,7 +328,8 @@ namespace XericUI.VisualForm
                 bool needUpdate = _cameraDirty || state.CoordinateDirty;
                 if (needUpdate)
                 {
-                    UpdateStatePosition(state);
+                    try { UpdateStatePosition(state); }
+                    catch (Exception ex) { Debug.LogException(ex); }
                 }
             }
         }
@@ -397,8 +408,12 @@ namespace XericUI.VisualForm
                 var anchor = _pendingRemoves[i];
                 if (_activeStates.TryGetValue(anchor, out var state))
                 {
-                    state.OnDisable();
-                    state.OnEnd();
+                    try { state.OnDisable(); }
+                    catch (Exception ex) { Debug.LogException(ex); }
+
+                    try { state.OnEnd(); }
+                    catch (Exception ex) { Debug.LogException(ex); }
+
                     _statePool.Enqueue(state);
                     _activeStates.Remove(anchor);
                 }
@@ -416,12 +431,24 @@ namespace XericUI.VisualForm
                 if (_activeStates.ContainsKey(anchor)) continue;
 
                 var state = GetPooledState();
-                state.OnStart(anchor, this);
+
+                try { state.OnStart(anchor, this); }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex);
+                    // OnStart 失败时回收到池中，避免泄漏
+                    _statePool.Enqueue(state);
+                    continue;
+                }
+
                 _activeStates[anchor] = state;
 
                 // 如果锚点当前处于激活状态，调用Enable
                 if (anchor.isActiveAndEnabled)
-                    state.OnEnable();
+                {
+                    try { state.OnEnable(); }
+                    catch (Exception ex) { Debug.LogException(ex); }
+                }
             }
             _pendingAdds.Clear();
         }
@@ -551,7 +578,8 @@ namespace XericUI.VisualForm
                 if (entryOverflow != entry.CurrentOverflow)
                 {
                     entry.CurrentOverflow = entryOverflow;
-                    anchorWindow?.OnWindowLevelChange(i, entryOverflow);
+                    try { anchorWindow?.OnWindowLevelChange(i, entryOverflow); }
+                    catch (Exception ex) { Debug.LogException(ex); }
                 }
 
                 var target = entry.Instance.transform;
