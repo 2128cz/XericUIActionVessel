@@ -62,6 +62,20 @@ namespace XericUI.VisualForm
 
         protected void OnDisable()
         {
+            UnregisterFromDock();
+        }
+
+        protected void OnDestroy()
+        {
+            UnregisterFromDock();
+        }
+
+        /// <summary>
+        /// 从锚点坞或待注册列表中注销此锚点。
+        /// OnDisable 和 OnDestroy 共用，确保所有退出路径都执行清理。
+        /// </summary>
+        private void UnregisterFromDock()
+        {
             if (m_TargetDock != null)
                 m_TargetDock.RemoveAnchor(this);
             else

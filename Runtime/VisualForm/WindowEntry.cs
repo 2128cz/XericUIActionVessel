@@ -18,7 +18,7 @@ namespace XericUI.VisualForm
         private Vector2 m_ScreenOffset;
 
         [SerializeField, Tooltip("是否启用此窗口")]
-        private bool m_Enabled = true;
+        private bool m_Enabled;
 
         [SerializeField, Tooltip("超出安全区后是否钳制在安全区内")]
         private bool m_ClampToSafeZone;
@@ -96,6 +96,20 @@ namespace XericUI.VisualForm
         [System.NonSerialized]
         public bool IsColliding;
 
+        /// <summary>
+        /// 碰撞覆盖偏移量 — 在碰撞检测时，为每边的碰撞矩形扩展的像素边距。
+        /// 此值在Canvas本地空间（像素），用于在检测重叠时增加额外间距。
+        /// 默认为0，即使用实例RectTransform的原始尺寸检测碰撞。
+        /// </summary>
+        [System.NonSerialized]
+        public float CollisionMargin;
+
+        /// <summary>
+        /// 实际生效的偏移量：碰撞中时返回 ScreenOffset + CollisionOffset，否则仅返回 ScreenOffset。
+        /// 锚点坞在更新位置时使用此属性获取最终偏移。
+        /// </summary>
+        public Vector2 EffectiveOffset => (EnableCollision && IsColliding) ? ScreenOffset + CollisionOffset : ScreenOffset;
+        
         // --- 内部方法（供 AnchorWindow 调用） ---
 
         internal void SetEnabledInternal(bool value) { m_Enabled = value; MarkDirty(); }

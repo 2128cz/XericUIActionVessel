@@ -69,14 +69,21 @@ namespace XericUI.VisualForm
         public void SetEntryEnabled(int index, bool enabled)
         {
             if (index < 0 || index >= m_WindowEntries.Count) return;
+            SetEntryEnabled(m_WindowEntries[index], enabled);
+        }
 
-            var entry = m_WindowEntries[index];
+        /// <summary>
+        /// 直接通过条目引用设置启用状态。无需索引查找。
+        /// </summary>
+        /// <param name="entry">条目引用</param>
+        /// <param name="enabled">是否启用</param>
+        public void SetEntryEnabled(T entry, bool enabled)
+        {
             if (entry == null) return;
-
             entry.SetEnabledInternal(enabled);
-
-            // 同步到WindowState
-            GetWindowState()?.RefreshFlags();
+            var state = GetWindowState();
+            state?.RefreshFlags();
+            state?.ApplyEntryEnabled(entry, enabled);
         }
 
         public void SetAllEntryEnabled(bool enabled)
@@ -94,13 +101,18 @@ namespace XericUI.VisualForm
         public void SetEntryClampToSafeZone(int index, bool clamp)
         {
             if (index < 0 || index >= m_WindowEntries.Count) return;
+            SetEntryClampToSafeZone(m_WindowEntries[index], clamp);
+        }
 
-            var entry = m_WindowEntries[index];
+        /// <summary>
+        /// 直接通过条目引用设置安全区钳制标记。无需索引查找。
+        /// </summary>
+        /// <param name="entry">条目引用</param>
+        /// <param name="clamp">是否钳制</param>
+        public void SetEntryClampToSafeZone(T entry, bool clamp)
+        {
             if (entry == null) return;
-
             entry.SetClampToSafeZoneInternal(clamp);
-
-            // 同步到WindowState
             GetWindowState()?.RefreshFlags();
         }
 
@@ -113,13 +125,18 @@ namespace XericUI.VisualForm
         public void SetEntryEnableCollision(int index, bool enable)
         {
             if (index < 0 || index >= m_WindowEntries.Count) return;
+            SetEntryEnableCollision(m_WindowEntries[index], enable);
+        }
 
-            var entry = m_WindowEntries[index];
+        /// <summary>
+        /// 直接通过条目引用设置碰撞参与标记。无需索引查找。
+        /// </summary>
+        /// <param name="entry">条目引用</param>
+        /// <param name="enable">是否参与碰撞</param>
+        public void SetEntryEnableCollision(T entry, bool enable)
+        {
             if (entry == null) return;
-
             entry.SetEnableCollisionInternal(enable);
-
-            // 同步到WindowState
             GetWindowState()?.RefreshFlags();
         }
 

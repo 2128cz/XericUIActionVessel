@@ -58,6 +58,20 @@ namespace XericUI.VisualForm
         public bool HasAnyCollisionEntry { get; private set; }
 
         /// <summary>
+        /// 是否存在任何条目当前处于碰撞中（CollisionOffset 非零）。
+        /// 由 SetCollisionOffset 自动维护，供外部查询。
+        /// </summary>
+        public bool HasAnyCollisionDirty { get; private set; }
+
+        /// <summary>
+        /// 碰撞重算标记 — 坐标自上次碰撞后是否变化，用于触发碰撞重新计算。
+        /// 由 CheckPositionDirty 设置，碰撞计算后由 ResetCollisionState 复位。
+        /// 与 CoordinateDirty 分离：CoordinateDirty 在 UpdateStatePosition 后被清除，
+        /// 而此标记保留到碰撞计算完成。
+        /// </summary>
+        public bool CollisionDirty { get; set; }
+
+        /// <summary>
         /// 坐标脏标记 - 当锚点世界坐标发生变化时标记
         /// </summary>
         public bool CoordinateDirty { get; set; }
@@ -132,6 +146,12 @@ namespace XericUI.VisualForm
                 // 将WindowState引用注入条目，使其能通过MarkDirty通知坞
                 entry.State = this;
 
+                // 立即按entry配置的Enabled决定实例的active状态。
+                // OnInstanceCreated可能已修改Enabled为false，必须在此处应用，
+                // 避免实例在后续OnEnable中被跳过激活但保持active的问题。
+                if (entry.Instance != null)
+                    entry.Instance.SetActive(entry.Enabled);
+
                 Entries.Add(entry);
             }
 
@@ -149,18 +169,21 @@ namespace XericUI.VisualForm
             if (Entries.Count == 0)
                 ResolveWindowEntries();
 
-            // 激活所有启用的条目实例
+            // 按每个条目的Enabled配置统一设置实例active状态
             foreach (var entry in Entries)
             {
-                if (entry.Instance != null && entry.Enabled)
+                if (entry.Instance != null)
                 {
-                    entry.Instance.SetActive(true);
-                    entry.OnInstanceEnable(this, entry.Instance);
+                    bool shouldActive = entry.Enabled;
+                    entry.Instance.SetActive(shouldActive);
+                    if (shouldActive)
+                        entry.OnInstanceEnable(this, entry.Instance);
                 }
             }
 
             // 激活时强制标记坐标脏，确保下一帧更新位置
             CoordinateDirty = true;
+            CollisionDirty = true;
         }
 
         /// <summary>
@@ -219,6 +242,7 @@ namespace XericUI.VisualForm
             HasAnyEnabled = false;
             HasAnyCollisionEntry = false;
             CoordinateDirty = false;
+            CollisionDirty = false;
             _lastPosition = Vector3.zero;
         }
 
@@ -245,6 +269,131 @@ namespace XericUI.VisualForm
         }
 
         /// <summary>
+        /// 立即将条目的Enabled状态应用到实例并触发对应生命周期回调。
+        /// 仅在锚点处于激活状态（IsEnabled）时生效，否则仅刷新标记等待下次OnEnable。
+        /// </summary>
+        internal void ApplyEntryEnabled(WindowEntry entry, bool enabled)
+        {
+            if (entry == null || entry.Instance == null) return;
+            if (!IsEnabled) return;
+
+            bool wasActive = entry.Instance.activeSelf;
+            entry.Instance.SetActive(enabled);
+
+            if (enabled && !wasActive)
+                entry.OnInstanceEnable(this, entry.Instance);
+            else if (!enabled && wasActive)
+                entry.OnInstanceDisable(this, entry.Instance);
+        }
+
+        #region 碰撞偏移管理
+
+        /// <summary>
+        /// 逐条目的碰撞矩形缓存（Canvas本地空间，不含碰撞偏移，不含Margin）。
+        /// 在碰撞计算前由 AdvancedAnchorDock 负责分批刷新。
+        /// </summary>
+        private readonly Dictionary<WindowEntry, Rect> _collisionRects = new Dictionary<WindowEntry, Rect>();
+
+        /// <summary>
+        /// 获取条目的原始碰撞矩形缓存（Canvas本地空间，不含CollisionOffset和Margin）。
+        /// </summary>
+        public Rect GetCollisionRect(WindowEntry entry)
+        {
+            _collisionRects.TryGetValue(entry, out var r);
+            return r;
+        }
+
+        /// <summary>
+        /// 设置条目的碰撞矩形缓存。
+        /// </summary>
+        internal void SetCollisionRect(WindowEntry entry, Rect rect)
+        {
+            _collisionRects[entry] = rect;
+        }
+
+        /// <summary>
+        /// 清空所有碰撞矩形缓存。
+        /// </summary>
+        internal void ClearCollisionRects()
+        {
+            _collisionRects.Clear();
+        }
+
+        /// <summary>
+        /// 获取条目用于碰撞检测的矩形（Canvas本地空间，含 CollisionMargin 扩展）。
+        /// 每次碰撞检测时以此扩展后的矩形判断是否重叠。
+        /// </summary>
+        public Rect GetEntryCollisionRect(WindowEntry entry)
+        {
+            if (entry == null || !_collisionRects.TryGetValue(entry, out Rect baseRect))
+                return Rect.zero;
+
+            float m = entry.CollisionMargin;
+            if (m > 0f)
+                return new Rect(baseRect.x - m, baseRect.y - m, baseRect.width + m * 2f, baseRect.height + m * 2f);
+            return baseRect;
+        }
+
+        /// <summary>
+        /// 获取条目在当前碰撞推挤位置下的矩形（Canvas本地空间，含 CollisionOffset + CollisionMargin）。
+        /// 供碰撞计算迭代过程中使用。
+        /// </summary>
+        public Rect GetEntryPushedRect(WindowEntry entry)
+        {
+            Rect rect = GetEntryCollisionRect(entry);
+            if (rect == Rect.zero) return Rect.zero;
+            rect.position += entry.CollisionOffset;
+            return rect;
+        }
+
+        /// <summary>
+        /// 设置条目的碰撞偏移量。自动标记 IsColliding=true 和 HasAnyCollisionDirty。
+        /// 碰撞偏移量相对于 ScreenOffset 空间（Canvas本地空间）。
+        /// </summary>
+        public void SetCollisionOffset(WindowEntry entry, Vector2 offset)
+        {
+            if (entry == null) return;
+            entry.CollisionOffset = offset;
+            if (offset != Vector2.zero)
+            {
+                entry.IsColliding = true;
+                HasAnyCollisionDirty = true;
+            }
+        }
+
+        /// <summary>
+        /// 重置所有条目碰撞状态（碰撞偏移清零，IsColliding置false）。
+        /// 由 AdvancedAnchorDock 在每次碰撞计算开始时调用，确保从原始位置重新计算。
+        /// </summary>
+        public void ResetCollisionState()
+        {
+            CollisionDirty = false;
+            HasAnyCollisionDirty = false;
+            foreach (var entry in Entries)
+            {
+                entry.CollisionOffset = Vector2.zero;
+                entry.IsColliding = false;
+            }
+        }
+
+        /// <summary>
+        /// 碰撞计算完成后调用：标记 CoordinateDirty，让下一帧位置更新通过 EffectiveOffset 自动获取碰撞偏移。
+        /// </summary>
+        public void ApplyCollisionResult()
+        {
+            foreach (var entry in Entries)
+            {
+                if (entry.IsColliding)
+                {
+                    CoordinateDirty = true;
+                    break;
+                }
+            }
+        }
+
+        #endregion
+
+        /// <summary>
         /// 检查锚点坐标是否发生变化，超过阈值则标记脏
         /// 由锚点坞在每帧调用
         /// </summary>
@@ -256,6 +405,7 @@ namespace XericUI.VisualForm
             if (Vector3.Distance(_lastPosition, currentPos) > threshold)
             {
                 CoordinateDirty = true;
+                CollisionDirty = true;  // 独立的碰撞重算标记，不会在 UpdateStatePosition 后被清除
                 _lastPosition = currentPos;
             }
         }
