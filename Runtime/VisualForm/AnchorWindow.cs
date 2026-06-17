@@ -141,6 +141,31 @@ namespace XericUI.VisualForm
         }
 
         /// <summary>
+        /// 设置指定索引条目的排序顺序。Order 越小越在下层，越大越在上层。
+        /// 自动通知 WindowState 重新排列实例的层级顺序。
+        /// </summary>
+        /// <param name="index">条目索引</param>
+        /// <param name="order">排序值</param>
+        public void SetEntryOrder(int index, int order)
+        {
+            if (index < 0 || index >= m_WindowEntries.Count) return;
+            SetEntryOrder(m_WindowEntries[index], order);
+        }
+
+        /// <summary>
+        /// 直接通过条目引用设置排序顺序。无需索引查找。
+        /// 自动通知 WindowState 重新排列实例的层级顺序。
+        /// </summary>
+        /// <param name="entry">条目引用</param>
+        /// <param name="order">排序值</param>
+        public void SetEntryOrder(T entry, int order)
+        {
+            if (entry == null) return;
+            entry.SetOrderInternal(order);
+            GetWindowState()?.ApplyEntryOrder();
+        }
+
+        /// <summary>
         /// 从所属锚点坞获取自己的中间窗口状态类
         /// </summary>
         public WindowState GetWindowState()

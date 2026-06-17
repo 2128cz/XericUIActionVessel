@@ -152,6 +152,7 @@ namespace XericUI.VisualForm
             }
 
             RefreshFlags();
+            ApplyEntryOrder();
         }
 
         /// <summary>
@@ -395,6 +396,30 @@ namespace XericUI.VisualForm
                     CoordinateDirty = true;
                     break;
                 }
+            }
+        }
+
+        #endregion
+
+        #region 排序
+
+        /// <summary>
+        /// 按条目的 Order 字段升序排列实例的层级顺序。
+        /// Order 越小越在下层（先渲染），Order 越大越在上层（后渲染）。
+        /// 在 ResolveWindowEntries 完成后调用，也可在运行时通过 AnchorWindow.SetEntryOrder 触发。
+        /// </summary>
+        internal void ApplyEntryOrder()
+        {
+            if (Entries == null || Entries.Count <= 1) return;
+
+            // 按Order升序 → SetAsLastSibling：结果就是 Order 越小 siblingIndex 越小（下层），Order 越大 siblingIndex 越大（上层）
+            var sorted = new List<WindowEntry>(Entries);
+            sorted.Sort((a, b) => a.Order.CompareTo(b.Order));
+
+            foreach (var entry in sorted)
+            {
+                if (entry.Instance != null)
+                    entry.Instance.transform.SetAsLastSibling();
             }
         }
 

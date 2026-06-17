@@ -26,6 +26,9 @@ namespace XericUI.VisualForm
         [SerializeField, Tooltip("是否参与屏幕空间碰撞分离计算")]
         private bool m_EnableCollision;
 
+        [SerializeField, Tooltip("排序顺序，值越小越在下层，值越大越在上层")]
+        private int m_Order;
+
         /// <summary>
         /// 窗口对象引用（实例或预制体）
         /// </summary>
@@ -62,6 +65,16 @@ namespace XericUI.VisualForm
         /// 是否参与屏幕空间碰撞分离计算。代码修改请通过 AnchorWindow.SetEntryEnableCollision()
         /// </summary>
         public bool EnableCollision => m_EnableCollision;
+
+        /// <summary>
+        /// 排序顺序 — 值越小越在下层（先渲染），值越大越在上层（后渲染）。
+        /// 运行时修改请通过 AnchorWindow.SetEntryOrder()。
+        /// </summary>
+        public int Order
+        {
+            get => m_Order;
+            set => SetOrderInternal(value);
+        }
 
         // --- 运行时状态（非序列化） ---
 
@@ -115,6 +128,7 @@ namespace XericUI.VisualForm
         internal void SetEnabledInternal(bool value) { m_Enabled = value; MarkDirty(); }
         internal void SetClampToSafeZoneInternal(bool value) { m_ClampToSafeZone = value; MarkDirty(); }
         internal void SetEnableCollisionInternal(bool value) { m_EnableCollision = value; MarkDirty(); }
+        internal void SetOrderInternal(int value) { m_Order = value; MarkDirty(); }
 
         // --- 依赖脏标记 ---
 
