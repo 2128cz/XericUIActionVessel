@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 using XericUI.Helper;
@@ -14,11 +15,11 @@ namespace XericUI.OverrideUI
     {
         [SerializeField]
         [Tooltip("Entry 功能标记，用于自动绑定匹配")]
-        private XuiavrgFieldTag _entryTag = XuiavrgFieldTag.Button;
+        public XuiavrgFieldTag _entryTag = XuiavrgFieldTag.Button;
 
         [SerializeField]
         [Tooltip("同一 Tag 存在多个时的索引区分")]
-        private int _tagIndex = 0;
+        public int _tagIndex = 0;
 
         public XuiavrgFieldTag EntryTag => _entryTag;
         public int TagIndex => _tagIndex;
