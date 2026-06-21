@@ -112,6 +112,98 @@ namespace XericUI.ReflectionUIGenerator
         private Type _valueType;
 
         /// <summary>
+        /// 所有程序集中类型名的缓存 — 简单名列表（如 "Boolean"、"Int32"、"String"）
+        /// 与 _allTypeFullNames 下标一一对应
+        /// </summary>
+        private static List<string> _allTypeSimpleNames;
+
+        /// <summary>
+        /// 所有程序集中类型名的缓存 — 全名列表（如 "System.Boolean"、"System.Int32"）
+        /// 与 _allTypeSimpleNames 下标一一对应
+        /// </summary>
+        private static List<string> _allTypeFullNames;
+
+        /// <summary>
+        /// 初始化类型名缓存 — 反射扫描所有已加载程序集中的类型
+        /// </summary>
+        private static void EnsureTypeCacheBuilt()
+        {
+            if (_allTypeFullNames != null) return;
+
+            _allTypeSimpleNames = new List<string>();
+            _allTypeFullNames = new List<string>();
+
+            var seen = new HashSet<string>();
+
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    foreach (var type in asm.GetTypes())
+                    {
+                        var fullName = type.FullName;
+                        if (string.IsNullOrEmpty(fullName)) continue;
+                        // 跳过泛型参数位置和编译器生成的类型
+                        if (fullName.Contains("`") || fullName.Contains("<")) continue;
+
+                        if (!seen.Add(fullName)) continue;
+
+                        _allTypeSimpleNames.Add(type.Name);
+                        _allTypeFullNames.Add(fullName);
+                    }
+                }
+                catch
+                {
+                    // 某些程序集可能无法反射（如动态程序集），忽略
+                }
+            }
+        }
+
+        /// <summary>
+        /// 尝试将用户输入的类型名纠正为标准全名。
+        /// 通过 LevenshteinDistance 在所有已知类型中找到最匹配的名称。
+        /// 如 "boolean" → "System.Boolean", "single" → "System.Single"。
+        /// 如果已经是标准全名或无法匹配则返回原值（不做修改）。
+        /// </summary>
+        /// <param name="userInput">用户输入的类型名</param>
+        /// <returns>纠正后的标准类型全名，无法识别时返回原值</returns>
+        public static string NormalizeTypeName(string userInput)
+        {
+            if (string.IsNullOrWhiteSpace(userInput))
+                return userInput;
+
+            userInput = userInput.Trim();
+
+            // 已经是标准全名（包含 "."），直接视为 OK，不做修改
+            if (userInput.Contains('.'))
+                return userInput;
+
+            // 初始化类型缓存
+            EnsureTypeCacheBuilt();
+
+            // 通过 Levenshtein 距离在所有类型简单名中找到最匹配的
+            var bestMatch = XericLibrary.Runtime.MacroLibrary.MacroMath.LevenshteinDistance(
+                _allTypeSimpleNames, userInput,
+                out int dis, out int index);
+
+            // 阈值：距离超过输入长度 2 倍 + 2，认为不匹配，返回原值
+            if (bestMatch == null || dis > userInput.Length * 2 + 2)
+                return userInput;
+
+            // 返回对应的全名
+            return _allTypeFullNames[index];
+        }
+
+        /// <summary>
+        /// 尝试将此实例的 valueTypeName 纠正为标准全名
+        /// </summary>
+        public void NormalizeValueTypeName()
+        {
+            valueTypeName = NormalizeTypeName(valueTypeName);
+            _valueType = null; // 清空缓存，下次访问时重新解析
+        }
+
+        /// <summary>
         /// 对应的 UI 预制体
         /// </summary>
         [Tooltip("拖入 UI 预制体，系统会自动扫描其中的 IXuiavrgFieldTagProvider 组件")]

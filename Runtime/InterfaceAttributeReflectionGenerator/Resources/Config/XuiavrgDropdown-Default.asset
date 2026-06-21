@@ -9,9 +9,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: be0acbdac8e549578dcccf8c076a5433, type: 3}
-  m_Name: Xeric UI avr Property
+  m_Script: {fileID: 11500000, guid: bcd1c64483d2457ab9143f086dff511d, type: 3}
+  m_Name: XuiavrgDropdown-Default
   m_EditorClassIdentifier: 
-  valueType: 
-  propertyName: 
-  prefab: {fileID: 0}
+  themeName: Default
+  uiName: Default
+  valueTypeName: System.Enum
+  prefab: {fileID: 1100600009542095382, guid: 4f25b16125eac234e820506fff28a4b0, type: 3}
+  supportedTags: 01000000

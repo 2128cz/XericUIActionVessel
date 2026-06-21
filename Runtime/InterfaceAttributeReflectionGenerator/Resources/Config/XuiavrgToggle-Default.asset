@@ -10,8 +10,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bcd1c64483d2457ab9143f086dff511d, type: 3}
-  m_Name: Xeric UI avr Property group
+  m_Name: XuiavrgToggle-Default
   m_EditorClassIdentifier: 
-  groupName: 
-  supportedTags: 
-  propertys: []
+  themeName: Default
+  uiName: Default
+  valueTypeName: System.Boolean
+  prefab: {fileID: 8328042880981269257, guid: 0dc894baa18f5cb4eb9c82fd3c40d2bd, type: 3}
+  supportedTags: 0100000008000000

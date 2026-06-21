@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bcd1c64483d2457ab9143f086dff511d, type: 3}
+  m_Name: XuiavrgFloatSlider-Default
+  m_EditorClassIdentifier: 
+  themeName: Default
+  uiName: Default
+  valueTypeName: System.Single
+  prefab: {fileID: 3950712135413418637, guid: f601d441cf135fe479d319c5eb01abd8, type: 3}
+  supportedTags: 010000002000000024000000
