@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,10 +13,11 @@ using Object = UnityEngine.Object;
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
-    /// 属性映射器
+    /// [已弃用] 属性映射器。请使用 XuiavrgPropertyGroupScriptableObject 替代。
+    /// 功能已整合到 PropertyGroup 中，此类保留仅用于向后兼容。
     /// </summary>
     [Serializable]
-    [CreateAssetMenu(fileName = "Xeric UI avr Property", menuName = "Xeric Library/UI Action Vessel/Reflection UI Gen/UI avr Property", order = 10)]
+    [Obsolete("Use XuiavrgPropertyGroupScriptableObject instead. Property mapping is now integrated directly into the group.")]
     public class XuiavrPropertyScriptableObject : ScriptableObject
     {
 #if ODIN_INSPECTOR

@@ -43,11 +43,11 @@ namespace XericUI.ReflectionUIGenerator
 
             if (!_propertyGroupPools.TryGetValue(group, out var pool))
             {
-                var firstPrefab = group.FirstOrDefault()?.prefab;
+                var prefab = group.prefab;
                 pool = new ObjectPool<GameObject>(
                     createFunc: () =>
-                        firstPrefab != null
-                            ? Object.Instantiate(firstPrefab, transform)
+                        prefab != null
+                            ? Object.Instantiate(prefab, transform)
                             : new GameObject("PropertyItem", typeof(RectTransform)),
                     actionOnGet: go => go.SetActive(true),
                     actionOnRelease: go => go.SetActive(false),
@@ -97,6 +97,15 @@ namespace XericUI.ReflectionUIGenerator
 
         #region 字段
 
+        [SerializeField]
+        [Tooltip("当前使用的 UI 主题名称。切换主题会立即销毁所有已生成 UI 和对象池，需重新 BuildEntries + GenerateUI")]
+        private string _currentTheme = XuiavrgPropertyGroupScriptableObject.DefaultThemeName;
+
+        /// <summary>
+        /// 当前 UI 主题名称
+        /// </summary>
+        public string CurrentTheme => _currentTheme;
+
         /// <summary>
         /// 当前活跃的 Entry 列表
         /// </summary>
@@ -106,6 +115,23 @@ namespace XericUI.ReflectionUIGenerator
         /// 当前传入的数据负载
         /// </summary>
         public object CurrentPayload { get; private set; }
+
+        /// <summary>
+        /// 切换 UI 主题。会立即销毁所有已生成 UI 和对象池。
+        /// 调用后需重新 BuildEntries + GenerateUI。
+        /// </summary>
+        /// <param name="themeName">新的主题名称</param>
+        public void SetTheme(string themeName)
+        {
+            if (_currentTheme == themeName) return;
+
+            _currentTheme = string.IsNullOrEmpty(themeName)
+                ? XuiavrgPropertyGroupScriptableObject.DefaultThemeName
+                : themeName;
+
+            // 销毁所有已生成 UI 和对象池
+            ClearAll();
+        }
 
         #endregion
 
@@ -321,18 +347,18 @@ namespace XericUI.ReflectionUIGenerator
 
         /// <summary>
         /// 解析 Entry 对应的 PropertyGroup
-        /// 优先使用 PrefabOverrideName，否则按 Tag 匹配
+        /// 优先使用 PrefabOverrideName，否则按 Tag 匹配，所有查找在 currentTheme 下进行
         /// </summary>
         private XuiavrgPropertyGroupScriptableObject ResolvePropertyGroup(IFieldEntry entry)
         {
-            // 1. 优先检查 PrefabOverrideName
+            // 1. 优先检查 PrefabOverrideName（按主题 + UI 名称查找）
             if (!string.IsNullOrEmpty(entry.PrefabOverrideName))
             {
-                var overrideGroup = XuiavrgPropertyGroupScriptableObject.FindGroupByName(entry.PrefabOverrideName);
+                var overrideGroup = XuiavrgPropertyGroupScriptableObject.FindGroupByUiName(_currentTheme, entry.PrefabOverrideName);
                 if (overrideGroup != null) return overrideGroup;
             }
 
-            // 2. 按 Tag 查找匹配的组
+            // 2. 按 Tag 查找匹配的组（在当前主题下）
             if (entry.Tag != XuiavrgFieldTag.None)
             {
                 var tags = new List<XuiavrgFieldTag> { entry.Tag };
@@ -346,12 +372,12 @@ namespace XericUI.ReflectionUIGenerator
                     }
                 }
 
-                var matchedGroup = XuiavrgPropertyGroupScriptableObject.FindGroupByTags(tags.ToArray());
+                var matchedGroup = XuiavrgPropertyGroupScriptableObject.FindGroup(_currentTheme, tags.ToArray());
                 if (matchedGroup != null) return matchedGroup;
             }
 
-            // 3. 回退到通用匹配
-            return XuiavrgPropertyGroupScriptableObject.FindGroupByName("Default");
+            // 3. 回退到当前主题下的 "Default" UI 名称
+            return XuiavrgPropertyGroupScriptableObject.FindGroupByUiName(_currentTheme, "Default");
         }
 
         /// <summary>
