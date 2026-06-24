@@ -1,8 +1,4 @@
 ﻿using System.Collections.Generic;
-#if ODIN_INSPECTOR
-using Sirenix.OdinInspector;
-using Sirenix.Utilities;
-#endif
 using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.UI;
