@@ -5,7 +5,6 @@ using System.ComponentModel;
 using System.Linq;
 using Deconstruction.Runtime.UI;
 using JetBrains.Annotations;
-using Sirenix.OdinInspector;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;

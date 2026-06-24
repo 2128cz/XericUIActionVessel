@@ -1,5 +1,7 @@
 ﻿using System;
+#if ODIN_INSPECTOR
 using Sirenix.OdinInspector;
+#endif
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -8,8 +10,10 @@ namespace XericUI.Core.Base
 {
     public class XericUIBehaciour : UIBehaviour
     {
+#if ODIN_INSPECTOR
         [InfoBox("脚本必填属性存在空引用！请检查开放属性后再试", InfoMessageType.Error, VisibleIf = "PublicFieldNullReference")]
         [HideLabel, DisplayAsString]
+#endif
         string __EMPTYFIELD;
 
 
