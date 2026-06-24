@@ -1,9 +1,8 @@
 ﻿using System.Collections.Generic;
-using Sirenix.OdinInspector;
-using Sirenix.Utilities;
 using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.UI;
+using XericLibrary.Runtime.MacroLibrary;
 
 namespace XericUI.OverrideLayout
 {

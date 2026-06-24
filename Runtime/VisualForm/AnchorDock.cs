@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
-using XericLibraryEditor.Debug;
 using System;
 
 namespace XericUI.VisualForm
@@ -858,8 +857,9 @@ namespace XericUI.VisualForm
 
             Vector2 center = pixelSafeZone.center;
             Vector3 size = new Vector3(pixelSafeZone.width, pixelSafeZone.height, 0.001f);
-
-            canvas.DrawGizmosCanvasRect_Warn(pixelSafeZone);
+            
+            // ReSharper disable once InvokeAsExtensionMethod
+            XericLibraryEditor.Debug.MacroGizmosDraw.DrawGizmosCanvasRect_Warn(canvas, pixelSafeZone);
         }
         
 #endif

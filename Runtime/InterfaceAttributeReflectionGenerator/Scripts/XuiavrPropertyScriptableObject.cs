@@ -48,9 +48,7 @@ namespace XericUI.ReflectionUIGenerator
         }
         private System.Type _valueType;
 
-        /// <summary>
-        /// 属性类型名称枚举
-        /// </summary>
+#if ODIN_INSPECTOR // 属性类型名称枚举
         private IEnumerable AssemblyValueTypeNames
         {
             get
@@ -75,6 +73,7 @@ namespace XericUI.ReflectionUIGenerator
             }
         }
         private static ValueDropdownList<string> _assemblyValueTypeName = null;
+#endif
         
         /// <summary>
         /// 直接定义所有需要检查的类型

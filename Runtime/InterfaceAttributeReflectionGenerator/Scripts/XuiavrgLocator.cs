@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+#if ODIN_INSPECTOR
 using Sirenix.OdinInspector;
+#endif
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -273,6 +275,7 @@ namespace XericUI.ReflectionUIGenerator
             /// </summary>
             public void ClearTriggerEvent()
             {
+#if dUI_TextMeshPro
                 if (TMPInputField)
                 {
                     TMPInputField.onEndEdit.RemoveAllListeners();
@@ -284,7 +287,7 @@ namespace XericUI.ReflectionUIGenerator
                     TMPInputField.onValueChanged.RemoveAllListeners();
                     TMPInputField.onTouchScreenKeyboardStatusChanged.RemoveAllListeners();
                 }
-
+#endif
                 if (UIInputField)
                 {
                     UIInputField.onEndEdit.RemoveAllListeners();

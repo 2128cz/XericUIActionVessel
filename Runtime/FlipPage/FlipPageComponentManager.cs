@@ -5,7 +5,9 @@ using System.ComponentModel;
 using System.Linq;
 using Deconstruction.Runtime.UI;
 using JetBrains.Annotations;
+#if ODIN_INSPECTOR
 using Sirenix.OdinInspector;
+#endif
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
