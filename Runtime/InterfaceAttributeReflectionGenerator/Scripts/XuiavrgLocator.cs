@@ -67,11 +67,12 @@ namespace XericUI.ReflectionUIGenerator
             [ShowIf("classify", UIElementClassify.UIDropdown)]
 #endif
             public UnityEngine.UI.Dropdown UIDropdown;
-
+#if dUI_TextMeshPro
 #if ODIN_INSPECTOR
             [ShowIf("classify", UIElementClassify.TMPInputField)]
 #endif
             public TMPInputTriggerEvent TMPInputTriggerOnEventType;
+#endif
 #if ODIN_INSPECTOR
             [ShowIf("classify", UIElementClassify.UIInputField)]
 #endif
