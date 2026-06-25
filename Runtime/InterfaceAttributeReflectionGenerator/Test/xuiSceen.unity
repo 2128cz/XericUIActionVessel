@@ -481,6 +481,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8643f83a494345edaba7e524c63dfd24, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _currentTheme: Default
 --- !u!224 &1802681382 stripped
 RectTransform:
   m_CorrespondingSourceObject: {fileID: 496212968317797178, guid: a58d335e7df1a994d9f1c0fd58aff68f, type: 3}
