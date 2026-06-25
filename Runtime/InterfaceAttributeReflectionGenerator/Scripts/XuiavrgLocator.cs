@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+#if ODIN_INSPECTOR
 using Sirenix.OdinInspector;
+#endif
 using UnityEngine;
 using UnityEngine.Serialization;
 
@@ -65,11 +67,12 @@ namespace XericUI.ReflectionUIGenerator
             [ShowIf("classify", UIElementClassify.UIDropdown)]
 #endif
             public UnityEngine.UI.Dropdown UIDropdown;
-
+#if dUI_TextMeshPro
 #if ODIN_INSPECTOR
             [ShowIf("classify", UIElementClassify.TMPInputField)]
 #endif
             public TMPInputTriggerEvent TMPInputTriggerOnEventType;
+#endif
 #if ODIN_INSPECTOR
             [ShowIf("classify", UIElementClassify.UIInputField)]
 #endif
@@ -273,6 +276,7 @@ namespace XericUI.ReflectionUIGenerator
             /// </summary>
             public void ClearTriggerEvent()
             {
+#if dUI_TextMeshPro
                 if (TMPInputField)
                 {
                     TMPInputField.onEndEdit.RemoveAllListeners();
@@ -284,7 +288,7 @@ namespace XericUI.ReflectionUIGenerator
                     TMPInputField.onValueChanged.RemoveAllListeners();
                     TMPInputField.onTouchScreenKeyboardStatusChanged.RemoveAllListeners();
                 }
-
+#endif
                 if (UIInputField)
                 {
                     UIInputField.onEndEdit.RemoveAllListeners();
