@@ -1,4 +1,4 @@
-﻿using TMPro;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using XericUI.Helper;
@@ -168,11 +168,11 @@ namespace XericUI.OverrideUI
 
         #region 组件替换
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To XericButton", true)]
+        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Xeric Button", true)]
         private static bool ValidateReplaceToXeric(UnityEditor.MenuCommand command)
             => command.context is Button and not XericButton;
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To XericButton", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Xeric Button", false, 10)]
         private static void ReplaceToXeric(UnityEditor.MenuCommand command) 
             => command.ReplaceCommandContext<Button, XericButton,
                 (Graphic targetGraphic, ButtonClickedEvent onClick)>(
@@ -184,11 +184,11 @@ namespace XericUI.OverrideUI
                     t.onClick = d.onClick;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To Button", true)]
+        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericButton;
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To Button", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command) 
             => command.ReplaceCommandContext<XericButton, Button,
                 (Graphic targetGraphic, ButtonClickedEvent onClick)>(

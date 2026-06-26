@@ -26,11 +26,11 @@ namespace XericUI.OverrideUI
         #region 组件替换
 
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/Slider/Replace To XericUIrAttributeSlider", true)]
+        [UnityEditor.MenuItem("CONTEXT/Slider/Replace To/Xeric (Attribute)", true)]
         private static bool ValidateReplaceToAttribute(UnityEditor.MenuCommand command)
             => command.context is Slider and not XericUIrAttributeSlider;
 
-        [UnityEditor.MenuItem("CONTEXT/Slider/Replace To XericUIrAttributeSlider", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/Slider/Replace To/Xeric (Attribute)", false, 10)]
         private static void ReplaceToAttribute(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<Slider, XericUIrAttributeSlider,
                 (Graphic targetGraphic, float value, Slider.SliderEvent onValueChanged)>(
@@ -43,11 +43,11 @@ namespace XericUI.OverrideUI
                     t.onValueChanged = d.onValueChanged;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/Slider/Replace To Slider", true)]
+        [UnityEditor.MenuItem("CONTEXT/Slider/Replace To/Unity Slider", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericUIrAttributeSlider;
 
-        [UnityEditor.MenuItem("CONTEXT/Slider/Replace To Slider", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/Slider/Replace To/Unity Slider", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<XericUIrAttributeSlider, Slider,
                 (Graphic targetGraphic, float value, Slider.SliderEvent onValueChanged)>(

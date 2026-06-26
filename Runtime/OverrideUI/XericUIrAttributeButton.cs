@@ -27,22 +27,22 @@ namespace XericUI.OverrideUI
         #region 组件替换
 
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To XericUIrAttributeButton", true)]
-        private static bool ValidateReplaceToAttribute(UnityEditor.MenuCommand command)
+        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Xeric (Attribute)", true)]
+        private static bool ValidateReplaceToXeric(UnityEditor.MenuCommand command)
             => command.context is Button and not XericUIrAttributeButton;
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To XericUIrAttributeButton", false, 11)]
-        private static void ReplaceToAttribute(UnityEditor.MenuCommand command)
+        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Xeric (Attribute)", false, 12)]
+        private static void ReplaceToXeric(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<Button, XericUIrAttributeButton,
                 (Graphic targetGraphic, Button.ButtonClickedEvent onClick)>(
                 o => (o.targetGraphic, o.onClick),
                 (t, d) => { t.targetGraphic = d.targetGraphic; t.onClick = d.onClick; });
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To Button", true)]
+        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericUIrAttributeButton;
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To Button", false, 11)]
+        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<XericUIrAttributeButton, Button,
                 (Graphic targetGraphic, Button.ButtonClickedEvent onClick)>(

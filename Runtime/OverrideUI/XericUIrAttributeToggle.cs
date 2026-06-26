@@ -26,11 +26,11 @@ namespace XericUI.OverrideUI
         #region 组件替换
 
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To XericUIrAttributeToggle", true)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Xeric (Attribute)", true)]
         private static bool ValidateReplaceToAttribute(UnityEditor.MenuCommand command)
             => command.context is Toggle and not XericUIrAttributeToggle;
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To XericUIrAttributeToggle", false, 11)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Xeric (Attribute)", false, 12)]
         private static void ReplaceToAttribute(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<Toggle, XericUIrAttributeToggle,
                 (Graphic graphic, ToggleGroup group, Toggle.ToggleEvent onValueChanged)>(
@@ -42,11 +42,11 @@ namespace XericUI.OverrideUI
                     t.onValueChanged = d.onValueChanged;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To Toggle", true)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericUIrAttributeToggle;
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To Toggle", false, 11)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<XericUIrAttributeToggle, Toggle,
                 (Graphic graphic, ToggleGroup group, Toggle.ToggleEvent onValueChanged)>(

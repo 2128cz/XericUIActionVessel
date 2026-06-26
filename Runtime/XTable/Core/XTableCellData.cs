@@ -1,0 +1,48 @@
+using System;
+
+using UnityEngine;
+
+namespace XericUI.XTable.Core
+{
+	/// <summary>
+	/// 单元格数据模型——仅保存数据内容，不保存自身尺寸。
+	/// 尺寸由渲染阶段的行列标题（行高/列宽）决定。
+	/// 样式通过 StyleNamespace 字符串引用 StyleManager 中的命名空间。
+	/// </summary>
+	[Serializable]
+	public class XTableCellData
+	{
+		/// <summary>文本内容</summary>
+		public string Text;
+
+		/// <summary>图片纹理</summary>
+		public Texture2D Image;
+
+		/// <summary>预制体对象（用于嵌入复杂 UI 元素）</summary>
+		public GameObject Prefab;
+
+		/// <summary>
+		/// 样式命名空间——对应 StyleManager 中的命名空间。
+		/// 为空或 "xeric_table_default" 时使用默认表格样式。
+		/// 渲染时从此命名空间读取 /cell/bg/color、/cell/font/size 等路径。
+		/// </summary>
+		public string StyleNamespace;
+
+		public XTableCellData() { }
+
+		public XTableCellData(string text)
+		{
+			Text = text;
+		}
+
+		public XTableCellData(string text, string styleNamespace = null) : this(text)
+		{
+			StyleNamespace = styleNamespace;
+		}
+
+		public XTableCellData(string text, Texture2D image, string styleNamespace = null) : this(text, styleNamespace)
+		{
+			Image = image;
+		}
+	}
+}

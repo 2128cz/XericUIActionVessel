@@ -1,0 +1,12 @@
+// ==================================================
+// Xeric Style Sheet (XSSS) - 超级干燥样式表 - 默认样式
+// ==================================================
+
+namespace: default
+
+/button/TargetGraphic/ColorTint:UnityEngine.UI.ColorBlock/ {
+.NormalColor = (1,1,1,1)
+.HighlightedColor = (0.96,0.96,0.96,1)
+.PressedColor = (0.78,0.78,0.78,1)
+.DisabledColor = (0.78,0.78,0.78,0.5)
+}
