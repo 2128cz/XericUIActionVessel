@@ -50,6 +50,13 @@ namespace XericUI.XTable.Rendering.Component
 
 		private int m_SelectedRow = -1;
 		private int m_SelectedCol = -1;
+
+		// 多选范围
+		private int m_SelectStartRow = -1;
+		private int m_SelectStartCol = -1;
+		private int m_SelectEndRow = -1;
+		private int m_SelectEndCol = -1;
+
 		[System.NonSerialized] private GameObject m_BackgroundGo;
 
 		private float m_TotalWidth;
@@ -71,7 +78,12 @@ namespace XericUI.XTable.Rendering.Component
 
 		public XTableData TableData
 		{
-			get => m_TableData;
+			get
+			{
+				if (m_TableData == null)
+					m_TableData = new XTableData();
+				return m_TableData;
+			}
 			set { m_TableData = value; MarkDirty(TableDirtyType.DataChanged); }
 		}
 
@@ -81,6 +93,23 @@ namespace XericUI.XTable.Rendering.Component
 		public string DefaultStyleNamespace => m_DefaultStyleNamespace;
 		public int SelectedRow => m_SelectedRow;
 		public int SelectedCol => m_SelectedCol;
+
+		public int SelectStartRow => m_SelectStartRow;
+		public int SelectStartCol => m_SelectStartCol;
+		public int SelectEndRow => m_SelectEndRow;
+		public int SelectEndCol => m_SelectEndCol;
+		public bool HasMultiSelection => m_SelectStartRow >= 0 && m_SelectEndRow >= 0;
+
+		/// <summary>判断单元格是否在多选范围内</summary>
+		public bool IsInSelectionRange(int row, int col)
+		{
+			if (!HasMultiSelection) return false;
+			int minR = Mathf.Min(m_SelectStartRow, m_SelectEndRow);
+			int maxR = Mathf.Max(m_SelectStartRow, m_SelectEndRow);
+			int minC = Mathf.Min(m_SelectStartCol, m_SelectEndCol);
+			int maxC = Mathf.Max(m_SelectStartCol, m_SelectEndCol);
+			return row >= minR && row <= maxR && col >= minC && col <= maxC;
+		}
 
 		#endregion
 
@@ -148,7 +177,7 @@ namespace XericUI.XTable.Rendering.Component
 
 		#region 默认示例数据
 
-		private bool m_DefaultDataCreated;
+		[System.NonSerialized] private bool m_DefaultDataCreated;
 
 		private void CreateDefaultSampleData()
 		{
@@ -168,11 +197,11 @@ namespace XericUI.XTable.Rendering.Component
 
 		private void SetCellTextInternal(int row, int col, string text, bool skipDirty)
 		{
-			var data = m_TableData.GetCell(row, col);
+			var data = TableData.GetCell(row, col);
 			if (data == null)
 			{
 				data = new XTableCellData();
-				m_TableData.SetCell(row, col, data);
+				TableData.SetCell(row, col, data);
 			}
 			data.Text = text;
 			if (!skipDirty) MarkDirty(TableDirtyType.DataChanged);
@@ -221,7 +250,7 @@ namespace XericUI.XTable.Rendering.Component
 
 		public void SetCellData(int row, int col, XTableCellData data)
 		{
-			m_TableData.SetCell(row, col, data);
+			TableData.SetCell(row, col, data);
 			MarkDirty(TableDirtyType.DataChanged);
 		}
 
@@ -231,37 +260,70 @@ namespace XericUI.XTable.Rendering.Component
 		}
 
 		public XTableCellData GetCellData(int row, int col)
-			=> m_TableData?.GetCell(row, col);
+			=> TableData.GetCell(row, col);
 
 		public void MergeCells(int startRow, int startCol, int rowSpan, int colSpan)
 		{
-			m_TableData.MergeCells(startRow, startCol, rowSpan, colSpan);
+			TableData.MergeCells(startRow, startCol, rowSpan, colSpan);
 			MarkDirty(TableDirtyType.DataChanged);
 		}
 
 		public void UnmergeCells(int startRow, int startCol)
 		{
-			m_TableData.UnmergeCells(startRow, startCol);
+			TableData.UnmergeCells(startRow, startCol);
 			MarkDirty(TableDirtyType.DataChanged);
 		}
 
 		public void SelectCell(int row, int col)
 		{
+			ClearMultiSelection();
 			m_SelectedRow = row;
 			m_SelectedCol = col;
-			MarkDirty(TableDirtyType.DataChanged);
+			MarkDirty(TableDirtyType.SelectionChanged);
 		}
 
 		public void ClearSelection()
 		{
 			m_SelectedRow = -1;
 			m_SelectedCol = -1;
-			MarkDirty(TableDirtyType.DataChanged);
+			ClearMultiSelection();
+			MarkDirty(TableDirtyType.SelectionChanged);
+		}
+
+		/// <summary>开始多选（以当前格为锚点）</summary>
+		public void StartMultiSelect(int row, int col)
+		{
+			m_SelectStartRow = row;
+			m_SelectStartCol = col;
+			m_SelectEndRow = row;
+			m_SelectEndCol = col;
+			m_SelectedRow = row;
+			m_SelectedCol = col;
+			MarkDirty(TableDirtyType.SelectionChanged);
+		}
+
+		/// <summary>扩展多选范围到目标格</summary>
+		public void ExtendMultiSelect(int row, int col)
+		{
+			m_SelectEndRow = row;
+			m_SelectEndCol = col;
+			m_SelectedRow = row;
+			m_SelectedCol = col;
+			MarkDirty(TableDirtyType.SelectionChanged);
+		}
+
+		/// <summary>清除多选范围</summary>
+		public void ClearMultiSelection()
+		{
+			m_SelectStartRow = -1;
+			m_SelectStartCol = -1;
+			m_SelectEndRow = -1;
+			m_SelectEndCol = -1;
 		}
 
 		public void RefreshView()
 		{
-			if (m_TableData == null || m_Assembler == null) return;
+			if (m_Assembler == null) return;
 			if (m_RowHeights == null || m_ColWidths == null) return;
 			if (m_RowHeights.Length == 0 || m_ColWidths.Length == 0) return;
 
@@ -354,6 +416,8 @@ namespace XericUI.XTable.Rendering.Component
 			Color fgColor = GetStyleColor(m_DefaultStyleNamespace, "/cell/fg/color",
 				new Color(0.05f, 0.05f, 0.05f));
 			Color selectionColor = new Color(0.18f, 0.42f, 0.82f, 0.25f);
+			Color multiSelectColor = new Color(0.18f, 0.42f, 0.82f, 0.12f);
+			Color focusColor = new Color(0.22f, 0.55f, 0.95f, 0.35f);
 			int fontSize = GetStyleInt(m_DefaultStyleNamespace, "/cell/font/size", 14);
 
 			for (int r = sr; r < er && r < m_RowHeights.Length; r++)
@@ -364,10 +428,19 @@ namespace XericUI.XTable.Rendering.Component
 					float cellY = -GetRowTopY(r);
 					float cellW = m_ColWidths[c];
 					float cellH = m_RowHeights[r];
-					XTableCellData data = m_TableData.GetCell(r, c);
+					XTableCellData data = TableData.GetCell(r, c);
 
-					// 选中高亮背景
-					if (r == m_SelectedRow && c == m_SelectedCol)
+					// 多选范围高亮（覆盖被选中范围内的所有格）
+					if (IsInSelectionRange(r, c))
+					{
+						var selImg = m_Assembler.GetImage("cell_multiselect");
+						selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+						selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+						selImg.Image.color = (r == m_SelectedRow && c == m_SelectedCol)
+							? focusColor : multiSelectColor;
+					}
+					// 单选高亮
+					else if (r == m_SelectedRow && c == m_SelectedCol)
 					{
 						var selImg = m_Assembler.GetImage("cell_select");
 						selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);

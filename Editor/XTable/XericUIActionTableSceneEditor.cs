@@ -105,6 +105,7 @@ namespace XericUIEditor.XTable
 			DrawSelectionHighlight(rh, cw, tableRect, xScale, yScale, table);
 			DrawInputBar(table, tableRect.x, tableRect.y + tableRect.height + MARGIN);
 			HandleInput(table, rh, cw, tableRect, xScale, yScale);
+			HandleKeyboard(table, rh, cw);
 
 			Handles.EndGUI();
 		}
@@ -276,6 +277,16 @@ namespace XericUIEditor.XTable
 					margin = new RectOffset(2, 2, 2, 2)
 				};
 				Rect inputRect = new Rect(barRect.x + 56, barRect.y + 2, 180, barRect.height - 4);
+
+				// 回车键提交
+				if (Event.current.isKey && Event.current.keyCode == KeyCode.Return
+					&& GUI.GetNameOfFocusedControl() == "XTableSceneEditInput")
+				{
+					ApplyEdit(table);
+					Event.current.Use();
+				}
+
+				GUI.SetNextControlName("XTableSceneEditInput");
 				s_EditText = GUI.TextField(inputRect, s_EditText, inputStyle);
 
 				var btnStyle = new GUIStyle(GUI.skin.button)
@@ -287,6 +298,7 @@ namespace XericUIEditor.XTable
 				if (GUI.Button(new Rect(barRect.x + 242, barRect.y + 2, 50, barRect.height - 4),
 					"应用", btnStyle))
 				{
+					GUI.FocusControl(null);
 					ApplyEdit(table);
 				}
 			}
@@ -341,6 +353,74 @@ namespace XericUIEditor.XTable
 
 			e.Use();
 			SceneView.RepaintAll();
+		}
+
+		#endregion
+
+		#region 键盘快捷键
+
+		private static void HandleKeyboard(XericUIActionTable table, float[] rh, float[] cw)
+		{
+			Event e = Event.current;
+			if (e.type != EventType.KeyDown) return;
+
+			// 输入框获得焦点时不拦截方向键（用于文本光标移动）
+			if (GUI.GetNameOfFocusedControl() == "XTableSceneEditInput")
+				return;
+
+			int row = table.SelectedRow;
+			int col = table.SelectedCol;
+			bool shift = e.shift;
+
+			switch (e.keyCode)
+			{
+				case KeyCode.UpArrow:
+					if (!TryClampToValid(row - 1, col, rh, cw, out row, out col)) return;
+					break;
+				case KeyCode.DownArrow:
+					if (!TryClampToValid(row + 1, col, rh, cw, out row, out col)) return;
+					break;
+				case KeyCode.LeftArrow:
+					if (!TryClampToValid(row, col - 1, rh, cw, out row, out col)) return;
+					break;
+				case KeyCode.RightArrow:
+					if (!TryClampToValid(row, col + 1, rh, cw, out row, out col)) return;
+					break;
+				default:
+					return;
+			}
+
+			if (shift)
+			{
+				// Shift: 扩展/开始多选
+				if (!table.HasMultiSelection && table.SelectedRow >= 0 && table.SelectedCol >= 0)
+					table.StartMultiSelect(table.SelectedRow, table.SelectedCol);
+				table.ExtendMultiSelect(row, col);
+			}
+			else
+			{
+				table.SelectCell(row, col);
+			}
+
+			UpdateEditText(table, row, col);
+			table.RefreshView();
+			e.Use();
+			SceneView.RepaintAll();
+		}
+
+		/// <summary>将行列约束到有效范围，若已到边界则返回 false（不移动）</summary>
+		private static bool TryClampToValid(int row, int col, float[] rh, float[] cw,
+			out int outRow, out int outCol)
+		{
+			if (row < 0 || row >= rh.Length || col < 0 || col >= cw.Length)
+			{
+				outRow = row;
+				outCol = col;
+				return false;
+			}
+			outRow = row;
+			outCol = col;
+			return true;
 		}
 
 		#endregion
