@@ -9,6 +9,7 @@ using UnityEngine.UI;
 
 using XericUI.Core.Base;
 using XericUI.XTable.Core;
+using XericUI.XTable.Mapping;
 using XericUI.XTable.Rendering.Elements;
 using XericLibrary.Runtime.SuperStyleSheet;
 
@@ -319,6 +320,46 @@ namespace XericUI.XTable.Rendering.Component
 			m_SelectStartCol = -1;
 			m_SelectEndRow = -1;
 			m_SelectEndCol = -1;
+		}
+
+		/// <summary>通过文本选择一个单元格（如 "A0"）</summary>
+		public bool SelectCellByText(string text)
+		{
+			if (!XTableCoordinateFormat.TryParseCell(text, out int row, out int col))
+				return false;
+			SelectCell(row, col);
+			return true;
+		}
+
+		/// <summary>通过文本选择一个范围（如 "A0:B1", "A:A", "0:0"）</summary>
+		public bool SelectRangeByText(string text)
+		{
+			if (!XTableCoordinateFormat.TryParseRange(text,
+				out int sr, out int sc, out int er, out int ec))
+				return false;
+
+			ClearSelection();
+			m_SelectStartRow = sr;
+			m_SelectStartCol = sc;
+			m_SelectEndRow = er;
+			m_SelectEndCol = ec;
+			m_SelectedRow = sr;
+			m_SelectedCol = sc;
+			MarkDirty(TableDirtyType.SelectionChanged);
+			return true;
+		}
+
+		/// <summary>获取当前选区的文本描述（无多选返回 "A0"，有多选返回 "A0:B1"）</summary>
+		public string GetSelectionText()
+		{
+			if (m_SelectedRow < 0 || m_SelectedCol < 0) return string.Empty;
+			if (HasMultiSelection)
+			{
+				return XTableCoordinateFormat.RangeToText(
+					m_SelectStartRow, m_SelectStartCol,
+					m_SelectEndRow, m_SelectEndCol);
+			}
+			return XTableCoordinateFormat.CellToText(m_SelectedRow, m_SelectedCol);
 		}
 
 		public void RefreshView()
