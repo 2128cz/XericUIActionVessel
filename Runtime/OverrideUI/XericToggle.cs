@@ -89,7 +89,7 @@ namespace XericUI
                 m_ximage = graphic.GetComponent<XericImage>();
                 if (m_ximage)
                     return m_ximage;
-                Debug.Log("ע���滻toggle��checkmarkΪXericImage��֧�������Ĺ���");
+                Debug.Log("请替换toggle的checkmark为XericImage以支持更多的功能");
                 return null;
             }
         }
@@ -226,7 +226,7 @@ namespace XericUI
 #endif
         }
 
-        #region ����滻
+        #region 组件替换
 #if UNITY_EDITOR
         [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Xeric Toggle", true)]
         private static bool ValidateReplaceToXeric(UnityEditor.MenuCommand command)
@@ -245,7 +245,7 @@ namespace XericUI
                     t.group = d.group;
                     t.onValueChanged = d.onValueChanged;
                 });
-            Debug.Log("���ֶ��滻toggle�µ�Checkmark Image���ΪXericImage������Toggle����ʱȡ��ѡ���״̬�ᱣ��Ϊison״̬��");
+            Debug.Log("请手动替换toggle下的Checkmark Image组件为XericImage，这样Toggle关闭时取消选中的状态会保持为ison状态");
         }
 
         [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle", true)]
