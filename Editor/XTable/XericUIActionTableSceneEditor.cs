@@ -21,6 +21,16 @@ namespace XericUIEditor.XTable
 
 		private static string s_EditText = "";
 
+		// 拖拽框选状态
+		private static bool s_IsDragging;
+		private static bool s_DragFromLabel;    // 拖拽是否从行/列标签发起
+		private static int s_DragStartRow = -1;
+		private static int s_DragStartCol = -1;
+		private static Rect s_TableRect;      // 当前表格区域（用于拖拽期间鼠标检测）
+		private static float s_XScale, s_YScale;
+		private static float[] s_RowHeights, s_ColWidths;
+		private static XericUIActionTable s_ActiveTable;
+
 		private static readonly Color s_LabelBg = new Color(0.12f, 0.12f, 0.18f, 0.9f);
 		private static readonly Color s_SelectedLabel = new Color(0.2f, 0.5f, 0.9f, 0.6f);
 		private static readonly Color s_MultiSelectLabel = new Color(0.2f, 0.5f, 0.9f, 0.35f);
@@ -191,6 +201,11 @@ namespace XericUIEditor.XTable
 					int col = table.SelectedCol;
 					if (col < 0) col = 0;
 
+					s_IsDragging = true;
+					s_DragFromLabel = true;
+					s_DragStartRow = r;
+					s_DragStartCol = col;
+
 					if (Event.current.shift && table.SelectedRow >= 0)
 					{
 						if (!table.HasMultiSelection)
@@ -199,7 +214,7 @@ namespace XericUIEditor.XTable
 					}
 					else
 					{
-						table.SelectCell(r, col);
+						table.StartMultiSelect(r, col);
 					}
 
 					table.RefreshView();
@@ -259,6 +274,11 @@ namespace XericUIEditor.XTable
 					int row = table.SelectedRow;
 					if (row < 0) row = 0;
 
+					s_IsDragging = true;
+					s_DragFromLabel = true;
+					s_DragStartRow = row;
+					s_DragStartCol = c;
+
 					if (Event.current.shift && table.SelectedCol >= 0)
 					{
 						if (!table.HasMultiSelection)
@@ -267,7 +287,7 @@ namespace XericUIEditor.XTable
 					}
 					else
 					{
-						table.SelectCell(row, c);
+						table.StartMultiSelect(row, c);
 					}
 
 					table.RefreshView();
@@ -450,39 +470,89 @@ namespace XericUIEditor.XTable
 
 		#endregion
 
-		#region 表格区域点击
+		#region 表格区域点击与拖拽
 
 		private static void HandleInput(XericUIActionTable table,
 			float[] rh, float[] cw, Rect tr,
 			float xScale, float yScale)
 		{
 			Event e = Event.current;
-			if (e.type != EventType.MouseDown || e.button != 0) return;
-			if (!tr.Contains(e.mousePosition)) return;
 
-			float rx = (e.mousePosition.x - tr.x) / xScale;
-			float ry = (e.mousePosition.y - tr.y) / yScale;
+			// 更新当前帧的表格参数缓存，供拖拽期间使用
+			s_TableRect = tr;
+			s_XScale = xScale;
+			s_YScale = yScale;
+			s_RowHeights = rh;
+			s_ColWidths = cw;
+			s_ActiveTable = table;
 
-			int col = IndexFromCoord(rx, cw);
-			int row = IndexFromCoord(ry, rh);
-			if (row < 0 || col < 0) return;
-
-			if (e.shift && table.SelectedRow >= 0 && table.SelectedCol >= 0)
+			switch (e.type)
 			{
-				if (!table.HasMultiSelection)
-					table.StartMultiSelect(table.SelectedRow, table.SelectedCol);
-				table.ExtendMultiSelect(row, col);
-			}
-			else
-			{
-				table.SelectCell(row, col);
-			}
+				case EventType.MouseDown:
+					if (e.button != 0) break;
+					if (!tr.Contains(e.mousePosition)) break;
 
-			table.RefreshView();
-			UpdateEditText(table, row, col);
+					CellFromMouse(tr, xScale, yScale, out int mdRow, out int mdCol);
+					if (mdRow < 0 || mdCol < 0) break;
 
-			e.Use();
-			SceneView.RepaintAll();
+					s_IsDragging = true;
+					s_DragFromLabel = false;
+					s_DragStartRow = mdRow;
+					s_DragStartCol = mdCol;
+
+					if (e.shift && table.SelectedRow >= 0 && table.SelectedCol >= 0)
+					{
+						if (!table.HasMultiSelection)
+							table.StartMultiSelect(table.SelectedRow, table.SelectedCol);
+						table.ExtendMultiSelect(mdRow, mdCol);
+					}
+					else
+					{
+						table.StartMultiSelect(mdRow, mdCol);
+					}
+
+					table.RefreshView();
+					UpdateEditText(table, mdRow, mdCol);
+					e.Use();
+					SceneView.RepaintAll();
+					break;
+
+				case EventType.MouseDrag:
+					if (!s_IsDragging || e.button != 0) break;
+
+					CellFromMouse(tr, xScale, yScale, out int dragRow, out int dragCol);
+					if (dragRow < 0 || dragCol < 0) break;
+
+					table.ExtendMultiSelect(dragRow, dragCol);
+					table.RefreshView();
+					UpdateEditText(table, dragRow, dragCol);
+					e.Use();
+					SceneView.RepaintAll();
+					break;
+
+				case EventType.MouseUp:
+					if (e.button != 0) break;
+					s_IsDragging = false;
+					break;
+			}
+		}
+
+		private static void CellFromMouse(Rect tr, float xScale, float yScale,
+			out int row, out int col)
+		{
+			float rx = (Event.current.mousePosition.x - tr.x) / xScale;
+			float ry = (Event.current.mousePosition.y - tr.y) / yScale;
+			col = IndexFromCoord(rx, s_ColWidths);
+			row = IndexFromCoord(ry, s_RowHeights);
+		}
+
+		/// <summary>被行标签/列标签拖拽时调用，将拖拽扩展到整行/整列方向</summary>
+		private static void StartDragFromLabel(int row, int col, XericUIActionTable table)
+		{
+			s_IsDragging = true;
+			s_DragStartRow = row;
+			s_DragStartCol = col;
+			table.StartMultiSelect(row, col);
 		}
 
 		#endregion
