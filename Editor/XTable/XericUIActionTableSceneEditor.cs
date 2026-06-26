@@ -73,17 +73,14 @@ namespace XericUIEditor.XTable
 			float[] cw = table.ColWidths;
 			if (rh == null || cw == null || rh.Length == 0 || cw.Length == 0) return;
 
-			// GetWorldCorners 返回世界坐标，topleft = corners[1]
+			// GetWorldCorners 返回世界坐标，topleft = corners[1], bottomRight = corners[3]
 			Vector3[] corners = new Vector3[4];
 			tableRt.GetWorldCorners(corners);
 
-			Camera svCam = sceneView.camera;
-			Rect camRect = svCam.pixelRect;
-
-			// 对 ScreenSpaceOverlay Canvas，世界坐标即屏幕像素坐标
-			// 需要映射到 SceneView 本地 GUI 坐标
-			Vector2 guiTL = ScreenToSceneViewGUI(corners[1], camRect);
-			Vector2 guiBR = ScreenToSceneViewGUI(corners[3], camRect);
+			// 使用 HandleUtility 将世界坐标投影到 Scene View GUI 坐标系
+			// 自动处理相机缩放、平移、旋转——无论何种 Canvas 渲染模式都正确
+			Vector2 guiTL = HandleUtility.WorldToGUIPoint(corners[1]);
+			Vector2 guiBR = HandleUtility.WorldToGUIPoint(corners[3]);
 
 			float tableW = guiBR.x - guiTL.x;
 			float tableH = guiBR.y - guiTL.y;
@@ -110,15 +107,6 @@ namespace XericUIEditor.XTable
 			HandleInput(table, rh, cw, tableRect, xScale, yScale);
 
 			Handles.EndGUI();
-		}
-
-		/// <summary>屏幕坐标转 SceneView 本地 GUI 坐标</summary>
-		private static Vector2 ScreenToSceneViewGUI(Vector2 screenPos, Rect camPixelRect)
-		{
-			return new Vector2(
-				screenPos.x - camPixelRect.x,
-				camPixelRect.yMax - screenPos.y
-			);
 		}
 
 		#region 行标签
