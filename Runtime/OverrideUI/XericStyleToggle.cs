@@ -13,7 +13,7 @@ namespace XericUI.OverrideUI
 	/// 额外支持 isOn 覆盖和 Checkmark 样式。
 	/// </summary>
 	[AddComponentMenu("Xeric UI Vessel/UI/Style Toggle", 52)]
-	public class XericStyleToggle : Toggle
+	public class XericStyleToggle : Toggle, IStyleRefreshable
 	{
 		#region 序列化字段
 
@@ -86,12 +86,15 @@ namespace XericUI.OverrideUI
 			m_CheckmarkStyle?.Register();
 			m_CheckmarkStyle.OnValueChanged += OnStyleChanged;
 
+			StyleRefreshManager.Register(this);
 			onValueChanged.AddListener(OnToggleValueChanged);
 			ApplyForState(m_CurrentState);
 		}
 
 		protected override void OnDisable()
 		{
+			StyleRefreshManager.Unregister(this);
+
 			onValueChanged.RemoveListener(OnToggleValueChanged);
 
 			m_ColorState?.UnsubscribeAll(OnStyleChanged);
@@ -129,6 +132,11 @@ namespace XericUI.OverrideUI
 		#endregion
 
 		#region 样式应用
+
+		public void RefreshStyle()
+		{
+			ApplyForState(m_CurrentState, false);
+		}
 
 		private void ApplyForState(StyleSheetSelectionState state, bool instant = false)
 		{
@@ -181,6 +189,12 @@ namespace XericUI.OverrideUI
 		#region 组件替换
 
 #if UNITY_EDITOR
+		[UnityEditor.MenuItem("CONTEXT/XericStyleToggle/Xeric UI/强制刷新样式", false, 1)]
+		private static void ForceRefreshStyle(UnityEditor.MenuCommand command)
+		{
+			StyleRefreshManager.ForceRefreshAll();
+		}
+
 		[UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Xeric (Style)", true)]
 		private static bool ValidateReplaceToStyleToggle(UnityEditor.MenuCommand command)
 			=> command.context is Toggle and not XericStyleToggle;

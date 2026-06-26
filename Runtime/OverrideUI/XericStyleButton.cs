@@ -14,7 +14,7 @@ namespace XericUI.OverrideUI
 	/// 替代 Unity 内置的 ColorBlock 和 SpriteState。
 	/// </summary>
 	[AddComponentMenu("Xeric UI Vessel/UI/Style Button", 51)]
-	public class XericStyleButton : Button
+	public class XericStyleButton : Button, IStyleRefreshable
 	{
 		#region 序列化字段
 
@@ -59,11 +59,14 @@ namespace XericUI.OverrideUI
 			m_ColorState?.SubscribeAll(OnStyleChanged);
 			m_TextureState?.SubscribeAll(OnStyleChanged);
 
+			StyleRefreshManager.Register(this);
 			ApplyForState(m_CurrentState);
 		}
 
 		protected override void OnDisable()
 		{
+			StyleRefreshManager.Unregister(this);
+
 			m_ColorState?.UnsubscribeAll(OnStyleChanged);
 			m_TextureState?.UnsubscribeAll(OnStyleChanged);
 			m_ColorState?.UnregisterAll();
@@ -91,6 +94,11 @@ namespace XericUI.OverrideUI
 		#endregion
 
 		#region 样式应用
+
+		public void RefreshStyle()
+		{
+			ApplyForState(m_CurrentState, false);
+		}
 
 		private void ApplyForState(StyleSheetSelectionState state, bool instant = false)
 		{
@@ -134,6 +142,12 @@ namespace XericUI.OverrideUI
 		#region 组件替换
 
 #if UNITY_EDITOR
+		[UnityEditor.MenuItem("CONTEXT/XericStyleButton/Xeric UI/强制刷新样式", false, 1)]
+		private static void ForceRefreshStyle(UnityEditor.MenuCommand command)
+		{
+			StyleRefreshManager.ForceRefreshAll();
+		}
+
 		[UnityEditor.MenuItem("CONTEXT/Button/Replace To/Xeric (Style)", true)]
 		private static bool ValidateReplaceToStyleButton(UnityEditor.MenuCommand command)
 			=> command.context is Button and not XericStyleButton;
