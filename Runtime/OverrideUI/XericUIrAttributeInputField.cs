@@ -26,11 +26,11 @@ namespace XericUI.OverrideUI
         #region 组件替换
 
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/InputField/Replace To XericUIrAttributeInputField", true)]
+        [UnityEditor.MenuItem("CONTEXT/InputField/Replace To/Xeric (Attribute)", true)]
         private static bool ValidateReplaceToAttribute(UnityEditor.MenuCommand command)
             => command.context is InputField and not XericUIrAttributeInputField;
 
-        [UnityEditor.MenuItem("CONTEXT/InputField/Replace To XericUIrAttributeInputField", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/InputField/Replace To/Xeric (Attribute)", false, 10)]
         private static void ReplaceToAttribute(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<InputField, XericUIrAttributeInputField,
                 (Graphic targetGraphic, string text, InputField.OnChangeEvent onValueChanged, InputField.EndEditEvent onEndEdit)>(
@@ -43,11 +43,11 @@ namespace XericUI.OverrideUI
                     t.onEndEdit = d.onEndEdit;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/InputField/Replace To InputField", true)]
+        [UnityEditor.MenuItem("CONTEXT/InputField/Replace To/Unity InputField", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericUIrAttributeInputField;
 
-        [UnityEditor.MenuItem("CONTEXT/InputField/Replace To InputField", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/InputField/Replace To/Unity InputField", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<XericUIrAttributeInputField, InputField,
                 (Graphic targetGraphic, string text, InputField.OnChangeEvent onValueChanged, InputField.EndEditEvent onEndEdit)>(

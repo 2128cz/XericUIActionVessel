@@ -27,11 +27,11 @@ namespace XericUI.OverrideUI
         #region 组件替换
 
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/Dropdown/Replace To XericUIrAttributeDropdown", true)]
+        [UnityEditor.MenuItem("CONTEXT/Dropdown/Replace To/Xeric (Attribute)", true)]
         private static bool ValidateReplaceToAttribute(UnityEditor.MenuCommand command)
             => command.context is Dropdown and not XericUIrAttributeDropdown;
 
-        [UnityEditor.MenuItem("CONTEXT/Dropdown/Replace To XericUIrAttributeDropdown", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/Dropdown/Replace To/Xeric (Attribute)", false, 10)]
         private static void ReplaceToAttribute(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<Dropdown, XericUIrAttributeDropdown,
                 (Graphic targetGraphic, int value, List<OptionData> options, DropdownEvent onValueChanged)>(
@@ -45,11 +45,11 @@ namespace XericUI.OverrideUI
                     t.onValueChanged = d.onValueChanged;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/Dropdown/Replace To Dropdown", true)]
+        [UnityEditor.MenuItem("CONTEXT/Dropdown/Replace To/Unity Dropdown", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericUIrAttributeDropdown;
 
-        [UnityEditor.MenuItem("CONTEXT/Dropdown/Replace To Dropdown", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/Dropdown/Replace To/Unity Dropdown", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<XericUIrAttributeDropdown, Dropdown,
                 (Graphic targetGraphic, int value, List<OptionData> options, DropdownEvent onValueChanged)>(

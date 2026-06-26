@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 using UnityEngine.Serialization;
 using UnityEngine.UI;
@@ -27,11 +27,11 @@ namespace XericUI.OverrideUI
 
         #region 组件替换
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/Image/Replace To XericImage", true)]
+        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Xeric Image", true)]
         private static bool ValidateReplaceToXeric(UnityEditor.MenuCommand command)
             => command.context is Image and not XericImage;
 
-        [UnityEditor.MenuItem("CONTEXT/Image/Replace To XericImage", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Xeric Image", false, 10)]
         private static void ReplaceToXeric(UnityEditor.MenuCommand command) 
             => command.ReplaceCommandContext<Image, XericImage, Sprite>(
                 o =>
@@ -41,11 +41,11 @@ namespace XericUI.OverrideUI
                     t.sprite = d;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/Image/Replace To Image", true)]
+        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericImage;
 
-        [UnityEditor.MenuItem("CONTEXT/Image/Replace To Image", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command) 
             => command.ReplaceCommandContext<XericImage, Image, Sprite>(
                 o =>

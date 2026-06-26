@@ -56,7 +56,7 @@ namespace XericUI.OverrideUI
         #region 组件替换
 
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/TextMeshProUGUI/Replace To XericUIrAttributeTextMeshProText", true)]
+        [UnityEditor.MenuItem("CONTEXT/TextMeshProUGUI/Replace To/Xeric (Attribute)", true)]
         private static bool ValidateReplaceToAttribute(UnityEditor.MenuCommand command)
         {
 #if dUI_TextMeshPro
@@ -66,7 +66,7 @@ namespace XericUI.OverrideUI
 #endif
         }
 
-        [UnityEditor.MenuItem("CONTEXT/TextMeshProUGUI/Replace To XericUIrAttributeTextMeshProText", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/TextMeshProUGUI/Replace To/Xeric (Attribute)", false, 10)]
         private static void ReplaceToAttribute(UnityEditor.MenuCommand command)
         {
 #if dUI_TextMeshPro
@@ -76,11 +76,11 @@ namespace XericUI.OverrideUI
 #endif
         }
 
-        [UnityEditor.MenuItem("CONTEXT/TextMeshProUGUI/Replace To TextMeshProUGUI", true)]
+        [UnityEditor.MenuItem("CONTEXT/TextMeshProUGUI/Replace To/Unity TextMeshPro", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericUIrAttributeTextMeshProText;
 
-        [UnityEditor.MenuItem("CONTEXT/TextMeshProUGUI/Replace To TextMeshProUGUI", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/TextMeshProUGUI/Replace To/Unity TextMeshPro", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command)
         {
             var comp = command.context as XericUIrAttributeTextMeshProText;

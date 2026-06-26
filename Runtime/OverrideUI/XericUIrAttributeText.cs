@@ -45,21 +45,21 @@ namespace XericUI.OverrideUI
         #region 组件替换
 
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/Image/Replace To XericUIrAttributeText", true)]
+        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Xeric (AttributeText)", true)]
         private static bool ValidateReplaceToAttribute(UnityEditor.MenuCommand command)
             => command.context is Image and not XericUIrAttributeText;
 
-        [UnityEditor.MenuItem("CONTEXT/Image/Replace To XericUIrAttributeText", false, 11)]
+        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Xeric (AttributeText)", false, 13)]
         private static void ReplaceToAttribute(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<Image, XericUIrAttributeText, Sprite>(
                 o => o.sprite,
                 (t, d) => { t.sprite = d; });
 
-        [UnityEditor.MenuItem("CONTEXT/Image/Replace To Image", true)]
+        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericUIrAttributeText;
 
-        [UnityEditor.MenuItem("CONTEXT/Image/Replace To Image", false, 11)]
+        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<XericUIrAttributeText, Image, Sprite>(
                 o => o.sprite,

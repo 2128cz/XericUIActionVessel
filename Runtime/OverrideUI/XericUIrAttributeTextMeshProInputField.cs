@@ -59,7 +59,7 @@ namespace XericUI.OverrideUI
         #region 组件替换
 
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/TMP_InputField/Replace To XericUIrAttributeTextMeshProInputField", true)]
+        [UnityEditor.MenuItem("CONTEXT/TMP_InputField/Replace To/Xeric (Attribute)", true)]
         private static bool ValidateReplaceToAttribute(UnityEditor.MenuCommand command)
         {
 #if dUI_TextMeshPro
@@ -69,7 +69,7 @@ namespace XericUI.OverrideUI
 #endif
         }
 
-        [UnityEditor.MenuItem("CONTEXT/TMP_InputField/Replace To XericUIrAttributeTextMeshProInputField", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/TMP_InputField/Replace To/Xeric (Attribute)", false, 10)]
         private static void ReplaceToAttribute(UnityEditor.MenuCommand command)
         {
 #if dUI_TextMeshPro
@@ -79,11 +79,11 @@ namespace XericUI.OverrideUI
 #endif
         }
 
-        [UnityEditor.MenuItem("CONTEXT/TMP_InputField/Replace To TMP_InputField", true)]
+        [UnityEditor.MenuItem("CONTEXT/TMP_InputField/Replace To/Unity TMP_InputField", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericUIrAttributeTextMeshProInputField;
 
-        [UnityEditor.MenuItem("CONTEXT/TMP_InputField/Replace To TMP_InputField", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/TMP_InputField/Replace To/Unity TMP_InputField", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command)
         {
             var comp = command.context as XericUIrAttributeTextMeshProInputField;

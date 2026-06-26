@@ -4,7 +4,9 @@
     "references": [
         "UnityEngine.UI",
         "Unity.TextMeshPro",
-        "Lrss3.Deconstruction"
+        "Lrss3.Deconstruction",
+        "Unity.Burst",
+        "Unity.Collections"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

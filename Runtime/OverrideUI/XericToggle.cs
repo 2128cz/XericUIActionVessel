@@ -89,7 +89,7 @@ namespace XericUI
                 m_ximage = graphic.GetComponent<XericImage>();
                 if (m_ximage)
                     return m_ximage;
-                Debug.Log("×¢ÒâÌæ»»toggleµÄcheckmarkÎªXericImageÒÔÖ§³ÖÍêÕûµÄ¹¦ÄÜ");
+                Debug.Log("×¢ï¿½ï¿½ï¿½æ»»toggleï¿½ï¿½checkmarkÎªXericImageï¿½ï¿½Ö§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¹ï¿½ï¿½ï¿½");
                 return null;
             }
         }
@@ -226,13 +226,13 @@ namespace XericUI
 #endif
         }
 
-        #region ×é¼þÌæ»»
+        #region ï¿½ï¿½ï¿½ï¿½æ»»
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To XericToggle", true)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Xeric Toggle", true)]
         private static bool ValidateReplaceToXeric(UnityEditor.MenuCommand command)
             => command.context is Toggle and not XericToggle;
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To XericToggle", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Xeric Toggle", false, 10)]
         private static void ReplaceToXeric(UnityEditor.MenuCommand command)
         {
             command.ReplaceCommandContext<Toggle, XericToggle,
@@ -245,14 +245,14 @@ namespace XericUI
                     t.group = d.group;
                     t.onValueChanged = d.onValueChanged;
                 });
-            Debug.Log("ÇëÊÖ¶¯Ìæ»»toggleÏÂµÄCheckmark Image×é¼þÎªXericImage£¬·ñÔòToggle¹¤×÷Ê±È¡ÏûÑ¡ÔñµÄ×´Ì¬»á±£³ÖÎªison×´Ì¬¡£");
+            Debug.Log("ï¿½ï¿½ï¿½Ö¶ï¿½ï¿½æ»»toggleï¿½Âµï¿½Checkmark Imageï¿½ï¿½ï¿½ÎªXericImageï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Toggleï¿½ï¿½ï¿½ï¿½Ê±È¡ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½×´Ì¬ï¿½á±£ï¿½ï¿½Îªison×´Ì¬ï¿½ï¿½");
         }
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To Toggle", true)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericToggle;
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To Toggle", false, 10)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command) 
             => command.ReplaceCommandContext<XericToggle, Toggle,
                 (Graphic graphic, ToggleGroup group, ToggleEvent onValueChanged)>(
