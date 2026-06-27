@@ -330,6 +330,110 @@ namespace XericUI.XTable.Rendering.Component
 #endif
 		}
 
+		/// <summary>删除指定行，单元格数据上移</summary>
+		public void RemoveRow(int row)
+		{
+			if (row < 0 || row >= m_RowHeights.Length) return;
+#if UNITY_EDITOR
+			UnityEditor.Undo.RecordObject(this, "Remove Table Row");
+#endif
+			int colCount = m_ColWidths.Length;
+
+			// 先解除涉及该行的合并
+			for (int c = 0; c < colCount; c++)
+				TableData.UnmergeCells(row, c);
+
+			// 将下方行数据上移
+			for (int r = row + 1; r < m_RowHeights.Length; r++)
+				for (int c = 0; c < colCount; c++)
+				{
+					var data = TableData.GetCell(r, c);
+					if (data != null)
+						TableData.SetCell(r - 1, c, data);
+					else
+						TableData.SetCell(r - 1, c, null); // 显式清空原位置
+				}
+
+			// 清空最后一行数据
+			int lastRow = m_RowHeights.Length - 1;
+			for (int c = 0; c < colCount; c++)
+				TableData.SetCell(lastRow, c, null);
+
+			// 缩小行高数组
+			int newLen = m_RowHeights.Length - 1;
+			var newArr = new float[newLen];
+			for (int i = 0; i < row; i++)
+				newArr[i] = m_RowHeights[i];
+			for (int i = row; i < newLen; i++)
+				newArr[i] = m_RowHeights[i + 1];
+			m_RowHeights = newArr;
+
+			// 更新选中状态
+			if (m_SelectedRow >= m_RowHeights.Length)
+				m_SelectedRow = Mathf.Max(-1, m_RowHeights.Length - 1);
+			if (m_SelectStartRow >= m_RowHeights.Length)
+				m_SelectStartRow = Mathf.Max(-1, m_RowHeights.Length - 1);
+			if (m_SelectEndRow >= m_RowHeights.Length)
+				m_SelectEndRow = Mathf.Max(-1, m_RowHeights.Length - 1);
+
+			MarkDirty(TableDirtyType.LayoutChanged | TableDirtyType.DataChanged | TableDirtyType.SelectionChanged);
+#if UNITY_EDITOR
+			UnityEditor.EditorUtility.SetDirty(this);
+#endif
+		}
+
+		/// <summary>删除指定列，单元格数据左移</summary>
+		public void RemoveColumn(int col)
+		{
+			if (col < 0 || col >= m_ColWidths.Length) return;
+#if UNITY_EDITOR
+			UnityEditor.Undo.RecordObject(this, "Remove Table Column");
+#endif
+			int rowCount = m_RowHeights.Length;
+
+			// 先解除涉及该列的合并
+			for (int r = 0; r < rowCount; r++)
+				TableData.UnmergeCells(r, col);
+
+			// 将右侧列数据左移
+			for (int r = 0; r < rowCount; r++)
+				for (int c = col + 1; c < m_ColWidths.Length; c++)
+				{
+					var data = TableData.GetCell(r, c);
+					if (data != null)
+						TableData.SetCell(r, c - 1, data);
+					else
+						TableData.SetCell(r, c - 1, null);
+				}
+
+			// 清空最后一列数据
+			int lastCol = m_ColWidths.Length - 1;
+			for (int r = 0; r < rowCount; r++)
+				TableData.SetCell(r, lastCol, null);
+
+			// 缩小列宽数组
+			int newLen = m_ColWidths.Length - 1;
+			var newArr = new float[newLen];
+			for (int i = 0; i < col; i++)
+				newArr[i] = m_ColWidths[i];
+			for (int i = col; i < newLen; i++)
+				newArr[i] = m_ColWidths[i + 1];
+			m_ColWidths = newArr;
+
+			// 更新选中状态
+			if (m_SelectedCol >= m_ColWidths.Length)
+				m_SelectedCol = Mathf.Max(-1, m_ColWidths.Length - 1);
+			if (m_SelectStartCol >= m_ColWidths.Length)
+				m_SelectStartCol = Mathf.Max(-1, m_ColWidths.Length - 1);
+			if (m_SelectEndCol >= m_ColWidths.Length)
+				m_SelectEndCol = Mathf.Max(-1, m_ColWidths.Length - 1);
+
+			MarkDirty(TableDirtyType.LayoutChanged | TableDirtyType.DataChanged | TableDirtyType.SelectionChanged);
+#if UNITY_EDITOR
+			UnityEditor.EditorUtility.SetDirty(this);
+#endif
+		}
+
 		public void SelectCell(int row, int col)
 		{
 			ClearMultiSelection();

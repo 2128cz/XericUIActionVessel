@@ -540,8 +540,11 @@ namespace XericUIEditor.XTable
 		private const float BUBBLE_W = 60;
 		private const float BUBBLE_H = 22;
 		private const float BUBBLE_APPLY_BTN_W = 24;
+		private const float BUBBLE_DEL_BTN_W = 24;
 
 		private static GUIStyle s_BubbleApplyBtnStyle;
+		private static GUIStyle s_BubbleApplyBtnStyleActive;
+		private static GUIStyle s_BubbleDelBtnStyle;
 
 		private static void EnsureBubbleStyles()
 		{
@@ -550,13 +553,25 @@ namespace XericUIEditor.XTable
 			{
 				fontSize = 11,
 				fontStyle = FontStyle.Bold,
-				normal = { textColor = Color.white, background = MakeTex(1, 1, s_ApplyBtnColor) },
-				hover = { textColor = Color.white, background = MakeTex(1, 1, new Color(0.2f, 0.55f, 0.2f, 0.95f)) },
-				active = { textColor = Color.white, background = MakeTex(1, 1, new Color(0.1f, 0.4f, 0.1f, 0.95f)) },
+				normal = { textColor = new Color(0.5f, 0.5f, 0.5f), background = MakeTex(1, 1, new Color(0.25f, 0.25f, 0.25f, 0.6f)) },
+				hover = { textColor = new Color(0.7f, 0.7f, 0.7f), background = MakeTex(1, 1, new Color(0.35f, 0.35f, 0.35f, 0.8f)) },
+				active = { textColor = Color.white, background = MakeTex(1, 1, new Color(0.15f, 0.15f, 0.15f, 0.8f)) },
 				padding = new RectOffset(0, 0, 0, 0),
 				margin = new RectOffset(0, 0, 0, 0),
 				alignment = TextAnchor.MiddleCenter,
 				border = new RectOffset(0, 0, 0, 0)
+			};
+			s_BubbleApplyBtnStyleActive = new GUIStyle(s_BubbleApplyBtnStyle)
+			{
+				normal = { textColor = Color.white, background = MakeTex(1, 1, new Color(0.2f, 0.6f, 0.2f, 0.9f)) },
+				hover = { textColor = Color.white, background = MakeTex(1, 1, new Color(0.2f, 0.55f, 0.2f, 0.95f)) },
+				active = { textColor = Color.white, background = MakeTex(1, 1, new Color(0.1f, 0.4f, 0.1f, 0.95f)) }
+			};
+			s_BubbleDelBtnStyle = new GUIStyle(s_BubbleApplyBtnStyle)
+			{
+				normal = { textColor = new Color(0.6f, 0.3f, 0.3f), background = MakeTex(1, 1, new Color(0.3f, 0.15f, 0.15f, 0.6f)) },
+				hover = { textColor = Color.white, background = MakeTex(1, 1, new Color(0.7f, 0.2f, 0.2f, 0.95f)) },
+				active = { textColor = Color.white, background = MakeTex(1, 1, new Color(0.5f, 0.1f, 0.1f, 0.95f)) }
 			};
 		}
 
@@ -566,64 +581,65 @@ namespace XericUIEditor.XTable
 			int selRow = table.SelectedRow;
 			int selCol = table.SelectedCol;
 
-			// 列宽气泡
+			// 气泡固定总宽：输入框 + 应用按钮 + 删除按钮 + 间距
+			const float totalW = BUBBLE_W + BUBBLE_APPLY_BTN_W + BUBBLE_DEL_BTN_W + 4f;
+
+			// ── 列宽气泡：左对齐列左边缘，位于列标签上方 ──
 			if (selCol >= 0 && selCol < cw.Length && selRow < 0)
 			{
 				float cx = tr.x + SumBefore(cw, selCol) * xScale;
-				float cwScaled = cw[selCol] * xScale;
-				float bubbleX = cx + cwScaled / 2f - BUBBLE_W / 2f;
-				float bubbleY = tr.y - ROW_H - MARGIN - 28f;
-				DrawBubble(table, bubbleX, bubbleY, cw[selCol], isColumn: true, index: selCol);
+				float bx = cx + 2f;
+				float by = tr.y - ROW_H - MARGIN - BUBBLE_H - 4f;
+				DrawBubble(table, bx, by, cw[selCol], totalW, isColumn: true, index: selCol);
 			}
 
+			// ── 行高气泡：左对齐行标签左侧 ──
 			if (selRow >= 0 && selRow < rh.Length && selCol < 0)
 			{
 				float ry = tr.y + SumBefore(rh, selRow) * yScale;
 				float rhScaled = rh[selRow] * yScale;
-				float bubbleX = tr.x - COL_W - MARGIN - 86f;
-				float bubbleY = ry + rhScaled / 2f - 12f;
-				DrawBubble(table, bubbleX, bubbleY, rh[selRow], isColumn: false, index: selRow);
+				float bx = tr.x - COL_W - MARGIN - totalW - 4f;
+				float by = ry + (rhScaled - BUBBLE_H) / 2f;
+				DrawBubble(table, bx, by, rh[selRow], totalW, isColumn: false, index: selRow);
 			}
 
+			// ── 单元格选中时同时显示 ──
 			if (selRow >= 0 && selCol >= 0)
 			{
 				if (selCol < cw.Length)
 				{
 					float cx = tr.x + SumBefore(cw, selCol) * xScale;
-					float cwScaled = cw[selCol] * xScale;
-					float bubbleX = cx + cwScaled / 2f - BUBBLE_W / 2f;
-					float bubbleY = tr.y - ROW_H - MARGIN - 28f;
-					DrawBubble(table, bubbleX, bubbleY, cw[selCol], isColumn: true, index: selCol);
+					float bx = cx + 2f;
+					float by = tr.y - ROW_H - MARGIN - BUBBLE_H - 4f;
+					DrawBubble(table, bx, by, cw[selCol], totalW, isColumn: true, index: selCol);
 				}
 				if (selRow < rh.Length)
 				{
 					float ry = tr.y + SumBefore(rh, selRow) * yScale;
 					float rhScaled = rh[selRow] * yScale;
-					float bubbleX = tr.x - COL_W - MARGIN - 86f;
-					float bubbleY = ry + rhScaled / 2f - 12f;
-					DrawBubble(table, bubbleX, bubbleY, rh[selRow], isColumn: false, index: selRow);
+					float bx = tr.x - COL_W - MARGIN - totalW - 4f;
+					float by = ry + (rhScaled - BUBBLE_H) / 2f;
+					DrawBubble(table, bx, by, rh[selRow], totalW, isColumn: false, index: selRow);
 				}
 			}
 		}
 
 		private static void DrawBubble(XericUIActionTable table,
 			float x, float y, float currentValue,
-			bool isColumn, int index)
+			float totalW, bool isColumn, int index)
 		{
 			string controlName = isColumn
 				? $"XTableColSizeEdit_{index}"
 				: $"XTableRowSizeEdit_{index}";
 			bool isFocused = GUI.GetNameOfFocusedControl() == controlName;
 
-			// 气泡容器（含输入框 + 应用按钮）
-			float totalW = isFocused ? BUBBLE_W + BUBBLE_APPLY_BTN_W + 2f : BUBBLE_W;
-			Rect bubbleRect = new Rect(x - (isFocused ? (BUBBLE_APPLY_BTN_W + 2f) / 2f : 0), y, totalW, BUBBLE_H);
+			Rect bubbleRect = new Rect(x, y, totalW, BUBBLE_H);
 
 			EditorGUI.DrawRect(bubbleRect, s_BubbleBg);
-			EditorGUI.DrawRect(new Rect(bubbleRect.x, bubbleRect.y, bubbleRect.width, 1), s_BubbleBorder);
-			EditorGUI.DrawRect(new Rect(bubbleRect.x, bubbleRect.y + BUBBLE_H - 1, bubbleRect.width, 1), s_BubbleBorder);
-			EditorGUI.DrawRect(new Rect(bubbleRect.x, bubbleRect.y, 1, BUBBLE_H), s_BubbleBorder);
-			EditorGUI.DrawRect(new Rect(bubbleRect.x + bubbleRect.width - 1, bubbleRect.y, 1, BUBBLE_H), s_BubbleBorder);
+			EditorGUI.DrawRect(new Rect(x, y, totalW, 1), s_BubbleBorder);
+			EditorGUI.DrawRect(new Rect(x, y + BUBBLE_H - 1, totalW, 1), s_BubbleBorder);
+			EditorGUI.DrawRect(new Rect(x, y, 1, BUBBLE_H), s_BubbleBorder);
+			EditorGUI.DrawRect(new Rect(x + totalW - 1, y, 1, BUBBLE_H), s_BubbleBorder);
 
 			var inputStyle = new GUIStyle(GUI.skin.textField)
 			{
@@ -632,33 +648,31 @@ namespace XericUIEditor.XTable
 				alignment = TextAnchor.MiddleCenter
 			};
 
-			Rect inputRect = new Rect(bubbleRect.x + 2, bubbleRect.y + 2,
-				BUBBLE_W - 4, BUBBLE_H - 4);
-
+			// 输入框占左
+			Rect inputRect = new Rect(x + 2, y + 2, BUBBLE_W - 4, BUBBLE_H - 4);
 			GUI.SetNextControlName(controlName);
 
 			if (isFocused)
-			{
 				s_SizeEditText = GUI.TextField(inputRect, s_SizeEditText, inputStyle);
-			}
 			else
-			{
 				GUI.TextField(inputRect, currentValue.ToString("F0"), inputStyle);
+
+			// 应用按钮 — 聚焦时绿色，否则灰色
+			EnsureBubbleStyles();
+			Rect applyBtnRect = new Rect(x + BUBBLE_W + 1f, y + 1, BUBBLE_APPLY_BTN_W, BUBBLE_H - 2);
+			var btnStyle = isFocused ? s_BubbleApplyBtnStyleActive : s_BubbleApplyBtnStyle;
+
+			if (GUI.Button(applyBtnRect, "✓", btnStyle))
+			{
+				ApplyBubbleEdit(table, isColumn, index);
+				GUI.FocusControl(null);
 			}
 
-			// ── 应用按钮（GUI.Button 确保正确交互）──
-			if (isFocused)
+			// 删除按钮 — 删除当前行/列
+			Rect delBtnRect = new Rect(x + BUBBLE_W + BUBBLE_APPLY_BTN_W + 2f, y + 1, BUBBLE_DEL_BTN_W, BUBBLE_H - 2);
+			if (GUI.Button(delBtnRect, "✕", s_BubbleDelBtnStyle))
 			{
-				EnsureBubbleStyles();
-				Rect applyBtnRect = new Rect(
-					bubbleRect.x + BUBBLE_W + 2f, bubbleRect.y,
-					BUBBLE_APPLY_BTN_W, BUBBLE_H);
-
-				if (GUI.Button(applyBtnRect, "✓", s_BubbleApplyBtnStyle))
-				{
-					ApplyBubbleEdit(table, isColumn, index);
-					GUI.FocusControl(null);
-				}
+				ApplyBubbleDelete(table, isColumn, index);
 			}
 
 			// 回车提交
@@ -682,6 +696,18 @@ namespace XericUIEditor.XTable
 					table.SetRowHeight(index, value);
 				table.RefreshView();
 			}
+			GUI.FocusControl(null);
+			s_State = EditorState.TableNavigation;
+			SceneView.RepaintAll();
+		}
+
+		private static void ApplyBubbleDelete(XericUIActionTable table, bool isColumn, int index)
+		{
+			if (isColumn)
+				table.RemoveColumn(index);
+			else
+				table.RemoveRow(index);
+
 			GUI.FocusControl(null);
 			s_State = EditorState.TableNavigation;
 			SceneView.RepaintAll();
