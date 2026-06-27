@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+
+using UnityEngine;
 
 namespace XericUI.XTable.Core
 {
@@ -6,7 +9,8 @@ namespace XericUI.XTable.Core
 	/// 单个数据块——保存 BlockSizeX × BlockSizeY 个单元格数据。
 	/// 数据使用线性数组存储，索引 = localRow * BlockSizeX + localCol。
 	/// </summary>
-	public class XTableBlock
+	[Serializable]
+	public class XTableBlock : ISerializationCallbackReceiver
 	{
 		/// <summary>块在全局块坐标系中的行号</summary>
 		public int BlockRow;
@@ -86,5 +90,21 @@ namespace XericUI.XTable.Core
 			}
 			return null;
 		}
+
+		#region 序列化回调
+
+		public void OnBeforeSerialize() { }
+
+		public void OnAfterDeserialize()
+		{
+			// 反序列化时确保 BlockSize 有效（构造函数被跳过）
+			if (BlockSizeX <= 0) BlockSizeX = XTableData.DefaultBlockSize;
+			if (BlockSizeY <= 0) BlockSizeY = XTableData.DefaultBlockSize;
+			// 确保数组和列表非空
+			if (Cells == null) Cells = new XTableCellData[BlockSizeX * BlockSizeY];
+			if (MergeDescriptors == null) MergeDescriptors = new List<XTableMergeDescriptor>();
+		}
+
+		#endregion
 	}
 }

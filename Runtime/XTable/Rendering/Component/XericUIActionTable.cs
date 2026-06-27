@@ -178,12 +178,10 @@ namespace XericUI.XTable.Rendering.Component
 
 		#region 默认示例数据
 
-		[System.NonSerialized] private bool m_DefaultDataCreated;
-
 		private void CreateDefaultSampleData()
 		{
-			if (m_DefaultDataCreated) return;
-			m_DefaultDataCreated = true;
+			// 仅当数据完全为空时才创建示例数据（首次使用或数据损坏后恢复）
+			if (m_TableData.BlockCount > 0) return;
 
 			string[,] sample = new string[2, 3]
 			{
@@ -193,19 +191,10 @@ namespace XericUI.XTable.Rendering.Component
 
 			for (int r = 0; r < 2; r++)
 				for (int c = 0; c < 3; c++)
-					SetCellTextInternal(r, c, sample[r, c], skipDirty: true);
-		}
-
-		private void SetCellTextInternal(int row, int col, string text, bool skipDirty)
-		{
-			var data = TableData.GetCell(row, col);
-			if (data == null)
-			{
-				data = new XTableCellData();
-				TableData.SetCell(row, col, data);
-			}
-			data.Text = text;
-			if (!skipDirty) MarkDirty(TableDirtyType.DataChanged);
+				{
+					var data = m_TableData.GetOrCreateCell(r, c);
+					data.Text = sample[r, c];
+				}
 		}
 
 		#endregion
@@ -257,11 +246,13 @@ namespace XericUI.XTable.Rendering.Component
 
 		public void SetCellText(int row, int col, string text)
 		{
-			SetCellTextInternal(row, col, text, skipDirty: false);
+			var data = TableData.GetOrCreateCell(row, col);
+			data.Text = text;
+			MarkDirty(TableDirtyType.DataChanged);
 		}
 
 		public XTableCellData GetCellData(int row, int col)
-			=> TableData.GetCell(row, col);
+			=> TableData.GetOrCreateCell(row, col);
 
 		public void MergeCells(int startRow, int startCol, int rowSpan, int colSpan)
 		{
@@ -349,11 +340,12 @@ namespace XericUI.XTable.Rendering.Component
 			return true;
 		}
 
-		/// <summary>获取当前选区的文本描述（无多选返回 "A0"，有多选返回 "A0:B1"）</summary>
+		/// <summary>获取当前选区的文本描述（单格 "A0"，多格 "A0:B1"）</summary>
 		public string GetSelectionText()
 		{
 			if (m_SelectedRow < 0 || m_SelectedCol < 0) return string.Empty;
-			if (HasMultiSelection)
+			if (HasMultiSelection &&
+				(m_SelectStartRow != m_SelectEndRow || m_SelectStartCol != m_SelectEndCol))
 			{
 				return XTableCoordinateFormat.RangeToText(
 					m_SelectStartRow, m_SelectStartCol,
@@ -429,7 +421,6 @@ namespace XericUI.XTable.Rendering.Component
 		public void FullRebuild()
 		{
 			m_Assembler?.DestroyAll();
-			m_DefaultDataCreated = false;
 
 			if (m_BackgroundGo != null)
 			{

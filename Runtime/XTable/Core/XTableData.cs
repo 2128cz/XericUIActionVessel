@@ -1,4 +1,7 @@
+using System;
 using System.Collections.Generic;
+
+using UnityEngine;
 
 using XericUI.XTable.Mapping;
 
@@ -8,14 +11,18 @@ namespace XericUI.XTable.Core
 	/// 表格数据主类——持有块字典，提供单元格级别的读写接口。
 	/// 块按需创建（SetCell 时自动创建不存在的块），通过 Z 曲线索引映射。
 	/// </summary>
-	public class XTableData
+	[Serializable]
+	public class XTableData : ISerializationCallbackReceiver
 	{
+		/// <summary>全系统唯一默认块尺寸——禁止硬编码字面量</summary>
+		public const int DefaultBlockSize = 32;
+
 		#region 属性
 
-		/// <summary>块内列数（默认 32）</summary>
+		/// <summary>块内列数（默认 <see cref="DefaultBlockSize"/>）</summary>
 		public int BlockSizeX { get; private set; }
 
-		/// <summary>块内行数（默认 32）</summary>
+		/// <summary>块内行数（默认 <see cref="DefaultBlockSize"/>）</summary>
 		public int BlockSizeY { get; private set; }
 
 		/// <summary>
@@ -24,6 +31,29 @@ namespace XericUI.XTable.Core
 		/// </summary>
 		public Dictionary<ulong, XTableBlock> BlockMap { get; private set; }
 
+		/// <summary>
+		/// 获取或创建单元格——如果单元格不存在则自动创建空数据。
+		/// 在编辑器和运行时都是安全的，保证不会返回 null。
+		/// </summary>
+		public XTableCellData GetOrCreateCell(int row, int col)
+		{
+			var data = GetCell(row, col);
+			if (data == null)
+			{
+				data = new XTableCellData();
+				SetCell(row, col, data);
+			}
+			return data;
+		}
+
+		/// <summary>
+		/// 判断指定单元格是否有数据
+		/// </summary>
+		public bool HasCell(int row, int col)
+		{
+			return GetCell(row, col) != null;
+		}
+
 		#endregion
 
 		#region 构造函数
@@ -31,13 +61,26 @@ namespace XericUI.XTable.Core
 		/// <summary>
 		/// 创建表格数据实例
 		/// </summary>
-		/// <param name="blockSizeX">块内列数，默认 32</param>
-		/// <param name="blockSizeY">块内行数，默认 32</param>
-		public XTableData(int blockSizeX = 32, int blockSizeY = 32)
+		/// <param name="blockSizeX">块内列数，默认 <see cref="DefaultBlockSize"/></param>
+		/// <param name="blockSizeY">块内行数，默认 <see cref="DefaultBlockSize"/></param>
+		public XTableData(int blockSizeX = DefaultBlockSize, int blockSizeY = DefaultBlockSize)
 		{
-			BlockSizeX = blockSizeX > 0 ? blockSizeX : 32;
-			BlockSizeY = blockSizeY > 0 ? blockSizeY : 32;
+			BlockSizeX = blockSizeX > 0 ? blockSizeX : DefaultBlockSize;
+			BlockSizeY = blockSizeY > 0 ? blockSizeY : DefaultBlockSize;
 			BlockMap = new Dictionary<ulong, XTableBlock>();
+		}
+
+		#endregion
+
+		#region 序列化回调
+
+		public void OnBeforeSerialize() { }
+
+		public void OnAfterDeserialize()
+		{
+			if (BlockSizeX <= 0) BlockSizeX = DefaultBlockSize;
+			if (BlockSizeY <= 0) BlockSizeY = DefaultBlockSize;
+			if (BlockMap == null) BlockMap = new Dictionary<ulong, XTableBlock>();
 		}
 
 		#endregion

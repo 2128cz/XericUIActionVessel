@@ -153,8 +153,7 @@ namespace XericUIEditor.XTable
 		/// <summary>更新 s_EditText 为当前焦点格的单元格内容</summary>
 		private static void UpdateEditText(XericUIActionTable table, int row, int col)
 		{
-			var data = table.GetCellData(row, col);
-			s_EditText = data != null ? data.Text ?? "" : "";
+			s_EditText = table.GetCellData(row, col).Text ?? "";
 		}
 
 		#endregion
@@ -399,30 +398,17 @@ namespace XericUIEditor.XTable
 					alignment = TextAnchor.MiddleCenter
 				};
 
-				// 位置坐标显示当前选中（焦点格）
-				string cellLabel = XTableCoordinateFormat.CellToText(
-					table.SelectedRow, table.SelectedCol);
-				GUI.Label(new Rect(barRect.x + 4, barRect.y, 55, barRect.height),
+				// 单元格坐标（单选 "A0"，多选 "A0:B1"）
+				string cellLabel = table.GetSelectionText();
+				GUI.Label(new Rect(barRect.x + 4, barRect.y, 75, barRect.height),
 					cellLabel, labelStyle);
-
-				var rangeStyle = new GUIStyle(GUI.skin.label)
-				{
-					fontSize = 10,
-					normal = { textColor = new Color(0.5f, 0.6f, 0.8f) },
-					alignment = TextAnchor.MiddleLeft
-				};
-
-				// 多选范围文本
-				string rangeText = table.GetSelectionText();
-				GUI.Label(new Rect(barRect.x + 62, barRect.y, 100, barRect.height),
-					rangeText, rangeStyle);
 
 				var inputStyle = new GUIStyle(GUI.skin.textField)
 				{
 					fontSize = 12,
 					margin = new RectOffset(2, 2, 2, 2)
 				};
-				Rect inputRect = new Rect(barRect.x + 165, barRect.y + 2, 200, barRect.height - 4);
+				Rect inputRect = new Rect(barRect.x + 85, barRect.y + 2, 200, barRect.height - 4);
 
 				// 回车键提交
 				if (Event.current.isKey && Event.current.keyCode == KeyCode.Return
