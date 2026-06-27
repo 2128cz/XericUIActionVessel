@@ -16,17 +16,31 @@ namespace XericUIEditor.XTable
 	[InitializeOnLoad]
 	public static class XericUIActionTableSceneEditor
 	{
+		// ─────────────────────────── 交互状态机 ───────────────────────────
+		private enum EditorState
+		{
+			TableNavigation,   // 默认：键盘/鼠标在表格上导航与选择
+			SizeEditing,       // 气泡输入框中编辑行高/列宽
+			CellEditing        // 底部工具栏中编辑单元格文本内容
+		}
+
+		private static EditorState s_State;
+		private static string s_CurrentControlName;  // 当前聚焦的控件名（每帧由焦点决定）
+
 		private static bool s_Enabled;
 		private const string ENABLED_KEY = "XericUI_TableSceneEditor_Enabled";
 
 		private static string s_EditText = "";
+		private static string s_SizeEditText = "";    // 气泡输入框当前编辑文本
+		private static int s_SizeEditTargetIndex = -1;
+		private static bool s_SizeEditIsColumn;
+		private static string s_LastFocusedControl = "";
 
 		// 拖拽框选状态
 		private static bool s_IsDragging;
-		private static bool s_DragFromLabel;    // 拖拽是否从行/列标签发起
 		private static int s_DragStartRow = -1;
 		private static int s_DragStartCol = -1;
-		private static Rect s_TableRect;      // 当前表格区域（用于拖拽期间鼠标检测）
+		private static Rect s_TableRect;
 		private static float s_XScale, s_YScale;
 		private static float[] s_RowHeights, s_ColWidths;
 		private static XericUIActionTable s_ActiveTable;
@@ -38,6 +52,11 @@ namespace XericUIEditor.XTable
 		private static readonly Color s_InputBg = new Color(0.08f, 0.08f, 0.14f, 0.92f);
 		private static readonly Color s_SelectionColor = new Color(0.18f, 0.45f, 0.85f, 0.25f);
 		private static readonly Color s_MultiSelectRangeColor = new Color(0.18f, 0.45f, 0.85f, 0.12f);
+		private static readonly Color s_BubbleBg = new Color(0.08f, 0.1f, 0.2f, 0.95f);
+		private static readonly Color s_BubbleBorder = new Color(0.3f, 0.5f, 0.9f, 0.8f);
+		private static readonly Color s_ApplyBtnColor = new Color(0.15f, 0.4f, 0.15f, 0.9f);
+		private static readonly Color s_AddBtnBg = new Color(0.15f, 0.3f, 0.15f, 0.8f);
+		private static readonly Color s_AddBtnHover = new Color(0.2f, 0.45f, 0.2f, 0.9f);
 
 		private const float ROW_H = 22f;
 		private const float COL_W = 36f;
@@ -64,6 +83,70 @@ namespace XericUIEditor.XTable
 			Menu.SetChecked("Xeric UI/表格编辑器覆盖层", s_Enabled);
 			return true;
 		}
+
+		// ═══════════════════════════════════════════════════════════════
+		//  状态机入口
+		// ═══════════════════════════════════════════════════════════════
+
+		private static void UpdateState()
+		{
+			string focused = GUI.GetNameOfFocusedControl();
+
+			// 检测焦点切换 → 种子编辑文本
+			if (focused != s_LastFocusedControl)
+			{
+				s_LastFocusedControl = focused;
+				OnFocusChanged(focused);
+			}
+
+			if (string.IsNullOrEmpty(focused))
+				s_State = EditorState.TableNavigation;
+			else if (focused.StartsWith("XTableColSizeEdit_") || focused.StartsWith("XTableRowSizeEdit_"))
+				s_State = EditorState.SizeEditing;
+			else if (focused == "XTableSceneEditInput")
+				s_State = EditorState.CellEditing;
+			else
+				s_State = EditorState.TableNavigation;
+
+			s_CurrentControlName = focused;
+		}
+
+		private static void OnFocusChanged(string newFocus)
+		{
+			// 气泡输入框获得焦点：种子为当前尺寸值
+			if (newFocus.StartsWith("XTableColSizeEdit_") && s_ActiveTable != null)
+			{
+				if (int.TryParse(newFocus.Substring("XTableColSizeEdit_".Length), out int idx))
+				{
+					s_SizeEditIsColumn = true;
+					s_SizeEditTargetIndex = idx;
+					s_SizeEditText = s_ColWidths != null && idx < s_ColWidths.Length
+						? s_ColWidths[idx].ToString("F0") : "";
+				}
+			}
+			else if (newFocus.StartsWith("XTableRowSizeEdit_") && s_ActiveTable != null)
+			{
+				if (int.TryParse(newFocus.Substring("XTableRowSizeEdit_".Length), out int idx))
+				{
+					s_SizeEditIsColumn = false;
+					s_SizeEditTargetIndex = idx;
+					s_SizeEditText = s_RowHeights != null && idx < s_RowHeights.Length
+						? s_RowHeights[idx].ToString("F0") : "";
+				}
+			}
+			// 底部内容输入框获得焦点：种子为当前单元格内容
+			else if (newFocus == "XTableSceneEditInput" && s_ActiveTable != null)
+			{
+				int sr = s_ActiveTable.SelectedRow;
+				int sc = s_ActiveTable.SelectedCol;
+				if (sr >= 0 && sc >= 0)
+					s_EditText = s_ActiveTable.GetCellData(sr, sc).Text ?? "";
+			}
+		}
+
+		// ═══════════════════════════════════════════════════════════════
+		//  主入口
+		// ═══════════════════════════════════════════════════════════════
 
 		private static void OnSceneGUI(SceneView sceneView)
 		{
@@ -106,15 +189,33 @@ namespace XericUIEditor.XTable
 
 			Rect tableRect = new Rect(guiTL.x, guiTL.y, tableW, tableH);
 
+			// 更新缓存
+			s_TableRect = tableRect;
+			s_XScale = xScale;
+			s_YScale = yScale;
+			s_RowHeights = rh;
+			s_ColWidths = cw;
+			s_ActiveTable = table;
+
 			Handles.BeginGUI();
+
+			// ★ 状态机：必须最先执行，后续所有逻辑依赖 s_State
+			UpdateState();
 
 			DrawRowLabels(rh, tableRect, xScale, yScale, table);
 			DrawColumnLabels(cw, tableRect, xScale, yScale, table);
 			DrawGridLines(rh, cw, tableRect, xScale, yScale);
 			DrawSelectionHighlight(rh, cw, tableRect, xScale, yScale, table);
+			DrawAddButtons(rh, cw, tableRect, xScale, yScale, table);
+			DrawSizeEditBubble(rh, cw, tableRect, xScale, yScale, table);
 			DrawInputBar(table, tableRect.x, tableRect.y + tableRect.height + MARGIN);
-			HandleInput(table, rh, cw, tableRect, xScale, yScale);
-			HandleKeyboard(table, rh, cw);
+
+			// 非导航状态不处理鼠标/键盘表格操作
+			if (s_State == EditorState.TableNavigation)
+			{
+				HandleTableMouse(table, rh, cw, tableRect, xScale, yScale);
+				HandleKeyboard(table, rh, cw);
+			}
 
 			Handles.EndGUI();
 		}
@@ -132,7 +233,20 @@ namespace XericUIEditor.XTable
 			return -1;
 		}
 
-		/// <summary>判断某行是否在多选范围内</summary>
+		private static float SumBefore(float[] arr, int count)
+		{
+			float sum = 0;
+			for (int i = 0; i < count && i < arr.Length; i++) sum += arr[i];
+			return sum;
+		}
+
+		private static float SumRange(float[] arr, int start, int end)
+		{
+			float sum = 0;
+			for (int i = start; i < end && i < arr.Length; i++) sum += arr[i];
+			return sum;
+		}
+
 		private static bool IsRowInMultiSelect(XericUIActionTable table, int row)
 		{
 			if (!table.HasMultiSelection) return false;
@@ -141,7 +255,6 @@ namespace XericUIEditor.XTable
 			return row >= minR && row <= maxR;
 		}
 
-		/// <summary>判断某列是否在多选范围内</summary>
 		private static bool IsColInMultiSelect(XericUIActionTable table, int col)
 		{
 			if (!table.HasMultiSelection) return false;
@@ -150,10 +263,16 @@ namespace XericUIEditor.XTable
 			return col >= minC && col <= maxC;
 		}
 
-		/// <summary>更新 s_EditText 为当前焦点格的单元格内容</summary>
-		private static void UpdateEditText(XericUIActionTable table, int row, int col)
+		/// <summary>创建纯色 1x1 纹理，用于按钮背景</summary>
+		private static Texture2D MakeTex(int w, int h, Color col)
 		{
-			s_EditText = table.GetCellData(row, col).Text ?? "";
+			Color[] pix = new Color[w * h];
+			for (int i = 0; i < pix.Length; i++)
+				pix[i] = col;
+			Texture2D result = new Texture2D(w, h);
+			result.SetPixels(pix);
+			result.Apply();
+			return result;
 		}
 
 		#endregion
@@ -193,6 +312,9 @@ namespace XericUIEditor.XTable
 				EditorGUI.DrawRect(labelRect, bgColor);
 				GUI.Label(labelRect, $"{r}", style);
 
+				// 表格导航状态下才响应鼠标
+				if (s_State != EditorState.TableNavigation) { y += cellH; continue; }
+
 				if (Event.current.type == EventType.MouseDown &&
 					Event.current.button == 0 &&
 					labelRect.Contains(Event.current.mousePosition))
@@ -201,7 +323,6 @@ namespace XericUIEditor.XTable
 					if (col < 0) col = 0;
 
 					s_IsDragging = true;
-					s_DragFromLabel = true;
 					s_DragStartRow = r;
 					s_DragStartCol = col;
 
@@ -217,7 +338,6 @@ namespace XericUIEditor.XTable
 					}
 
 					table.RefreshView();
-					UpdateEditText(table, r, col);
 					Event.current.Use();
 					SceneView.RepaintAll();
 				}
@@ -266,6 +386,9 @@ namespace XericUIEditor.XTable
 				string text = cellW > 40 ? colLetter : (cellW > 18 ? colLetter : "");
 				GUI.Label(labelRect, text, style);
 
+				// 表格导航状态下才响应鼠标
+				if (s_State != EditorState.TableNavigation) { x += cellW; continue; }
+
 				if (Event.current.type == EventType.MouseDown &&
 					Event.current.button == 0 &&
 					labelRect.Contains(Event.current.mousePosition))
@@ -274,7 +397,6 @@ namespace XericUIEditor.XTable
 					if (row < 0) row = 0;
 
 					s_IsDragging = true;
-					s_DragFromLabel = true;
 					s_DragStartRow = row;
 					s_DragStartCol = c;
 
@@ -290,7 +412,6 @@ namespace XericUIEditor.XTable
 					}
 
 					table.RefreshView();
-					UpdateEditText(table, row, c);
 					Event.current.Use();
 					SceneView.RepaintAll();
 				}
@@ -334,7 +455,6 @@ namespace XericUIEditor.XTable
 			int sc = table.SelectedCol;
 			if (sr < 0 || sc < 0 || sr >= rh.Length || sc >= cw.Length) return;
 
-			// 多选范围高亮
 			if (table.HasMultiSelection)
 			{
 				int minR = Mathf.Min(table.SelectStartRow, table.SelectEndRow);
@@ -356,7 +476,6 @@ namespace XericUIEditor.XTable
 					s_MultiSelectRangeColor);
 			}
 
-			// 焦点格高亮（始终绘制）
 			float sx = tr.x + SumBefore(cw, sc) * xScale;
 			float sy = tr.y + SumBefore(rh, sr) * yScale;
 			float sw = cw[sc] * xScale;
@@ -366,18 +485,206 @@ namespace XericUIEditor.XTable
 				s_SelectionColor);
 		}
 
-		private static float SumBefore(float[] arr, int count)
+		#endregion
+
+		#region 添加行列按钮
+
+		private static void DrawAddButtons(float[] rh, float[] cw, Rect tr,
+			float xScale, float yScale, XericUIActionTable table)
 		{
-			float sum = 0;
-			for (int i = 0; i < count && i < arr.Length; i++) sum += arr[i];
-			return sum;
+			var plusStyle = new GUIStyle(GUI.skin.label)
+			{
+				fontSize = 14,
+				fontStyle = FontStyle.Bold,
+				normal = { textColor = Color.white },
+				alignment = TextAnchor.MiddleCenter
+			};
+
+			float yEnd = tr.y + tr.height;
+			Rect rowBtn = new Rect(tr.x - COL_W - MARGIN, yEnd + MARGIN, COL_W, ROW_H);
+
+			bool rowHover = rowBtn.Contains(Event.current.mousePosition);
+			EditorGUI.DrawRect(rowBtn, rowHover ? s_AddBtnHover : s_AddBtnBg);
+			GUI.Label(rowBtn, "+", plusStyle);
+
+			if (Event.current.type == EventType.MouseDown &&
+				Event.current.button == 0 && rowHover)
+			{
+				table.AddRow();
+				table.RefreshView();
+				Event.current.Use();
+				SceneView.RepaintAll();
+			}
+
+			float xEnd = tr.x + tr.width;
+			Rect colBtn = new Rect(xEnd + MARGIN, tr.y - ROW_H - MARGIN, COL_W, ROW_H);
+
+			bool colHover = colBtn.Contains(Event.current.mousePosition);
+			EditorGUI.DrawRect(colBtn, colHover ? s_AddBtnHover : s_AddBtnBg);
+			GUI.Label(colBtn, "+", plusStyle);
+
+			if (Event.current.type == EventType.MouseDown &&
+				Event.current.button == 0 && colHover)
+			{
+				table.AddColumn();
+				table.RefreshView();
+				Event.current.Use();
+				SceneView.RepaintAll();
+			}
 		}
 
-		private static float SumRange(float[] arr, int start, int end)
+		#endregion
+
+		#region 气泡尺寸编辑器（含应用按钮）
+
+		private const float BUBBLE_W = 60;
+		private const float BUBBLE_H = 22;
+		private const float BUBBLE_APPLY_BTN_W = 24;
+
+		private static GUIStyle s_BubbleApplyBtnStyle;
+
+		private static void EnsureBubbleStyles()
 		{
-			float sum = 0;
-			for (int i = start; i < end && i < arr.Length; i++) sum += arr[i];
-			return sum;
+			if (s_BubbleApplyBtnStyle != null) return;
+			s_BubbleApplyBtnStyle = new GUIStyle(GUI.skin.button)
+			{
+				fontSize = 11,
+				fontStyle = FontStyle.Bold,
+				normal = { textColor = Color.white, background = MakeTex(1, 1, s_ApplyBtnColor) },
+				hover = { textColor = Color.white, background = MakeTex(1, 1, new Color(0.2f, 0.55f, 0.2f, 0.95f)) },
+				active = { textColor = Color.white, background = MakeTex(1, 1, new Color(0.1f, 0.4f, 0.1f, 0.95f)) },
+				padding = new RectOffset(0, 0, 0, 0),
+				margin = new RectOffset(0, 0, 0, 0),
+				alignment = TextAnchor.MiddleCenter,
+				border = new RectOffset(0, 0, 0, 0)
+			};
+		}
+
+		private static void DrawSizeEditBubble(float[] rh, float[] cw, Rect tr,
+			float xScale, float yScale, XericUIActionTable table)
+		{
+			int selRow = table.SelectedRow;
+			int selCol = table.SelectedCol;
+
+			// 列宽气泡
+			if (selCol >= 0 && selCol < cw.Length && selRow < 0)
+			{
+				float cx = tr.x + SumBefore(cw, selCol) * xScale;
+				float cwScaled = cw[selCol] * xScale;
+				float bubbleX = cx + cwScaled / 2f - BUBBLE_W / 2f;
+				float bubbleY = tr.y - ROW_H - MARGIN - 28f;
+				DrawBubble(table, bubbleX, bubbleY, cw[selCol], isColumn: true, index: selCol);
+			}
+
+			if (selRow >= 0 && selRow < rh.Length && selCol < 0)
+			{
+				float ry = tr.y + SumBefore(rh, selRow) * yScale;
+				float rhScaled = rh[selRow] * yScale;
+				float bubbleX = tr.x - COL_W - MARGIN - 86f;
+				float bubbleY = ry + rhScaled / 2f - 12f;
+				DrawBubble(table, bubbleX, bubbleY, rh[selRow], isColumn: false, index: selRow);
+			}
+
+			if (selRow >= 0 && selCol >= 0)
+			{
+				if (selCol < cw.Length)
+				{
+					float cx = tr.x + SumBefore(cw, selCol) * xScale;
+					float cwScaled = cw[selCol] * xScale;
+					float bubbleX = cx + cwScaled / 2f - BUBBLE_W / 2f;
+					float bubbleY = tr.y - ROW_H - MARGIN - 28f;
+					DrawBubble(table, bubbleX, bubbleY, cw[selCol], isColumn: true, index: selCol);
+				}
+				if (selRow < rh.Length)
+				{
+					float ry = tr.y + SumBefore(rh, selRow) * yScale;
+					float rhScaled = rh[selRow] * yScale;
+					float bubbleX = tr.x - COL_W - MARGIN - 86f;
+					float bubbleY = ry + rhScaled / 2f - 12f;
+					DrawBubble(table, bubbleX, bubbleY, rh[selRow], isColumn: false, index: selRow);
+				}
+			}
+		}
+
+		private static void DrawBubble(XericUIActionTable table,
+			float x, float y, float currentValue,
+			bool isColumn, int index)
+		{
+			string controlName = isColumn
+				? $"XTableColSizeEdit_{index}"
+				: $"XTableRowSizeEdit_{index}";
+			bool isFocused = GUI.GetNameOfFocusedControl() == controlName;
+
+			// 气泡容器（含输入框 + 应用按钮）
+			float totalW = isFocused ? BUBBLE_W + BUBBLE_APPLY_BTN_W + 2f : BUBBLE_W;
+			Rect bubbleRect = new Rect(x - (isFocused ? (BUBBLE_APPLY_BTN_W + 2f) / 2f : 0), y, totalW, BUBBLE_H);
+
+			EditorGUI.DrawRect(bubbleRect, s_BubbleBg);
+			EditorGUI.DrawRect(new Rect(bubbleRect.x, bubbleRect.y, bubbleRect.width, 1), s_BubbleBorder);
+			EditorGUI.DrawRect(new Rect(bubbleRect.x, bubbleRect.y + BUBBLE_H - 1, bubbleRect.width, 1), s_BubbleBorder);
+			EditorGUI.DrawRect(new Rect(bubbleRect.x, bubbleRect.y, 1, BUBBLE_H), s_BubbleBorder);
+			EditorGUI.DrawRect(new Rect(bubbleRect.x + bubbleRect.width - 1, bubbleRect.y, 1, BUBBLE_H), s_BubbleBorder);
+
+			var inputStyle = new GUIStyle(GUI.skin.textField)
+			{
+				fontSize = 11,
+				margin = new RectOffset(1, 1, 1, 1),
+				alignment = TextAnchor.MiddleCenter
+			};
+
+			Rect inputRect = new Rect(bubbleRect.x + 2, bubbleRect.y + 2,
+				BUBBLE_W - 4, BUBBLE_H - 4);
+
+			GUI.SetNextControlName(controlName);
+
+			if (isFocused)
+			{
+				s_SizeEditText = GUI.TextField(inputRect, s_SizeEditText, inputStyle);
+			}
+			else
+			{
+				GUI.TextField(inputRect, currentValue.ToString("F0"), inputStyle);
+			}
+
+			// ── 应用按钮（GUI.Button 确保正确交互）──
+			if (isFocused)
+			{
+				EnsureBubbleStyles();
+				Rect applyBtnRect = new Rect(
+					bubbleRect.x + BUBBLE_W + 2f, bubbleRect.y,
+					BUBBLE_APPLY_BTN_W, BUBBLE_H);
+
+				if (GUI.Button(applyBtnRect, "✓", s_BubbleApplyBtnStyle))
+				{
+					ApplyBubbleEdit(table, isColumn, index);
+					GUI.FocusControl(null);
+				}
+			}
+
+			// 回车提交
+			if (isFocused &&
+				Event.current.type == EventType.KeyDown &&
+				Event.current.keyCode == KeyCode.Return)
+			{
+				ApplyBubbleEdit(table, isColumn, index);
+				Event.current.Use();
+			}
+		}
+
+		private static void ApplyBubbleEdit(XericUIActionTable table, bool isColumn, int index)
+		{
+			string trimmed = s_SizeEditText.Trim();
+			if (float.TryParse(trimmed, out float value) && value > 0)
+			{
+				if (isColumn)
+					table.SetColWidth(index, value);
+				else
+					table.SetRowHeight(index, value);
+				table.RefreshView();
+			}
+			GUI.FocusControl(null);
+			s_State = EditorState.TableNavigation;
+			SceneView.RepaintAll();
 		}
 
 		#endregion
@@ -398,7 +705,6 @@ namespace XericUIEditor.XTable
 					alignment = TextAnchor.MiddleCenter
 				};
 
-				// 单元格坐标（单选 "A0"，多选 "A0:B1"）
 				string cellLabel = table.GetSelectionText();
 				GUI.Label(new Rect(barRect.x + 4, barRect.y, 75, barRect.height),
 					cellLabel, labelStyle);
@@ -410,11 +716,12 @@ namespace XericUIEditor.XTable
 				};
 				Rect inputRect = new Rect(barRect.x + 85, barRect.y + 2, 200, barRect.height - 4);
 
-				// 回车键提交
-				if (Event.current.isKey && Event.current.keyCode == KeyCode.Return
-					&& GUI.GetNameOfFocusedControl() == "XTableSceneEditInput")
+				// 回车提交（仅在 CellEditing 状态下）
+				if (s_State == EditorState.CellEditing &&
+					Event.current.type == EventType.KeyDown &&
+					Event.current.keyCode == KeyCode.Return)
 				{
-					ApplyEdit(table);
+					ApplyCellEdit(table);
 					Event.current.Use();
 				}
 
@@ -431,7 +738,7 @@ namespace XericUIEditor.XTable
 					"应用", btnStyle))
 				{
 					GUI.FocusControl(null);
-					ApplyEdit(table);
+					ApplyCellEdit(table);
 				}
 			}
 			else
@@ -446,31 +753,24 @@ namespace XericUIEditor.XTable
 			}
 		}
 
-		private static void ApplyEdit(XericUIActionTable table)
+		private static void ApplyCellEdit(XericUIActionTable table)
 		{
 			if (table.SelectedRow < 0 || table.SelectedCol < 0) return;
 			table.SetCellText(table.SelectedRow, table.SelectedCol, s_EditText);
 			table.RefreshView();
+			s_State = EditorState.TableNavigation;
 			SceneView.RepaintAll();
 		}
 
 		#endregion
 
-		#region 表格区域点击与拖拽
+		#region 表格区域鼠标（仅 TableNavigation 状态调用）
 
-		private static void HandleInput(XericUIActionTable table,
+		private static void HandleTableMouse(XericUIActionTable table,
 			float[] rh, float[] cw, Rect tr,
 			float xScale, float yScale)
 		{
 			Event e = Event.current;
-
-			// 更新当前帧的表格参数缓存，供拖拽期间使用
-			s_TableRect = tr;
-			s_XScale = xScale;
-			s_YScale = yScale;
-			s_RowHeights = rh;
-			s_ColWidths = cw;
-			s_ActiveTable = table;
 
 			switch (e.type)
 			{
@@ -482,7 +782,6 @@ namespace XericUIEditor.XTable
 					if (mdRow < 0 || mdCol < 0) break;
 
 					s_IsDragging = true;
-					s_DragFromLabel = false;
 					s_DragStartRow = mdRow;
 					s_DragStartCol = mdCol;
 
@@ -498,7 +797,6 @@ namespace XericUIEditor.XTable
 					}
 
 					table.RefreshView();
-					UpdateEditText(table, mdRow, mdCol);
 					e.Use();
 					SceneView.RepaintAll();
 					break;
@@ -511,7 +809,6 @@ namespace XericUIEditor.XTable
 
 					table.ExtendMultiSelect(dragRow, dragCol);
 					table.RefreshView();
-					UpdateEditText(table, dragRow, dragCol);
 					e.Use();
 					SceneView.RepaintAll();
 					break;
@@ -532,27 +829,14 @@ namespace XericUIEditor.XTable
 			row = IndexFromCoord(ry, s_RowHeights);
 		}
 
-		/// <summary>被行标签/列标签拖拽时调用，将拖拽扩展到整行/整列方向</summary>
-		private static void StartDragFromLabel(int row, int col, XericUIActionTable table)
-		{
-			s_IsDragging = true;
-			s_DragStartRow = row;
-			s_DragStartCol = col;
-			table.StartMultiSelect(row, col);
-		}
-
 		#endregion
 
-		#region 键盘快捷键
+		#region 键盘（仅 TableNavigation 状态调用）
 
 		private static void HandleKeyboard(XericUIActionTable table, float[] rh, float[] cw)
 		{
 			Event e = Event.current;
 			if (e.type != EventType.KeyDown) return;
-
-			// 输入框获得焦点时不拦截方向键（用于文本光标移动）
-			if (GUI.GetNameOfFocusedControl() == "XTableSceneEditInput")
-				return;
 
 			// Escape 清除选区
 			if (e.keyCode == KeyCode.Escape)
@@ -589,7 +873,6 @@ namespace XericUIEditor.XTable
 
 				table.SelectCell(row, col);
 				table.RefreshView();
-				UpdateEditText(table, row, col);
 				e.Use();
 				SceneView.RepaintAll();
 				return;
@@ -624,7 +907,6 @@ namespace XericUIEditor.XTable
 				table.SelectCell(row, col);
 			}
 
-			UpdateEditText(table, row, col);
 			table.RefreshView();
 			e.Use();
 			SceneView.RepaintAll();

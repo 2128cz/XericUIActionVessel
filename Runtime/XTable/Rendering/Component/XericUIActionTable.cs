@@ -266,6 +266,70 @@ namespace XericUI.XTable.Rendering.Component
 			MarkDirty(TableDirtyType.DataChanged);
 		}
 
+		/// <summary>在末尾追加一行，默认行高 40</summary>
+		public void AddRow(float height = 40f)
+		{
+#if UNITY_EDITOR
+			UnityEditor.Undo.RecordObject(this, "Add Table Row");
+#endif
+			int newLen = m_RowHeights.Length + 1;
+			var newArr = new float[newLen];
+			System.Array.Copy(m_RowHeights, newArr, m_RowHeights.Length);
+			newArr[newLen - 1] = height;
+			m_RowHeights = newArr;
+			MarkDirty(TableDirtyType.LayoutChanged);
+#if UNITY_EDITOR
+			UnityEditor.EditorUtility.SetDirty(this);
+#endif
+		}
+
+		/// <summary>在末尾追加一列，默认列宽 100</summary>
+		public void AddColumn(float width = 100f)
+		{
+#if UNITY_EDITOR
+			UnityEditor.Undo.RecordObject(this, "Add Table Column");
+#endif
+			int newLen = m_ColWidths.Length + 1;
+			var newArr = new float[newLen];
+			System.Array.Copy(m_ColWidths, newArr, m_ColWidths.Length);
+			newArr[newLen - 1] = width;
+			m_ColWidths = newArr;
+			MarkDirty(TableDirtyType.LayoutChanged);
+#if UNITY_EDITOR
+			UnityEditor.EditorUtility.SetDirty(this);
+#endif
+		}
+
+		/// <summary>设置指定行的高度</summary>
+		public void SetRowHeight(int row, float height)
+		{
+			if (row < 0 || row >= m_RowHeights.Length) return;
+			if (height <= 0) return;
+#if UNITY_EDITOR
+			UnityEditor.Undo.RecordObject(this, "Set Row Height");
+#endif
+			m_RowHeights[row] = height;
+			MarkDirty(TableDirtyType.LayoutChanged);
+#if UNITY_EDITOR
+			if (!Application.isPlaying) UnityEditor.EditorUtility.SetDirty(this);
+#endif
+		}
+
+		/// <summary>设置指定列的宽度</summary>
+		public void SetColWidth(int col, float width)
+		{
+			if (col < 0 || col >= m_ColWidths.Length) return;
+			if (width <= 0) return;
+#if UNITY_EDITOR
+			UnityEditor.Undo.RecordObject(this, "Set Column Width");
+#endif
+			m_ColWidths[col] = width;
+			MarkDirty(TableDirtyType.LayoutChanged);
+#if UNITY_EDITOR
+			if (!Application.isPlaying) UnityEditor.EditorUtility.SetDirty(this);
+#endif
+		}
+
 		public void SelectCell(int row, int col)
 		{
 			ClearMultiSelection();
@@ -356,9 +420,18 @@ namespace XericUI.XTable.Rendering.Component
 
 		public void RefreshView()
 		{
-			if (m_Assembler == null) return;
+			// 编辑模式下 Awake 可能尚未执行，按需回退初始化
+			if (m_Assembler == null)
+			{
+				if (rectTransform != null)
+					m_Assembler = new CellAssembler(rectTransform);
+				else return;
+			}
+
 			if (m_RowHeights == null || m_ColWidths == null) return;
 			if (m_RowHeights.Length == 0 || m_ColWidths.Length == 0) return;
+
+			CreateBackground();
 
 #if UNITY_EDITOR
 			if (!Application.isPlaying)
