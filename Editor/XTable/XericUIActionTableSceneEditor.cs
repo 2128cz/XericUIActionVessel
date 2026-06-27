@@ -2,6 +2,7 @@ using UnityEditor;
 
 using UnityEngine;
 
+using XericLibrary.Runtime.SuperStyleSheet;
 using XericUI.XTable.Mapping;
 using XericUI.XTable.Rendering.Component;
 
@@ -137,10 +138,23 @@ namespace XericUIEditor.XTable
 			// 底部内容输入框获得焦点：种子为当前单元格内容
 			else if (newFocus == "XTableSceneEditInput" && s_ActiveTable != null)
 			{
-				int sr = s_ActiveTable.SelectedRow;
-				int sc = s_ActiveTable.SelectedCol;
-				if (sr >= 0 && sc >= 0)
-					s_EditText = s_ActiveTable.GetCellData(sr, sc).Text ?? "";
+				SyncEditText(s_ActiveTable);
+			}
+		}
+
+		/// <summary>将 s_EditText 同步为当前选中单元格的内容（选中变更时调用）</summary>
+		private static void SyncEditText(XericUIActionTable table)
+		{
+			int sr = table.SelectedRow;
+			int sc = table.SelectedCol;
+			if (sr >= 0 && sc >= 0)
+			{
+				var data = table.GetCellData(sr, sc);
+				s_EditText = (data != null) ? (data.Text ?? "") : "";
+			}
+			else
+			{
+				s_EditText = "";
 			}
 		}
 
@@ -338,6 +352,7 @@ namespace XericUIEditor.XTable
 					}
 
 					table.RefreshView();
+					SyncEditText(table);
 					Event.current.Use();
 					SceneView.RepaintAll();
 				}
@@ -412,6 +427,7 @@ namespace XericUIEditor.XTable
 					}
 
 					table.RefreshView();
+					SyncEditText(table);
 					Event.current.Use();
 					SceneView.RepaintAll();
 				}
@@ -719,7 +735,12 @@ namespace XericUIEditor.XTable
 
 		private static void DrawInputBar(XericUIActionTable table, float x, float y)
 		{
-			Rect barRect = new Rect(x, y, 500, 24);
+			const float barW = 450;
+			const float barH = 52;
+			const float rowH = 22;
+			const float pad = 2;
+
+			Rect barRect = new Rect(x, y, barW, barH);
 			EditorGUI.DrawRect(barRect, s_InputBg);
 
 			if (table.SelectedRow >= 0 && table.SelectedCol >= 0)
@@ -730,17 +751,26 @@ namespace XericUIEditor.XTable
 					normal = { textColor = s_LabelText },
 					alignment = TextAnchor.MiddleCenter
 				};
-
-				string cellLabel = table.GetSelectionText();
-				GUI.Label(new Rect(barRect.x + 4, barRect.y, 75, barRect.height),
-					cellLabel, labelStyle);
-
 				var inputStyle = new GUIStyle(GUI.skin.textField)
 				{
 					fontSize = 12,
-					margin = new RectOffset(2, 2, 2, 2)
+					margin = new RectOffset(1, 1, 1, 1)
 				};
-				Rect inputRect = new Rect(barRect.x + 85, barRect.y + 2, 200, barRect.height - 4);
+				var btnStyle = new GUIStyle(GUI.skin.button)
+				{
+					fontSize = 11,
+					margin = new RectOffset(1, 1, 1, 1),
+					padding = new RectOffset(4, 4, 2, 2)
+				};
+
+				// Row 1: 坐标标签 | 输入框 | 应用按钮
+				float btnW = 44;
+				float row1Y = barRect.y + pad;
+				float row2Y = barRect.y + rowH + pad + 4;
+				string cellLabel = table.GetSelectionText();
+
+				GUI.Label(new Rect(barRect.x + 4, row1Y, 60, rowH), cellLabel, labelStyle);
+				Rect inputRect = new Rect(barRect.x + 68, row1Y, barW - 68 - btnW - pad * 2, rowH);
 
 				// 回车提交（仅在 CellEditing 状态下）
 				if (s_State == EditorState.CellEditing &&
@@ -754,17 +784,39 @@ namespace XericUIEditor.XTable
 				GUI.SetNextControlName("XTableSceneEditInput");
 				s_EditText = GUI.TextField(inputRect, s_EditText, inputStyle);
 
-				var btnStyle = new GUIStyle(GUI.skin.button)
-				{
-					fontSize = 11,
-					margin = new RectOffset(2, 2, 2, 2),
-					padding = new RectOffset(4, 4, 2, 2)
-				};
-				if (GUI.Button(new Rect(barRect.x + 370, barRect.y + 2, 50, barRect.height - 4),
+				if (GUI.Button(new Rect(barRect.x + barW - btnW - pad, row1Y, btnW, rowH),
 					"应用", btnStyle))
 				{
 					GUI.FocusControl(null);
 					ApplyCellEdit(table);
+				}
+
+				// Row 2: 样式命名空间下拉框
+				var nsLabelStyle = new GUIStyle(GUI.skin.label)
+				{
+					fontSize = 10,
+					normal = { textColor = new Color(0.6f, 0.6f, 0.6f) },
+					alignment = TextAnchor.MiddleRight
+				};
+				GUI.Label(new Rect(barRect.x + 4, row2Y, 36, rowH), "样式:", nsLabelStyle);
+
+				// 获取当前命名空间
+				string currentNS = table.GetCellStyleNamespace(
+					table.SelectedRow, table.SelectedCol) ?? "";
+
+				// 构建下拉选项（StyleManager.GetAvailableNamespaces 已保证 "default" 在首位）
+				var namespaces = StyleManager.GetAvailableNamespaces();
+				int currentIdx = namespaces.IndexOf(currentNS);
+				if (currentIdx < 0) currentIdx = 0;
+
+				Rect dropRect = new Rect(barRect.x + 44, row2Y, barW - 44 - pad, rowH);
+				int newIdx = UnityEditor.EditorGUI.Popup(dropRect, currentIdx,
+					namespaces.ToArray(), UnityEditor.EditorStyles.popup);
+
+				if (newIdx != currentIdx && newIdx >= 0 && newIdx < namespaces.Count)
+				{
+					table.SetCellStyleNamespace(table.SelectedRow, table.SelectedCol,
+						namespaces[newIdx]);
 				}
 			}
 			else
@@ -775,7 +827,8 @@ namespace XericUIEditor.XTable
 					normal = { textColor = new Color(0.5f, 0.5f, 0.5f) },
 					alignment = TextAnchor.MiddleCenter
 				};
-				GUI.Label(barRect, "点击左侧行号或上方列名选中单元格 | Shift+方向键多选", hintStyle);
+				GUI.Label(new Rect(barRect.x, barRect.y, barW, barH / 2),
+					"点击左侧行号或上方列名选中单元格 | Shift+方向键多选", hintStyle);
 			}
 		}
 
@@ -823,6 +876,7 @@ namespace XericUIEditor.XTable
 					}
 
 					table.RefreshView();
+					SyncEditText(table);
 					e.Use();
 					SceneView.RepaintAll();
 					break;
@@ -835,6 +889,7 @@ namespace XericUIEditor.XTable
 
 					table.ExtendMultiSelect(dragRow, dragCol);
 					table.RefreshView();
+					SyncEditText(table);
 					e.Use();
 					SceneView.RepaintAll();
 					break;
@@ -870,6 +925,7 @@ namespace XericUIEditor.XTable
 				table.ClearSelection();
 				table.RefreshView();
 				s_EditText = "";
+				SyncEditText(table);
 				e.Use();
 				SceneView.RepaintAll();
 				return;
@@ -899,6 +955,7 @@ namespace XericUIEditor.XTable
 
 				table.SelectCell(row, col);
 				table.RefreshView();
+				SyncEditText(table);
 				e.Use();
 				SceneView.RepaintAll();
 				return;
@@ -934,6 +991,7 @@ namespace XericUIEditor.XTable
 			}
 
 			table.RefreshView();
+			SyncEditText(table);
 			e.Use();
 			SceneView.RepaintAll();
 		}

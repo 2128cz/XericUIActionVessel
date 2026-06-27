@@ -20,16 +20,23 @@ namespace XericUI.XTable.Core
 		#region 属性
 
 		/// <summary>块内列数（默认 <see cref="DefaultBlockSize"/>）</summary>
-		public int BlockSizeX { get; private set; }
+		[field: SerializeField] public int BlockSizeX { get; private set; }
 
 		/// <summary>块内行数（默认 <see cref="DefaultBlockSize"/>）</summary>
-		public int BlockSizeY { get; private set; }
+		[field: SerializeField] public int BlockSizeY { get; private set; }
 
 		/// <summary>
 		/// 块字典——key = Z 曲线索引(ulong)，value = 数据块。
 		/// 具有哈希表性质，按需创建，键不连续（离散存储）。
+		/// 注意：Dictionary 不被 Unity 序列化器原生支持，通过 <see cref="m_BlockKeys"/> / <see cref="m_BlockValues"/> 代理序列化。
 		/// </summary>
-		public Dictionary<ulong, XTableBlock> BlockMap { get; private set; }
+		[NonSerialized] public Dictionary<ulong, XTableBlock> BlockMap;
+
+		// ── Dictionary 序列化代理 ──
+		// Unity 无法直接序列化 Dictionary<ulong, XTableBlock>，
+		// 使用两个平行列表在 OnBeforeSerialize/OnAfterDeserialize 中转换。
+		[SerializeField] private List<ulong> m_BlockKeys = new List<ulong>();
+		[SerializeField] private List<XTableBlock> m_BlockValues = new List<XTableBlock>();
 
 		/// <summary>
 		/// 获取或创建单元格——如果单元格不存在则自动创建空数据。
@@ -74,13 +81,36 @@ namespace XericUI.XTable.Core
 
 		#region 序列化回调
 
-		public void OnBeforeSerialize() { }
+		public void OnBeforeSerialize()
+		{
+			// Dictionary → 平行列表
+			m_BlockKeys.Clear();
+			m_BlockValues.Clear();
+			if (BlockMap != null)
+			{
+				foreach (var kv in BlockMap)
+				{
+					m_BlockKeys.Add(kv.Key);
+					m_BlockValues.Add(kv.Value);
+				}
+			}
+		}
 
 		public void OnAfterDeserialize()
 		{
 			if (BlockSizeX <= 0) BlockSizeX = DefaultBlockSize;
 			if (BlockSizeY <= 0) BlockSizeY = DefaultBlockSize;
-			if (BlockMap == null) BlockMap = new Dictionary<ulong, XTableBlock>();
+
+			// 平行列表 → Dictionary
+			BlockMap = new Dictionary<ulong, XTableBlock>();
+			int count = System.Math.Min(
+				m_BlockKeys?.Count ?? 0,
+				m_BlockValues?.Count ?? 0);
+			for (int i = 0; i < count; i++)
+			{
+				if (m_BlockValues[i] != null)
+					BlockMap[m_BlockKeys[i]] = m_BlockValues[i];
+			}
 		}
 
 		#endregion

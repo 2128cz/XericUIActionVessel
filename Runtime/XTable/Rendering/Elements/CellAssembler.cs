@@ -39,6 +39,9 @@ namespace XericUI.XTable.Rendering.Elements
 		private Transform m_Parent;
 		private Transform m_PoolRoot;
 
+		/// <summary>池根节点（所有回收对象均挂在此节点下，节点本身处于 inactive）</summary>
+		public Transform PoolRoot => m_PoolRoot;
+
 		private Stack<PooledImage> m_ImagePool = new Stack<PooledImage>();
 		private Stack<PooledText> m_TextPool = new Stack<PooledText>();
 		private List<PooledImage> m_ActiveImages = new List<PooledImage>();

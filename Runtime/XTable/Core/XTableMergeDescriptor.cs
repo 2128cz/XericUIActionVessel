@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 
+using UnityEngine;
+
 namespace XericUI.XTable.Core
 {
 	/// <summary>
@@ -8,7 +10,7 @@ namespace XericUI.XTable.Core
 	/// 同一类型支持本地块内引用和跨块引用，通过 <see cref="IsCrossBlock"/> 区分。
 	/// </summary>
 	[Serializable]
-	public class XTableMergeDescriptor
+	public class XTableMergeDescriptor : ISerializationCallbackReceiver
 	{
 		/// <summary>合并区域在本地块内的起始行</summary>
 		public int LocalStartRow;
@@ -37,8 +39,12 @@ namespace XericUI.XTable.Core
 		/// <summary>源单元格在块内的列号（跨块时=源块的列、本地时=本块的列）</summary>
 		public int SourceLocalCol;
 
-		/// <summary>本块内被合并的 (row, col) 集合，查询时快速判断是否需要重定向</summary>
-		public HashSet<(int row, int col)> MergedCellSet;
+		/// <summary>本块内被合并的 (row, col) 集合——不参与序列化，通过代理列表同步</summary>
+		[NonSerialized] public HashSet<(int row, int col)> MergedCellSet;
+
+		// ── HashSet 序列化代理 ──
+		[SerializeField] private List<int> m_MergedRowList = new List<int>();
+		[SerializeField] private List<int> m_MergedColList = new List<int>();
 
 		public XTableMergeDescriptor()
 		{
@@ -63,5 +69,37 @@ namespace XericUI.XTable.Core
 			targetRow = SourceLocalRow;
 			targetCol = SourceLocalCol;
 		}
+
+		#region 序列化回调
+
+		public void OnBeforeSerialize()
+		{
+			// HashSet<(int,int)> → 两个平行列表
+			m_MergedRowList.Clear();
+			m_MergedColList.Clear();
+			if (MergedCellSet != null)
+			{
+				foreach (var (row, col) in MergedCellSet)
+				{
+					m_MergedRowList.Add(row);
+					m_MergedColList.Add(col);
+				}
+			}
+		}
+
+		public void OnAfterDeserialize()
+		{
+			// 两个平行列表 → HashSet<(int,int)>
+			MergedCellSet = new HashSet<(int, int)>();
+			int count = System.Math.Min(
+				m_MergedRowList?.Count ?? 0,
+				m_MergedColList?.Count ?? 0);
+			for (int i = 0; i < count; i++)
+			{
+				MergedCellSet.Add((m_MergedRowList[i], m_MergedColList[i]));
+			}
+		}
+
+		#endregion
 	}
 }

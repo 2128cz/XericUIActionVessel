@@ -8,7 +8,7 @@ namespace XericUIEditor.XTable
 {
 	/// <summary>
 	/// XericUIActionTable 的 Inspector 编辑器——
-	/// 折叠分组：[样式设定] [尺寸设定] [编辑测试] [数据浏览]。
+	/// 折叠分组：[样式设定] [尺寸设定] [调试] [数据浏览]。
 	/// 使用 EditorGUILayout.Foldout 避免与数组 PropertyField 内部的折叠冲突。
 	/// </summary>
 	[CustomEditor(typeof(XericUIActionTable))]
@@ -24,23 +24,11 @@ namespace XericUIEditor.XTable
 		// 折叠状态
 		private static bool s_StyleFoldout = true;
 		private static bool s_SizeFoldout = true;
-		private static bool s_EditTestFoldout;
+		private static bool s_DebugFoldout;
 		private static bool s_DataBrowseFoldout;
 
-		// 编辑测试参数
-		private int m_BatchRowCount = 10;
-		private int m_BatchColCount = 10;
-		private float m_BatchCellHeight = 40f;
-		private float m_BatchCellWidth = 100f;
-
-		private int m_MergeStartRow;
-		private int m_MergeStartCol;
-		private int m_MergeRowSpan = 2;
-		private int m_MergeColSpan = 2;
-
-		private int m_EditRow;
-		private int m_EditCol;
-		private string m_EditText = "";
+		// 调试参数
+		private bool m_ShowChildren;
 
 		private void OnEnable()
 		{
@@ -81,55 +69,35 @@ namespace XericUIEditor.XTable
 				EditorGUI.indentLevel--;
 			}
 
-			// ===== 编辑测试 =====
+			// ===== 调试 =====
 			EditorGUILayout.Space(4);
-			s_EditTestFoldout = EditorGUILayout.Foldout(s_EditTestFoldout, "编辑测试", true);
-			if (s_EditTestFoldout)
+			s_DebugFoldout = EditorGUILayout.Foldout(s_DebugFoldout, "调试", true);
+			if (s_DebugFoldout)
 			{
 				EditorGUI.indentLevel++;
 
-				EditorGUILayout.LabelField("批量生成尺寸", EditorStyles.miniBoldLabel);
-				m_BatchRowCount = EditorGUILayout.IntField("行数", m_BatchRowCount);
-				m_BatchColCount = EditorGUILayout.IntField("列数", m_BatchColCount);
-				m_BatchCellHeight = EditorGUILayout.FloatField("单元格高度", m_BatchCellHeight);
-				m_BatchCellWidth = EditorGUILayout.FloatField("单元格宽度", m_BatchCellWidth);
-				if (GUILayout.Button("应用批量尺寸", GUILayout.Height(22)))
-					ApplyBatchRowColSizes();
+				if (GUILayout.Button("重新生成表格", GUILayout.Height(26)))
+				{
+					m_Table.FullRebuild();
+					m_Table.SetChildrenVisible(!m_ShowChildren);
+				}
 
-				EditorGUILayout.Space(6);
+				EditorGUILayout.Space(4);
 
-				EditorGUILayout.LabelField("合并单元格", EditorStyles.miniBoldLabel);
-				m_MergeStartRow = EditorGUILayout.IntField("起始行", m_MergeStartRow);
-				m_MergeStartCol = EditorGUILayout.IntField("起始列", m_MergeStartCol);
-				m_MergeRowSpan = EditorGUILayout.IntField("行跨度", m_MergeRowSpan);
-				m_MergeColSpan = EditorGUILayout.IntField("列跨度", m_MergeColSpan);
-				EditorGUILayout.BeginHorizontal();
-				if (GUILayout.Button("合并", GUILayout.Height(22)))
-					EditorApplication.delayCall += () => m_Table.MergeCells(m_MergeStartRow, m_MergeStartCol, m_MergeRowSpan, m_MergeColSpan);
-				if (GUILayout.Button("取消合并", GUILayout.Height(22)))
-					EditorApplication.delayCall += () => m_Table.UnmergeCells(m_MergeStartRow, m_MergeStartCol);
-				EditorGUILayout.EndHorizontal();
+				bool newShow = EditorGUILayout.Toggle("显示子项", m_ShowChildren);
+				if (newShow != m_ShowChildren)
+				{
+					m_ShowChildren = newShow;
+					m_Table.SetChildrenVisible(m_ShowChildren);
+				}
 
-				EditorGUILayout.Space(6);
-
-				EditorGUILayout.LabelField("单元格编辑", EditorStyles.miniBoldLabel);
-				m_EditRow = EditorGUILayout.IntField("行", m_EditRow);
-				m_EditCol = EditorGUILayout.IntField("列", m_EditCol);
-
-				var existing = m_Table.GetCellData(m_EditRow, m_EditCol);
-				if (existing != null && !string.IsNullOrEmpty(existing.Text) && string.IsNullOrEmpty(m_EditText))
-					m_EditText = existing.Text;
-
-				m_EditText = EditorGUILayout.TextField("文本内容", m_EditText);
-
-				EditorGUILayout.BeginHorizontal();
-				if (GUILayout.Button("应用文本", GUILayout.Height(22)))
-					EditorApplication.delayCall += () => m_Table.SetCellText(m_EditRow, m_EditCol, m_EditText);
-				if (GUILayout.Button("选中此格", GUILayout.Height(22)))
-					EditorApplication.delayCall += () => m_Table.SelectCell(m_EditRow, m_EditCol);
-				if (GUILayout.Button("清除选中", GUILayout.Height(22)))
-					EditorApplication.delayCall += () => m_Table.ClearSelection();
-				EditorGUILayout.EndHorizontal();
+				if (m_ShowChildren)
+				{
+					EditorGUILayout.HelpBox(
+						"子项已显示：所有动态生成的对象将在 Hierarchy 中可见（仍不保存到场景）。\n" +
+						"用于排查表格元素堆积或渲染异常问题。",
+						MessageType.Info);
+				}
 
 				EditorGUI.indentLevel--;
 			}
@@ -161,27 +129,6 @@ namespace XericUIEditor.XTable
 					EditorApplication.delayCall += () => m_Table.RefreshView();
 
 				EditorGUI.indentLevel--;
-			}
-
-			serializedObject.ApplyModifiedProperties();
-		}
-
-		private void ApplyBatchRowColSizes()
-		{
-			serializedObject.Update();
-
-			if (m_RowHeightsProp != null)
-			{
-				m_RowHeightsProp.arraySize = m_BatchRowCount;
-				for (int i = 0; i < m_BatchRowCount; i++)
-					m_RowHeightsProp.GetArrayElementAtIndex(i).floatValue = m_BatchCellHeight;
-			}
-
-			if (m_ColWidthsProp != null)
-			{
-				m_ColWidthsProp.arraySize = m_BatchColCount;
-				for (int i = 0; i < m_BatchColCount; i++)
-					m_ColWidthsProp.GetArrayElementAtIndex(i).floatValue = m_BatchCellWidth;
 			}
 
 			serializedObject.ApplyModifiedProperties();
