@@ -74,6 +74,33 @@ namespace XericUI.OverrideUI
 		{
 			base.OnEnable();
 
+			RevalidateStyles();
+
+			StyleRefreshManager.Register(this);
+			onValueChanged.AddListener(OnToggleValueChanged);
+			ApplyForState(m_CurrentState);
+		}
+
+#if UNITY_EDITOR
+		/// <summary>编辑器下属性变更时即刻刷新（路径从空变为有效等场景）</summary>
+		protected override void OnValidate()
+		{
+			base.OnValidate();
+			RevalidateStyles();
+			ApplyForState(m_CurrentState);
+		}
+#endif
+
+		/// <summary>重新注册/订阅所有 StyleField（供 OnEnable 和 OnValidate 共用）</summary>
+		private void RevalidateStyles()
+		{
+			// 先退订防止双重订阅
+			m_ColorState?.UnsubscribeAll(OnStyleChanged);
+			m_TextureState?.UnsubscribeAll(OnStyleChanged);
+			m_OnOverrideColor.Member.OnValueChanged -= OnStyleChanged;
+			m_OnOverrideTexture.Member.OnValueChanged -= OnStyleChanged;
+			m_CheckmarkStyle.Member.OnValueChanged -= OnStyleChanged;
+
 			m_ColorState?.RegisterAll();
 			m_TextureState?.RegisterAll();
 			m_ColorState?.SubscribeAll(OnStyleChanged);
@@ -85,10 +112,6 @@ namespace XericUI.OverrideUI
 			m_OnOverrideTexture.Member.OnValueChanged += OnStyleChanged;
 			m_CheckmarkStyle?.Register();
 			m_CheckmarkStyle.Member.OnValueChanged += OnStyleChanged;
-
-			StyleRefreshManager.Register(this);
-			onValueChanged.AddListener(OnToggleValueChanged);
-			ApplyForState(m_CurrentState);
 		}
 
 		protected override void OnDisable()

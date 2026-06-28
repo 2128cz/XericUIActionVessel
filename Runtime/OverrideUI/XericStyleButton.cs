@@ -54,13 +54,30 @@ namespace XericUI.OverrideUI
 		{
 			base.OnEnable();
 
+			RevalidateStyles();
+
+			StyleRefreshManager.Register(this);
+			ApplyForState(m_CurrentState);
+		}
+
+#if UNITY_EDITOR
+		protected override void OnValidate()
+		{
+			base.OnValidate();
+			RevalidateStyles();
+			ApplyForState(m_CurrentState);
+		}
+#endif
+
+		private void RevalidateStyles()
+		{
+			m_ColorState?.UnsubscribeAll(OnStyleChanged);
+			m_TextureState?.UnsubscribeAll(OnStyleChanged);
+
 			m_ColorState?.RegisterAll();
 			m_TextureState?.RegisterAll();
 			m_ColorState?.SubscribeAll(OnStyleChanged);
 			m_TextureState?.SubscribeAll(OnStyleChanged);
-
-			StyleRefreshManager.Register(this);
-			ApplyForState(m_CurrentState);
 		}
 
 		protected override void OnDisable()

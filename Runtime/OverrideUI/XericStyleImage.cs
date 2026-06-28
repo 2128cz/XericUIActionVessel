@@ -56,6 +56,21 @@ namespace XericUI.OverrideUI
 			ApplyAllStyles();
 		}
 
+#if UNITY_EDITOR
+		/// <summary>编辑器下属性变更时即刻刷新（路径从空变为有效等场景）</summary>
+		protected override void OnValidate()
+		{
+			base.OnValidate();
+			if (!m_AutoRefresh) return;
+
+			RegisterIfValid(m_ColorStyle);
+			RegisterIfValid(m_TextureStyle);
+			RegisterIfValid(m_MaterialStyle);
+
+			ApplyAllStyles();
+		}
+#endif
+
 		protected override void OnDisable()
 		{
 			UnregisterIfValid(m_ColorStyle);
@@ -70,6 +85,8 @@ namespace XericUI.OverrideUI
 			if (field == null) return;
 			// 路径为空说明未在 Inspector 中配置，跳过注册避免空路径查询错误
 			if (string.IsNullOrEmpty(field.StylePath)) return;
+			// 先退订再注册，防止 OnValidate 重复调用导致双重订阅
+			field.Member.OnValueChanged -= OnStyleChanged;
 			field.Register();
 			field.Member.OnValueChanged += OnStyleChanged;
 		}
