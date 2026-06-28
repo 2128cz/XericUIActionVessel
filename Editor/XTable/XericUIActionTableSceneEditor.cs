@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEngine;
 
 using XericLibrary.Runtime.SuperStyleSheet;
+using XericUI.XTable.Core;
 using XericUI.XTable.Mapping;
 using XericUI.XTable.Rendering.Component;
 
@@ -445,18 +446,42 @@ namespace XericUIEditor.XTable
 		{
 			Color lineColor = new Color(0.5f, 0.5f, 0.55f, 0.18f);
 
+			// 水平网格线（跳过合并区域内的线）
 			float y = tr.y;
 			for (int r = 0; r < rh.Length; r++)
 			{
 				y += rh[r] * yScale;
-				EditorGUI.DrawRect(new Rect(tr.x, y, tr.width, 1), lineColor);
+
+				// 检查此行是否在合并区域内（非底部边界的行）
+				bool skipLine = false;
+				if (s_ActiveTable != null && r + 1 < rh.Length)
+				{
+					var data = s_ActiveTable.TableData;
+					if (data != null && data.IsCellMerged(r + 1, 0))
+						skipLine = true;
+				}
+
+				if (!skipLine)
+					EditorGUI.DrawRect(new Rect(tr.x, y, tr.width, 1), lineColor);
 			}
 
+			// 垂直网格线（跳过合并区域内的线）
 			float x = tr.x;
 			for (int c = 0; c < cw.Length; c++)
 			{
 				x += cw[c] * xScale;
-				EditorGUI.DrawRect(new Rect(x, tr.y, 1, tr.height), lineColor);
+
+				// 检查此列是否在合并区域内（非右侧边界的列）
+				bool skipLine = false;
+				if (s_ActiveTable != null && c + 1 < cw.Length)
+				{
+					var data = s_ActiveTable.TableData;
+					if (data != null && data.IsCellMerged(0, c + 1))
+						skipLine = true;
+				}
+
+				if (!skipLine)
+					EditorGUI.DrawRect(new Rect(x, tr.y, 1, tr.height), lineColor);
 			}
 		}
 
@@ -471,12 +496,23 @@ namespace XericUIEditor.XTable
 			int sc = table.SelectedCol;
 			if (sr < 0 || sc < 0 || sr >= rh.Length || sc >= cw.Length) return;
 
+			// 获取选中单元格的实际显示范围（合并源需要扩展）
+			int hlRowSpan = 1, hlColSpan = 1;
+			table.IsMergeSource(sr, sc, out hlRowSpan, out hlColSpan);
+
 			if (table.HasMultiSelection)
 			{
 				int minR = Mathf.Min(table.SelectStartRow, table.SelectEndRow);
 				int maxR = Mathf.Max(table.SelectStartRow, table.SelectEndRow);
 				int minC = Mathf.Min(table.SelectStartCol, table.SelectEndCol);
 				int maxC = Mathf.Max(table.SelectStartCol, table.SelectEndCol);
+
+				// 扩展多选区域以包含合并源的全部跨度
+				if (table.IsMergeSource(minR, minC, out int msRS, out int msCS))
+				{
+					maxR = Mathf.Max(maxR, minR + msRS - 1);
+					maxC = Mathf.Max(maxC, minC + msCS - 1);
+				}
 
 				minR = Mathf.Clamp(minR, 0, rh.Length - 1);
 				maxR = Mathf.Clamp(maxR, 0, rh.Length - 1);
@@ -492,10 +528,11 @@ namespace XericUIEditor.XTable
 					s_MultiSelectRangeColor);
 			}
 
+			// 单选高亮（合并源用完整跨度）
 			float sx = tr.x + SumBefore(cw, sc) * xScale;
 			float sy = tr.y + SumBefore(rh, sr) * yScale;
-			float sw = cw[sc] * xScale;
-			float sh = rh[sr] * yScale;
+			float sw = SumRange(cw, sc, sc + hlColSpan) * xScale;
+			float sh = SumRange(rh, sr, sr + hlRowSpan) * yScale;
 
 			EditorGUI.DrawRect(new Rect(sx + 1, sy + 1, sw - 2, sh - 2),
 				s_SelectionColor);
@@ -763,16 +800,31 @@ namespace XericUIEditor.XTable
 					padding = new RectOffset(4, 4, 2, 2)
 				};
 
-				// Row 1: 坐标标签 | 输入框 | 应用按钮
-				float btnW = 44;
+				// Row 1: 坐标标签 | 输入框 | 应用按钮 + 合并/拆分按钮
+				float actionBtnW = 50;
 				float row1Y = barRect.y + pad;
 				float row2Y = barRect.y + rowH + pad + 4;
 				string cellLabel = table.GetSelectionText();
 
-				GUI.Label(new Rect(barRect.x + 4, row1Y, 60, rowH), cellLabel, labelStyle);
-				Rect inputRect = new Rect(barRect.x + 68, row1Y, barW - 68 - btnW - pad * 2, rowH);
+				// 合并按钮（多选时显示）
+				bool showMerge = table.HasMultiSelection &&
+				                 (table.SelectStartRow != table.SelectEndRow ||
+				                  table.SelectStartCol != table.SelectEndCol);
 
-				// 回车提交（仅在 CellEditing 状态下）
+				// 拆分按钮（选中单元格是合并源时显示）
+				bool isMergeSource = table.IsMergeSource(table.SelectedRow,
+					table.SelectedCol, out _, out _);
+
+				float mergeBtnW = showMerge || isMergeSource ? actionBtnW : 0;
+				float unmergeBtnW = isMergeSource ? actionBtnW : 0;
+
+				// 坐标标签
+				GUI.Label(new Rect(barRect.x + 4, row1Y, 60, rowH), cellLabel, labelStyle);
+
+				// 输入框
+				float inputW = barW - 68 - 44 - 2 - mergeBtnW - unmergeBtnW - pad * 2 - 4;
+				Rect inputRect = new Rect(barRect.x + 68, row1Y, inputW, rowH);
+
 				if (s_State == EditorState.CellEditing &&
 					Event.current.type == EventType.KeyDown &&
 					Event.current.keyCode == KeyCode.Return)
@@ -784,11 +836,49 @@ namespace XericUIEditor.XTable
 				GUI.SetNextControlName("XTableSceneEditInput");
 				s_EditText = GUI.TextField(inputRect, s_EditText, inputStyle);
 
-				if (GUI.Button(new Rect(barRect.x + barW - btnW - pad, row1Y, btnW, rowH),
-					"应用", btnStyle))
+				// 应用按钮
+				float rightX = barRect.x + barW - pad - 44;
+				if (GUI.Button(new Rect(rightX, row1Y, 44, rowH), "应用", btnStyle))
 				{
 					GUI.FocusControl(null);
 					ApplyCellEdit(table);
+				}
+
+				// 合并按钮
+				if (showMerge)
+				{
+					var mergeStyle = new GUIStyle(btnStyle)
+					{
+						normal = { background = MakeTex(1, 1, new Color(0.15f, 0.3f, 0.65f, 0.8f)), textColor = Color.white },
+						hover = { background = MakeTex(1, 1, new Color(0.2f, 0.4f, 0.85f, 0.9f)), textColor = Color.white }
+					};
+					if (GUI.Button(new Rect(rightX - mergeBtnW - 2, row1Y, mergeBtnW, rowH), "合并", mergeStyle))
+					{
+						int minR = Mathf.Min(table.SelectStartRow, table.SelectEndRow);
+						int maxR = Mathf.Max(table.SelectStartRow, table.SelectEndRow);
+						int minC = Mathf.Min(table.SelectStartCol, table.SelectEndCol);
+						int maxC = Mathf.Max(table.SelectStartCol, table.SelectEndCol);
+						table.MergeCells(minR, minC, maxR - minR + 1, maxC - minC + 1);
+						table.RefreshView();
+						SceneView.RepaintAll();
+					}
+				}
+
+				// 拆分按钮
+				if (isMergeSource)
+				{
+					var unmergeStyle = new GUIStyle(btnStyle)
+					{
+						normal = { background = MakeTex(1, 1, new Color(0.65f, 0.25f, 0.15f, 0.8f)), textColor = Color.white },
+						hover = { background = MakeTex(1, 1, new Color(0.85f, 0.35f, 0.2f, 0.9f)), textColor = Color.white }
+					};
+					float unmergeX = showMerge ? rightX - mergeBtnW - unmergeBtnW - 4 : rightX - unmergeBtnW - 2;
+					if (GUI.Button(new Rect(unmergeX, row1Y, unmergeBtnW, rowH), "拆分", unmergeStyle))
+					{
+						table.UnmergeCells(table.SelectedRow, table.SelectedCol);
+						table.RefreshView();
+						SceneView.RepaintAll();
+					}
 				}
 
 				// Row 2: 样式命名空间下拉框
@@ -800,11 +890,9 @@ namespace XericUIEditor.XTable
 				};
 				GUI.Label(new Rect(barRect.x + 4, row2Y, 36, rowH), "样式:", nsLabelStyle);
 
-				// 获取当前命名空间
 				string currentNS = table.GetCellStyleNamespace(
 					table.SelectedRow, table.SelectedCol) ?? "";
 
-				// 构建下拉选项（StyleManager.GetAvailableNamespaces 已保证 "default" 在首位）
 				var namespaces = StyleManager.GetAvailableNamespaces();
 				int currentIdx = namespaces.IndexOf(currentNS);
 				if (currentIdx < 0) currentIdx = 0;
@@ -908,6 +996,46 @@ namespace XericUIEditor.XTable
 			float ry = (Event.current.mousePosition.y - tr.y) / yScale;
 			col = IndexFromCoord(rx, s_ColWidths);
 			row = IndexFromCoord(ry, s_RowHeights);
+
+			// 点击合并覆盖的单元格时，重定向到合并源
+			if (row >= 0 && col >= 0 && s_ActiveTable != null)
+				RedirectToMergeSource(ref row, ref col);
+		}
+
+		/// <summary>如果指定单元格被合并覆盖，重定向到合并源（锚点）</summary>
+		private static void RedirectToMergeSource(ref int row, ref int col)
+		{
+			var data = s_ActiveTable.TableData;
+			if (data == null) return;
+
+			XTableCoordinateUtility.CellToBlockCoordinate(
+				row, col, data.BlockSizeX, data.BlockSizeY,
+				out int blockRow, out int blockCol,
+				out int localRow, out int localCol);
+
+			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
+			if (!data.BlockMap.TryGetValue(zIndex, out XTableBlock block))
+				return;
+
+			var merge = block.GetMergeRedirect(localRow, localCol);
+			if (merge == null) return;
+
+			merge.GetRedirectTarget(out ulong targetBlockIndex, out int targetLocalRow, out int targetLocalCol);
+
+			if (merge.IsCrossBlock && data.BlockMap.TryGetValue(targetBlockIndex, out XTableBlock targetBlock))
+			{
+				// 跨块合并：从目标块的块坐标反算全局坐标
+				XTableBlockMapping.ZIndexToBlockCoord(targetBlockIndex,
+					out int targetBlockRow, out int targetBlockCol);
+				row = targetBlockRow * data.BlockSizeY + targetLocalRow;
+				col = targetBlockCol * data.BlockSizeX + targetLocalCol;
+			}
+			else
+			{
+				// 本地合并：源在同一块内，反算全局坐标
+				row = blockRow * data.BlockSizeY + targetLocalRow;
+				col = blockCol * data.BlockSizeX + targetLocalCol;
+			}
 		}
 
 		#endregion
@@ -987,6 +1115,7 @@ namespace XericUIEditor.XTable
 			}
 			else
 			{
+				RedirectToMergeSource(ref row, ref col);
 				table.SelectCell(row, col);
 			}
 

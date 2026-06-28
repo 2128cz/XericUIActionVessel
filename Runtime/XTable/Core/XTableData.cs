@@ -229,12 +229,19 @@ namespace XericUI.XTable.Core
 						BlockMap[zIndex] = block;
 					}
 
-					// 查找或创建此块的合并描述（相同源）
+					// 计算本块内合并区域的局部起始和跨度
+					int localStartRow = Math.Max(0, startRow - blockRow * BlockSizeY);
+					int localStartCol = Math.Max(0, startCol - blockCol * BlockSizeX);
+					int blockEndRow = Math.Min((blockRow + 1) * BlockSizeY, startRow + rowSpan) - blockRow * BlockSizeY;
+					int blockEndCol = Math.Min((blockCol + 1) * BlockSizeX, startCol + colSpan) - blockCol * BlockSizeX;
+
+					// 查找或创建此块的合并描述
 					XTableMergeDescriptor descriptor = FindOrCreateMergeDescriptor(block,
-						zIndex == srcZIndex ? srcLocalRow : -1,
-						zIndex == srcZIndex ? srcLocalCol : -1,
 						srcZIndex, srcLocalRow, srcLocalCol,
-						zIndex != srcZIndex);
+						zIndex != srcZIndex,
+						localStartRow, localStartCol,
+						blockEndRow - localStartRow, blockEndCol - localStartCol,
+						rowSpan, colSpan);
 
 					descriptor.MergedCellSet.Add((localRow, localCol));
 				}
@@ -245,35 +252,41 @@ namespace XericUI.XTable.Core
 		/// 查找或创建合并描述
 		/// </summary>
 		private XTableMergeDescriptor FindOrCreateMergeDescriptor(
-			XTableBlock block, int checkLocalRow, int checkLocalCol,
-			ulong srcZIndex, int srcLocalRow, int srcLocalCol, bool isCrossBlock)
+			XTableBlock block,
+			ulong srcZIndex, int srcLocalRow, int srcLocalCol, bool isCrossBlock,
+			int localStartRow, int localStartCol, int blockRowSpan, int blockColSpan,
+			int totalRowSpan, int totalColSpan)
 		{
-			// 查找已有描述
+			// 查找已有描述：匹配源坐标和跨块标记
 			for (int i = 0; i < block.MergeDescriptors.Count; i++)
 			{
 				var desc = block.MergeDescriptors[i];
-				if (desc.MergeRowSpan > 0 && desc.MergeColSpan > 0)
-				{
-					// 简化的同源判断：跨块引用共享 sourceBlockIndex
-					if (isCrossBlock && desc.IsCrossBlock && desc.SourceBlockIndex == srcZIndex)
-						return desc;
-				}
+				if (desc.IsCrossBlock == isCrossBlock &&
+				    desc.SourceBlockIndex == srcZIndex &&
+				    desc.SourceLocalRow == srcLocalRow &&
+				    desc.SourceLocalCol == srcLocalCol)
+					return desc;
 			}
 
-			// 创建新描述
+			// 创建新描述，设置完整跨度信息
 			var newDesc = new XTableMergeDescriptor
 			{
 				IsCrossBlock = isCrossBlock,
 				SourceBlockIndex = srcZIndex,
 				SourceLocalRow = srcLocalRow,
-				SourceLocalCol = srcLocalCol
+				SourceLocalCol = srcLocalCol,
+				LocalStartRow = localStartRow,
+				LocalStartCol = localStartCol,
+				MergeRowSpan = totalRowSpan,
+				MergeColSpan = totalColSpan
 			};
 			block.MergeDescriptors.Add(newDesc);
 			return newDesc;
 		}
 
 		/// <summary>
-		/// 取消指定区域的合并
+		/// 取消指定坐标所在合并——同时处理"点击源坐标"和"点击被合并坐标"两种情况。
+		/// 遍历所有块，移除所有指向该源的合并描述。
 		/// </summary>
 		public void UnmergeCells(int startRow, int startCol)
 		{
@@ -284,15 +297,43 @@ namespace XericUI.XTable.Core
 
 			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
 
-			if (!BlockMap.TryGetValue(zIndex, out XTableBlock block))
-				return;
-
-			// 移除包含此单元格的所有合并描述
-			for (int i = block.MergeDescriptors.Count - 1; i >= 0; i--)
+			// 1) 从这个单元格所在的块开始：移除包含此坐标的合并描述（被合并格）
+			if (BlockMap.TryGetValue(zIndex, out XTableBlock block))
 			{
-				if (block.MergeDescriptors[i].Contains(localRow, localCol))
+				for (int i = block.MergeDescriptors.Count - 1; i >= 0; i--)
 				{
-					block.MergeDescriptors.RemoveAt(i);
+					if (block.MergeDescriptors[i].Contains(localRow, localCol))
+						block.MergeDescriptors.RemoveAt(i);
+				}
+			}
+
+			// 2) 遍历所有块：移除源坐标为此单元格的合并描述（合并源 / 锚点）
+			//    处理非跨块和跨块两种情况
+			foreach (var kv in BlockMap)
+			{
+				var b = kv.Value;
+				if (b.MergeDescriptors.Count == 0) continue;
+
+				for (int i = b.MergeDescriptors.Count - 1; i >= 0; i--)
+				{
+					var desc = b.MergeDescriptors[i];
+
+					// 非跨块：源在同一个块内 → 直接比较本地坐标
+					if (!desc.IsCrossBlock &&
+					    desc.SourceLocalRow == localRow &&
+					    desc.SourceLocalCol == localCol &&
+					    kv.Key == zIndex)
+					{
+						b.MergeDescriptors.RemoveAt(i);
+					}
+					// 跨块：源在另一个块 → 比较 SourceBlockIndex + 源本地坐标
+					else if (desc.IsCrossBlock &&
+					         desc.SourceBlockIndex == zIndex &&
+					         desc.SourceLocalRow == localRow &&
+					         desc.SourceLocalCol == localCol)
+					{
+						b.MergeDescriptors.RemoveAt(i);
+					}
 				}
 			}
 		}
@@ -301,9 +342,47 @@ namespace XericUI.XTable.Core
 
 		#region 查询方法
 
-		/// <summary>
-		/// 判断指定块是否存在
-		/// </summary>
+		/// <summary>判断指定单元格是否被合并覆盖（非源，会被重定向）</summary>
+		public bool IsCellMerged(int row, int col)
+		{
+			XTableCoordinateUtility.CellToBlockCoordinate(
+				row, col, BlockSizeX, BlockSizeY,
+				out int blockRow, out int blockCol,
+				out int localRow, out int localCol);
+			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
+			if (!BlockMap.TryGetValue(zIndex, out XTableBlock block)) return false;
+			return block.GetMergeRedirect(localRow, localCol) != null;
+		}
+
+		/// <summary>判断指定单元格是否为合并源（锚点），并返回合并跨度</summary>
+		public bool IsMergeSource(int row, int col, out int rowSpan, out int colSpan)
+		{
+			rowSpan = 1; colSpan = 1;
+			XTableCoordinateUtility.CellToBlockCoordinate(
+				row, col, BlockSizeX, BlockSizeY,
+				out int blockRow, out int blockCol,
+				out int localRow, out int localCol);
+			ulong thisZIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
+
+			foreach (var kv in BlockMap)
+			{
+				foreach (var desc in kv.Value.MergeDescriptors)
+				{
+					ulong srcBlockIdx = desc.IsCrossBlock ? desc.SourceBlockIndex : kv.Key;
+					if (srcBlockIdx == thisZIndex &&
+					    desc.SourceLocalRow == localRow &&
+					    desc.SourceLocalCol == localCol)
+					{
+						rowSpan = desc.MergeRowSpan;
+						colSpan = desc.MergeColSpan;
+						return true;
+					}
+				}
+			}
+			return false;
+		}
+
+		/// <summary>判断指定块是否存在</summary>
 		public bool HasBlock(int blockRow, int blockCol)
 		{
 			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);

@@ -310,6 +310,13 @@ namespace XericUI.XTable.Rendering.Component
             MarkDirty(TableDirtyType.DataChanged);
         }
 
+        /// <summary>判断指定单元格是否被合并覆盖（非源，会被重定向）</summary>
+        public bool IsCellMerged(int row, int col) => TableData.IsCellMerged(row, col);
+
+        /// <summary>判断指定单元格是否为合并源（锚点），并返回合并跨度</summary>
+        public bool IsMergeSource(int row, int col, out int rowSpan, out int colSpan)
+            => TableData.IsMergeSource(row, col, out rowSpan, out colSpan);
+
         /// <summary>在末尾追加一行，默认行高 40</summary>
         public void AddRow(float height = 40f)
         {
@@ -738,15 +745,28 @@ namespace XericUI.XTable.Rendering.Component
                 {
                     for (int c = sc; c < ec && c < m_ColWidths.Length; c++)
                     {
+                        // 跳过被合并覆盖的单元格
+                        if (TableData.IsCellMerged(r, c)) continue;
+
                         float cellX = GetColLeftX(c);
                         float cellY = -GetRowTopY(r);
                         float cellW = m_ColWidths[c];
                         float cellH = m_RowHeights[r];
+
+                        // 合并源：扩展尺寸
+                        if (TableData.IsMergeSource(r, c, out int mergeRS, out int mergeCS))
+                        {
+                            for (int i = 1; i < mergeCS && c + i < m_ColWidths.Length; i++)
+                                cellW += m_ColWidths[c + i];
+                            for (int i = 1; i < mergeRS && r + i < m_RowHeights.Length; i++)
+                                cellH += m_RowHeights[r + i];
+                        }
+
                         XTableCellData data = TableData.GetCell(r, c);
                         string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
                             ? data.StyleNamespace : ns;
 
-                        // 多选高亮
+                        // 多选 / 单选高亮
                         if (IsInSelectionRange(r, c))
                         {
                             var selImg = m_Assembler.GetImage("cell_multiselect");
@@ -763,13 +783,13 @@ namespace XericUI.XTable.Rendering.Component
                             selImg.Image.color = selectionColor;
                         }
 
-                        // 水平网格线（单元格底部）
+                        // 水平网格线（合并区域底部）
                         var hLine = m_Assembler.GetImage("cell_hline");
                         hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
                         hLine.Rect.sizeDelta = new Vector2(cellW, borderWidth);
                         hLine.Image.color = borderColor;
 
-                        // 垂直网格线（单元格右侧）
+                        // 垂直网格线（合并区域右侧）
                         var vLine = m_Assembler.GetImage("cell_vline");
                         vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - borderWidth, cellY);
                         vLine.Rect.sizeDelta = new Vector2(borderWidth, cellH);
@@ -802,10 +822,23 @@ namespace XericUI.XTable.Rendering.Component
             {
                 for (int c = sc; c < ec && c < m_ColWidths.Length; c++)
                 {
+                    // 跳过被合并覆盖的单元格
+                    if (TableData.IsCellMerged(r, c)) continue;
+
                     float cellX = GetColLeftX(c);
                     float cellY = -GetRowTopY(r);
                     float cellW = m_ColWidths[c];
                     float cellH = m_RowHeights[r];
+
+                    // 合并源：扩展尺寸
+                    if (TableData.IsMergeSource(r, c, out int mergeRS, out int mergeCS))
+                    {
+                        for (int i = 1; i < mergeCS && c + i < m_ColWidths.Length; i++)
+                            cellW += m_ColWidths[c + i];
+                        for (int i = 1; i < mergeRS && r + i < m_RowHeights.Length; i++)
+                            cellH += m_RowHeights[r + i];
+                    }
+
                     XTableCellData data = TableData.GetCell(r, c);
                     string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
                         ? data.StyleNamespace : ns;
