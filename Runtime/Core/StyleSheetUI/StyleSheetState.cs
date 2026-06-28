@@ -9,34 +9,36 @@ namespace XericUI.Core.StyleSheetUI
 	/// <summary>
 	/// 样式表驱动的 UI 交互状态块——仿 ColorBlock 设计。
 	/// 集中管理 Normal/Highlighted/Pressed/Selected/Disabled 五种状态的 StyleField。
-	/// 职责单一：仅保存一组样式属性（如仅颜色、或仅纹理）。
-	/// 在组件上声明多个实例分别实现颜色切换和纹理切换。
 	/// </summary>
 	[Serializable]
 	public class StyleSheetState
 	{
+		private const string k_DefaultColorBasePath   = "/button/TargetGraphic/ColorTint";
+		private const string k_DefaultTextureBasePath = "/button/TargetGraphic/SpriteState";
+		private const string k_DefaultNamespace       = "default";
+
 		#region 序列化字段
 
 		[Header("五态样式路径")]
 		[SerializeField]
 		[Tooltip("正常状态")]
-		private StyleField m_Normal = new StyleField();
+		private StyleField m_Normal = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/NormalColor" };
 
 		[SerializeField]
 		[Tooltip("高亮状态")]
-		private StyleField m_Highlighted = new StyleField();
+		private StyleField m_Highlighted = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/HighlightedColor" };
 
 		[SerializeField]
 		[Tooltip("按下状态")]
-		private StyleField m_Pressed = new StyleField();
+		private StyleField m_Pressed = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/PressedColor" };
 
 		[SerializeField]
 		[Tooltip("选中状态")]
-		private StyleField m_Selected = new StyleField();
+		private StyleField m_Selected = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/SelectedColor" };
 
 		[SerializeField]
 		[Tooltip("禁用状态")]
-		private StyleField m_Disabled = new StyleField();
+		private StyleField m_Disabled = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/DisabledColor" };
 
 		[Header("过渡")]
 		[SerializeField]
@@ -66,8 +68,23 @@ namespace XericUI.Core.StyleSheetUI
 			m_Normal, m_Highlighted, m_Pressed, m_Selected, m_Disabled
 		};
 
-		/// <summary>默认实例</summary>
+		/// <summary>默认实例（五态默认匹配 ColorTint 颜色块）</summary>
 		public static StyleSheetState Default => new StyleSheetState();
+
+		/// <summary>
+		/// 创建纹理五态样式块，StylePath 默认匹配 SpriteState 块。
+		/// </summary>
+		public static StyleSheetState CreateTexture(string ns = k_DefaultNamespace)
+		{
+			var state = new StyleSheetState();
+			state.Normal.StylePath      = k_DefaultTextureBasePath + "/NormalSprite";
+			state.Highlighted.StylePath = k_DefaultTextureBasePath + "/HighlightedSprite";
+			state.Pressed.StylePath     = k_DefaultTextureBasePath + "/PressedSprite";
+			state.Selected.StylePath    = k_DefaultTextureBasePath + "/SelectedSprite";
+			state.Disabled.StylePath    = k_DefaultTextureBasePath + "/DisabledSprite";
+			foreach (var f in state.AllFields) f.Namespace = ns;
+			return state;
+		}
 
 		#endregion
 

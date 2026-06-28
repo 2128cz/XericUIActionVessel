@@ -37,6 +37,9 @@ namespace XericUIEditor.XTable
             m_ColWidthsProp = serializedObject.FindProperty("m_ColWidths");
             m_DefaultStyleNsProp = serializedObject.FindProperty("m_DefaultStyleNamespace");
             m_ScrollRectProp = serializedObject.FindProperty("m_ScrollRect");
+
+            // 同步表格的 ChildrenVisible 状态到编辑器 toggle
+            m_ShowChildren = m_Table.ChildrenVisible;
         }
 
         public override void OnInspectorGUI()
@@ -78,7 +81,14 @@ namespace XericUIEditor.XTable
                 if (GUILayout.Button("重新生成表格", GUILayout.Height(26)))
                 {
                     m_Table.FullRebuild();
-                    m_Table.SetChildrenVisible(!m_ShowChildren);
+                    m_Table.SetChildrenVisible(m_ShowChildren);
+                }
+
+                if (GUILayout.Button("强制刷新样式", GUILayout.Height(26)))
+                {
+                    XericLibrary.Runtime.SuperStyleSheet.StyleManager.ForceRefresh();
+                    m_Table.FullRebuild();
+                    m_Table.SetChildrenVisible(m_ShowChildren);
                 }
 
                 EditorGUILayout.Space(4);

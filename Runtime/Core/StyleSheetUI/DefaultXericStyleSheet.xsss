@@ -8,5 +8,6 @@ namespace: default
 .NormalColor = (1,1,1,1)
 .HighlightedColor = (0.96,0.96,0.96,1)
 .PressedColor = (0.78,0.78,0.78,1)
-.DisabledColor = (0.78,0.78,0.78,0.5)
+.SelectedColor = (0.96,0.96,0.96,1)
+.DisabledColor = (0.6,0.6,0.6,0.8)
 }

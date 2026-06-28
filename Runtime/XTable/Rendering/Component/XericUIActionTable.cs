@@ -39,6 +39,10 @@ namespace XericUI.XTable.Rendering.Component
 
         [SerializeField] private ScrollRect m_ScrollRect;
 
+        [SerializeField]
+        [Tooltip("在 Hierarchy 中显示动态生成的子对象（仅编辑器，不保存到场景）")]
+        private bool m_ChildrenVisible;
+
         #endregion
 
         #region 私有字段
@@ -102,6 +106,13 @@ namespace XericUI.XTable.Rendering.Component
         public int SelectEndCol => m_SelectEndCol;
         public bool HasMultiSelection => m_SelectStartRow >= 0 && m_SelectEndRow >= 0;
 
+        /// <summary>动态子对象在 Hierarchy 中是否可见（仅编辑器有效）</summary>
+        public bool ChildrenVisible
+        {
+            get => m_ChildrenVisible;
+            set => SetChildrenVisible(value);
+        }
+
         /// <summary>判断单元格是否在多选范围内</summary>
         public bool IsInSelectionRange(int row, int col)
         {
@@ -150,6 +161,15 @@ namespace XericUI.XTable.Rendering.Component
             EnsureDefaultStyleNamespace();
             MarkDirty(TableDirtyType.All);
         }
+
+#if UNITY_EDITOR
+        protected override void OnValidate()
+        {
+            base.OnValidate();
+            // 编辑器下属性变更 / 选中组件时即刻刷新样式
+            MarkDirty(TableDirtyType.All);
+        }
+#endif
 
         protected override void OnDisable()
         {
@@ -606,6 +626,7 @@ namespace XericUI.XTable.Rendering.Component
 
             m_DirtyFlag.Clear();
             OnTableRefreshed?.Invoke();
+            SetChildrenVisible(m_ChildrenVisible);
         }
 
         #endregion
@@ -629,7 +650,7 @@ namespace XericUI.XTable.Rendering.Component
             bgRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
 
             var bgImg = m_BackgroundGo.GetComponent<Image>();
-            bgImg.color = new Color(0.18f, 0.18f, 0.18f, 1f);
+            bgImg.color = GetStyleColor(m_DefaultStyleNamespace, "/cell/bg/color", new Color(0.18f, 0.18f, 0.18f, 1f));
             bgImg.raycastTarget = false;
         }
 
@@ -661,14 +682,15 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>设置所有动态子对象的可见性（仅编辑器）</summary>
         public void SetChildrenVisible(bool visible)
         {
+            m_ChildrenVisible = visible;
 #if UNITY_EDITOR
             if (rectTransform == null) return;
             for (int i = rectTransform.childCount - 1; i >= 0; i--)
             {
                 var child = rectTransform.GetChild(i);
                 child.gameObject.hideFlags = visible
-                    ? HideFlags.DontSave // 可见但不保存
-                    : HideFlags.DontSave | HideFlags.HideInHierarchy; // 隐藏且不保存
+                    ? HideFlags.DontSave
+                    : HideFlags.DontSave | HideFlags.HideInHierarchy;
             }
 #endif
         }
@@ -689,6 +711,7 @@ namespace XericUI.XTable.Rendering.Component
             CreateBackground();
             MarkDirty(TableDirtyType.All);
             RefreshView();
+            SetChildrenVisible(m_ChildrenVisible);
         }
 
         #endregion
@@ -698,9 +721,82 @@ namespace XericUI.XTable.Rendering.Component
         private void RenderCells(int sr, int er, int sc, int ec)
         {
             Color fgFallback = new Color(0.05f, 0.05f, 0.05f);
-            Color selectionColor = new Color(0.18f, 0.42f, 0.82f, 0.25f);
-            Color multiSelectColor = new Color(0.18f, 0.42f, 0.82f, 0.12f);
-            Color focusColor = new Color(0.22f, 0.55f, 0.95f, 0.35f);
+            string ns = m_DefaultStyleNamespace;
+
+            // 编辑器模式：从样式表 pull 所有颜色值
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                Color selectionColor = GetStyleColor(ns, "/cell/selection/bg/color", new Color(0.2f, 0.5f, 1f, 0.3f));
+                Color borderColor = GetStyleColor(ns, "/cell/border/bottom/color", new Color(0.35f, 0.35f, 0.35f, 0.5f));
+                float borderWidth = GetStyleFloat(ns, "/cell/border/bottom/width", 1f);
+
+                Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * 0.4f);
+                Color focusColor = new Color(selectionColor.r + 0.04f, selectionColor.g + 0.13f, selectionColor.b + 0.13f, selectionColor.a * 1.4f);
+
+                for (int r = sr; r < er && r < m_RowHeights.Length; r++)
+                {
+                    for (int c = sc; c < ec && c < m_ColWidths.Length; c++)
+                    {
+                        float cellX = GetColLeftX(c);
+                        float cellY = -GetRowTopY(r);
+                        float cellW = m_ColWidths[c];
+                        float cellH = m_RowHeights[r];
+                        XTableCellData data = TableData.GetCell(r, c);
+                        string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
+                            ? data.StyleNamespace : ns;
+
+                        // 多选高亮
+                        if (IsInSelectionRange(r, c))
+                        {
+                            var selImg = m_Assembler.GetImage("cell_multiselect");
+                            selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                            selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                            selImg.Image.color = (r == m_SelectedRow && c == m_SelectedCol)
+                                ? focusColor : multiSelectColor;
+                        }
+                        else if (r == m_SelectedRow && c == m_SelectedCol)
+                        {
+                            var selImg = m_Assembler.GetImage("cell_select");
+                            selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                            selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                            selImg.Image.color = selectionColor;
+                        }
+
+                        // 水平网格线（单元格底部）
+                        var hLine = m_Assembler.GetImage("cell_hline");
+                        hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
+                        hLine.Rect.sizeDelta = new Vector2(cellW, borderWidth);
+                        hLine.Image.color = borderColor;
+
+                        // 垂直网格线（单元格右侧）
+                        var vLine = m_Assembler.GetImage("cell_vline");
+                        vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - borderWidth, cellY);
+                        vLine.Rect.sizeDelta = new Vector2(borderWidth, cellH);
+                        vLine.Image.color = borderColor;
+
+                        if (data == null) continue;
+
+                        if (!string.IsNullOrEmpty(data.Text))
+                        {
+                            var txt = m_Assembler.GetText("cell_text", cellNS);
+                            txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
+                            txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                            txt.Text.text = data.Text;
+                            txt.Text.color = GetStyleColor(cellNS, "/cell/fg/color", fgFallback);
+                            txt.Text.fontSize = GetStyleInt(cellNS, "/cell/font/size", 14);
+                            txt.Text.alignment = TextAlignmentOptions.Midline;
+                        }
+                    }
+                }
+                return;
+            }
+#endif
+
+            // 运行时模式
+            Color rtSelectionColor = new Color(0.18f, 0.42f, 0.82f, 0.25f);
+            Color rtMultiSelectColor = new Color(0.18f, 0.42f, 0.82f, 0.12f);
+            Color rtFocusColor = new Color(0.22f, 0.55f, 0.95f, 0.35f);
 
             for (int r = sr; r < er && r < m_RowHeights.Length; r++)
             {
@@ -712,34 +808,29 @@ namespace XericUI.XTable.Rendering.Component
                     float cellH = m_RowHeights[r];
                     XTableCellData data = TableData.GetCell(r, c);
                     string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
-                        ? data.StyleNamespace : m_DefaultStyleNamespace;
+                        ? data.StyleNamespace : ns;
 
-                    // 多选范围高亮（覆盖被选中范围内的所有格）
                     if (IsInSelectionRange(r, c))
                     {
                         var selImg = m_Assembler.GetImage("cell_multiselect");
                         selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
                         selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
                         selImg.Image.color = (r == m_SelectedRow && c == m_SelectedCol)
-                            ? focusColor
-                            : multiSelectColor;
+                            ? rtFocusColor : rtMultiSelectColor;
                     }
-                    // 单选高亮
                     else if (r == m_SelectedRow && c == m_SelectedCol)
                     {
                         var selImg = m_Assembler.GetImage("cell_select");
                         selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
                         selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
-                        selImg.Image.color = selectionColor;
+                        selImg.Image.color = rtSelectionColor;
                     }
 
-                    // 水平网格线
                     var hLine = m_Assembler.GetImage("cell_hline");
                     hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
                     hLine.Rect.sizeDelta = new Vector2(cellW, 1f);
                     hLine.Image.color = new Color(0.35f, 0.35f, 0.35f, 0.5f);
 
-                    // 垂直网格线
                     var vLine = m_Assembler.GetImage("cell_vline");
                     vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - 1, cellY);
                     vLine.Rect.sizeDelta = new Vector2(1f, cellH);
@@ -747,7 +838,6 @@ namespace XericUI.XTable.Rendering.Component
 
                     if (data == null) continue;
 
-                    // 文本：与 cell 同位置同尺寸
                     if (!string.IsNullOrEmpty(data.Text))
                     {
                         var txt = m_Assembler.GetText("cell_text", cellNS);
@@ -756,7 +846,6 @@ namespace XericUI.XTable.Rendering.Component
                         txt.Text.text = data.Text;
 
 #if UNITY_EDITOR
-                        // 编辑器模式：直接 pull 样式值（cellNS 可能是个性化命名空间）
                         if (!Application.isPlaying)
                         {
                             txt.Text.color = GetStyleColor(cellNS, "/cell/fg/color", fgFallback);
@@ -764,8 +853,6 @@ namespace XericUI.XTable.Rendering.Component
                             txt.Text.alignment = TextAlignmentOptions.Midline;
                         }
 #endif
-                        // 运行时：颜色/字号/对齐由 StyleBoundElement 管理（push），
-                        // GetText(_, cellNS) 已通过 BindStyle 注册了对应命名空间的 StyleField
                     }
                 }
             }
@@ -879,6 +966,12 @@ namespace XericUI.XTable.Rendering.Component
             return val != null ? (int)val : fallback;
         }
 
+        private float GetStyleFloat(string ns, string path, float fallback)
+        {
+            StyleValue val = StyleManager.GetValue(ns, path);
+            return val != null ? (float)val : fallback;
+        }
+
         private void EnsureDefaultStyleNamespace()
         {
             // 避免在样式表尚未加载时触发 HasStyle → GetValue 的命名空间不存在错误
@@ -888,11 +981,29 @@ namespace XericUI.XTable.Rendering.Component
 
             if (!StyleManager.HasStyle(m_DefaultStyleNamespace, "/cell/bg/color"))
             {
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/bg/color",
-                    new Color(0.18f, 0.18f, 0.18f));
+                // 回退默认值匹配 DefaultTableStyles.xsss
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/bg/color", Color.white);
                 StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/fg/color",
-                    new Color(0.05f, 0.05f, 0.05f));
+                    new Color(0.1f, 0.1f, 0.1f));
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/top/color",
+                    new Color(0.8f, 0.8f, 0.8f));
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/top/width", 1f);
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/bottom/color",
+                    new Color(0.8f, 0.8f, 0.8f));
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/bottom/width", 1f);
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/left/color",
+                    new Color(0.8f, 0.8f, 0.8f));
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/left/width", 1f);
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/right/color",
+                    new Color(0.8f, 0.8f, 0.8f));
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/right/width", 1f);
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/selection/bg/color",
+                    new Color(0.2f, 0.5f, 1f, 0.3f));
                 StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/font/size", 14);
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/font/alignment", "MiddleCenter");
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/font/richText", true);
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/default/height", 40f);
+                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/default/width", 100f);
                 StyleManager.ForceRefresh();
             }
         }

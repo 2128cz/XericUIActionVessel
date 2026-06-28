@@ -9,20 +9,38 @@ namespace XericUI.OverrideUI
 {
 	/// <summary>
 	/// 基于 SuperStyleSheet 的开关组件。
-	/// 使用两个 StyleSheetState 实例管理五态颜色和纹理样式，
+	/// 通过 TransitionMode 选择颜色切换、纹理切换或两者并用，
 	/// 额外支持 isOn 覆盖和 Checkmark 样式。
 	/// </summary>
 	[AddComponentMenu("Xeric UI Vessel/UI/Style Toggle", 52)]
 	public class XericStyleToggle : Toggle, IStyleRefreshable
 	{
+		/// <summary>样式过渡模式</summary>
+		public enum TransitionMode
+		{
+			/// <summary>仅颜色切换</summary>
+			Color,
+			/// <summary>仅纹理/Sprite 切换</summary>
+			Sprite,
+			/// <summary>颜色 + 纹理切换</summary>
+			ColorAndSprite
+		}
+
 		#region 序列化字段
+
+		[Header("过渡模式")]
+		[SerializeField]
+		[Tooltip("选择颜色 / 纹理 / 同时切换")]
+		private TransitionMode m_TransitionMode = TransitionMode.ColorAndSprite;
 
 		[Header("样式表状态")]
 		[SerializeField]
+		[Tooltip("五态颜色样式块（ColorTint）")]
 		private StyleSheetState m_ColorState = StyleSheetState.Default;
 
 		[SerializeField]
-		private StyleSheetState m_TextureState = StyleSheetState.Default;
+		[Tooltip("五态纹理样式块（SpriteState）")]
+		private StyleSheetState m_TextureState = StyleSheetState.CreateTexture();
 
 		[Header("Toggle 专用")]
 		[SerializeField]
@@ -163,37 +181,43 @@ namespace XericUI.OverrideUI
 
 		private void ApplyForState(StyleSheetSelectionState state, bool instant = false)
 		{
-			// 颜色：On 覆盖优先
-			StyleField colorField = isOn && m_OnOverrideColor?.GetValue() != null
-				? m_OnOverrideColor
-				: m_ColorState?.GetForState(state);
-
-			if (colorField != null && m_TargetGraphic != null)
+			if (m_TransitionMode == TransitionMode.Color || m_TransitionMode == TransitionMode.ColorAndSprite)
 			{
-				StyleValue val = colorField.GetValue();
-				if (val != null)
+				// 颜色：On 覆盖优先
+				StyleField colorField = isOn && m_OnOverrideColor?.GetValue() != null
+					? m_OnOverrideColor
+					: m_ColorState?.GetForState(state);
+
+				if (colorField != null && m_TargetGraphic != null)
 				{
-					float dur = instant ? 0f : (m_ColorState?.FadeDuration ?? 0.1f);
-					m_TargetGraphic.CrossFadeColor((Color)val, dur, true, true);
+					StyleValue val = colorField.GetValue();
+					if (val != null)
+					{
+						float dur = instant ? 0f : (m_ColorState?.FadeDuration ?? 0.1f);
+						m_TargetGraphic.CrossFadeColor((Color)val, dur, true, true);
+					}
 				}
 			}
 
-			// 纹理：On 覆盖优先
-			StyleField texField = isOn && m_OnOverrideTexture?.GetValue() != null
-				? m_OnOverrideTexture
-				: m_TextureState?.GetForState(state);
-
-			if (texField != null && m_TargetImage != null)
+			if (m_TransitionMode == TransitionMode.Sprite || m_TransitionMode == TransitionMode.ColorAndSprite)
 			{
-				StyleValue val = texField.GetValue();
-				Texture2D tex = val?.GetValueAs<Texture2D>();
-				if (tex != null)
-					m_TargetImage.overrideSprite = Sprite.Create(tex,
-						new Rect(0, 0, tex.width, tex.height),
-						new Vector2(0.5f, 0.5f));
+				// 纹理：On 覆盖优先
+				StyleField texField = isOn && m_OnOverrideTexture?.GetValue() != null
+					? m_OnOverrideTexture
+					: m_TextureState?.GetForState(state);
+
+				if (texField != null && m_TargetImage != null)
+				{
+					StyleValue val = texField.GetValue();
+					Texture2D tex = val?.GetValueAs<Texture2D>();
+					if (tex != null)
+						m_TargetImage.overrideSprite = Sprite.Create(tex,
+							new Rect(0, 0, tex.width, tex.height),
+							new Vector2(0.5f, 0.5f));
+				}
 			}
 
-			// Checkmark
+			// Checkmark（独立于 TransitionMode）
 			if (m_CheckmarkGraphic != null && m_CheckmarkStyle != null)
 			{
 				StyleValue val = m_CheckmarkStyle.GetValue();
