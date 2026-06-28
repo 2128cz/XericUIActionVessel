@@ -80,11 +80,11 @@ namespace XericUI.OverrideUI
 			m_TextureState?.SubscribeAll(OnStyleChanged);
 
 			m_OnOverrideColor?.Register();
-			m_OnOverrideColor.OnValueChanged += OnStyleChanged;
+			m_OnOverrideColor.Member.OnValueChanged += OnStyleChanged;
 			m_OnOverrideTexture?.Register();
-			m_OnOverrideTexture.OnValueChanged += OnStyleChanged;
+			m_OnOverrideTexture.Member.OnValueChanged += OnStyleChanged;
 			m_CheckmarkStyle?.Register();
-			m_CheckmarkStyle.OnValueChanged += OnStyleChanged;
+			m_CheckmarkStyle.Member.OnValueChanged += OnStyleChanged;
 
 			StyleRefreshManager.Register(this);
 			onValueChanged.AddListener(OnToggleValueChanged);
@@ -101,9 +101,9 @@ namespace XericUI.OverrideUI
 			m_TextureState?.UnsubscribeAll(OnStyleChanged);
 			m_ColorState?.UnregisterAll();
 			m_TextureState?.UnregisterAll();
-			if (m_OnOverrideColor != null) { m_OnOverrideColor.OnValueChanged -= OnStyleChanged; m_OnOverrideColor.Unregister(); }
-			if (m_OnOverrideTexture != null) { m_OnOverrideTexture.OnValueChanged -= OnStyleChanged; m_OnOverrideTexture.Unregister(); }
-			if (m_CheckmarkStyle != null) { m_CheckmarkStyle.OnValueChanged -= OnStyleChanged; m_CheckmarkStyle.Unregister(); }
+			if (m_OnOverrideColor != null) { m_OnOverrideColor.Member.OnValueChanged -= OnStyleChanged; m_OnOverrideColor.Unregister(); }
+			if (m_OnOverrideTexture != null) { m_OnOverrideTexture.Member.OnValueChanged -= OnStyleChanged; m_OnOverrideTexture.Unregister(); }
+			if (m_CheckmarkStyle != null) { m_CheckmarkStyle.Member.OnValueChanged -= OnStyleChanged; m_CheckmarkStyle.Unregister(); }
 
 			base.OnDisable();
 		}

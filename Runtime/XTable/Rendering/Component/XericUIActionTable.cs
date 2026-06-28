@@ -127,7 +127,7 @@ namespace XericUI.XTable.Rendering.Component
             if (m_TableData == null)
                 m_TableData = new XTableData();
 
-            m_Assembler = new CellAssembler(rectTransform);
+            m_Assembler = new CellAssembler(rectTransform, m_DefaultStyleNamespace);
             RecalculateTotalSize();
             EnsureDefaultStyleNamespace();
             CreateDefaultSampleData();
@@ -138,6 +138,8 @@ namespace XericUI.XTable.Rendering.Component
 
             if (!Application.isPlaying)
                 SubscribeEditorUpdate();
+            else
+                m_Assembler.OnStyleChangeDetected += OnPoolStyleChanged;
 
             MarkDirty(TableDirtyType.All);
         }
@@ -159,6 +161,9 @@ namespace XericUI.XTable.Rendering.Component
             if (m_ScrollRect != null)
                 m_ScrollRect.onValueChanged.RemoveListener(OnScrollValueChanged);
             UnsubscribeEditorUpdate();
+
+            if (m_Assembler != null)
+                m_Assembler.OnStyleChangeDetected -= OnPoolStyleChanged;
 
             // 销毁所有动态生成的对象
             if (m_Assembler != null)
@@ -548,7 +553,7 @@ namespace XericUI.XTable.Rendering.Component
             if (m_Assembler == null)
             {
                 if (rectTransform != null)
-                    m_Assembler = new CellAssembler(rectTransform);
+                    m_Assembler = new CellAssembler(rectTransform, m_DefaultStyleNamespace);
                 else return;
             }
 
@@ -678,7 +683,7 @@ namespace XericUI.XTable.Rendering.Component
 
             m_TableData = new XTableData();
 
-            m_Assembler = new CellAssembler(rectTransform);
+            m_Assembler = new CellAssembler(rectTransform, m_DefaultStyleNamespace);
             RecalculateTotalSize();
             CreateDefaultSampleData();
             CreateBackground();
@@ -692,12 +697,10 @@ namespace XericUI.XTable.Rendering.Component
 
         private void RenderCells(int sr, int er, int sc, int ec)
         {
-            Color fgColor = GetStyleColor(m_DefaultStyleNamespace, "/cell/fg/color",
-                new Color(0.05f, 0.05f, 0.05f));
+            Color fgFallback = new Color(0.05f, 0.05f, 0.05f);
             Color selectionColor = new Color(0.18f, 0.42f, 0.82f, 0.25f);
             Color multiSelectColor = new Color(0.18f, 0.42f, 0.82f, 0.12f);
             Color focusColor = new Color(0.22f, 0.55f, 0.95f, 0.35f);
-            int fontSize = GetStyleInt(m_DefaultStyleNamespace, "/cell/font/size", 14);
 
             for (int r = sr; r < er && r < m_RowHeights.Length; r++)
             {
@@ -708,6 +711,8 @@ namespace XericUI.XTable.Rendering.Component
                     float cellW = m_ColWidths[c];
                     float cellH = m_RowHeights[r];
                     XTableCellData data = TableData.GetCell(r, c);
+                    string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
+                        ? data.StyleNamespace : m_DefaultStyleNamespace;
 
                     // 多选范围高亮（覆盖被选中范围内的所有格）
                     if (IsInSelectionRange(r, c))
@@ -742,16 +747,25 @@ namespace XericUI.XTable.Rendering.Component
 
                     if (data == null) continue;
 
-                    // 文本：与 cell 同位置同尺寸，TMP 内部 Midline 对齐实现居中
+                    // 文本：与 cell 同位置同尺寸
                     if (!string.IsNullOrEmpty(data.Text))
                     {
-                        var txt = m_Assembler.GetText("cell_text");
+                        var txt = m_Assembler.GetText("cell_text", cellNS);
                         txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
                         txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
                         txt.Text.text = data.Text;
-                        txt.Text.color = fgColor;
-                        txt.Text.fontSize = fontSize;
-                        txt.Text.alignment = TextAlignmentOptions.Midline;
+
+#if UNITY_EDITOR
+                        // 编辑器模式：直接 pull 样式值（cellNS 可能是个性化命名空间）
+                        if (!Application.isPlaying)
+                        {
+                            txt.Text.color = GetStyleColor(cellNS, "/cell/fg/color", fgFallback);
+                            txt.Text.fontSize = GetStyleInt(cellNS, "/cell/font/size", 14);
+                            txt.Text.alignment = TextAlignmentOptions.Midline;
+                        }
+#endif
+                        // 运行时：颜色/字号/对齐由 StyleBoundElement 管理（push），
+                        // GetText(_, cellNS) 已通过 BindStyle 注册了对应命名空间的 StyleField
                     }
                 }
             }
@@ -867,6 +881,11 @@ namespace XericUI.XTable.Rendering.Component
 
         private void EnsureDefaultStyleNamespace()
         {
+            // 避免在样式表尚未加载时触发 HasStyle → GetValue 的命名空间不存在错误
+            var namespaces = StyleManager.GetAvailableNamespaces();
+            if (namespaces == null || !namespaces.Contains(m_DefaultStyleNamespace))
+                return;
+
             if (!StyleManager.HasStyle(m_DefaultStyleNamespace, "/cell/bg/color"))
             {
                 StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/bg/color",
@@ -883,6 +902,9 @@ namespace XericUI.XTable.Rendering.Component
         #region 其他
 
         private void MarkDirty(TableDirtyType type) => m_DirtyFlag.Mark(type);
+
+        /// <summary>运行时样式变更回调：标记脏数据，下一帧重绘</summary>
+        private void OnPoolStyleChanged() => MarkDirty(TableDirtyType.StyleChanged);
 
         private void OnScrollValueChanged(Vector2 _) => MarkDirty(TableDirtyType.ViewChanged);
 

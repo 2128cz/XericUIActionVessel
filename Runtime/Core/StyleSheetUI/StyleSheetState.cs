@@ -103,12 +103,12 @@ namespace XericUI.Core.StyleSheetUI
 
 		public void SubscribeAll(Action<StyleValue> callback)
 		{
-			foreach (var f in AllFields) { if (f != null) f.OnValueChanged += callback; }
+			foreach (var f in AllFields) { if (f != null) f.Member.OnValueChanged += callback; }
 		}
 
 		public void UnsubscribeAll(Action<StyleValue> callback)
 		{
-			foreach (var f in AllFields) { if (f != null) f.OnValueChanged -= callback; }
+			foreach (var f in AllFields) { if (f != null) f.Member.OnValueChanged -= callback; }
 		}
 
 		#endregion

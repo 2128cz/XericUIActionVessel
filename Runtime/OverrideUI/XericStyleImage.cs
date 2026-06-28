@@ -49,23 +49,37 @@ namespace XericUI.OverrideUI
 
 			if (!m_AutoRefresh) return;
 
-			m_ColorStyle?.Register();
-			m_TextureStyle?.Register();
-			m_MaterialStyle?.Register();
-			m_ColorStyle.OnValueChanged += OnStyleChanged;
-			m_TextureStyle.OnValueChanged += OnStyleChanged;
-			m_MaterialStyle.OnValueChanged += OnStyleChanged;
+			RegisterIfValid(m_ColorStyle);
+			RegisterIfValid(m_TextureStyle);
+			RegisterIfValid(m_MaterialStyle);
 
 			ApplyAllStyles();
 		}
 
 		protected override void OnDisable()
 		{
-			if (m_ColorStyle != null) { m_ColorStyle.OnValueChanged -= OnStyleChanged; m_ColorStyle.Unregister(); }
-			if (m_TextureStyle != null) { m_TextureStyle.OnValueChanged -= OnStyleChanged; m_TextureStyle.Unregister(); }
-			if (m_MaterialStyle != null) { m_MaterialStyle.OnValueChanged -= OnStyleChanged; m_MaterialStyle.Unregister(); }
+			UnregisterIfValid(m_ColorStyle);
+			UnregisterIfValid(m_TextureStyle);
+			UnregisterIfValid(m_MaterialStyle);
 
 			base.OnDisable();
+		}
+
+		private void RegisterIfValid(StyleField field)
+		{
+			if (field == null) return;
+			// 路径为空说明未在 Inspector 中配置，跳过注册避免空路径查询错误
+			if (string.IsNullOrEmpty(field.StylePath)) return;
+			field.Register();
+			field.Member.OnValueChanged += OnStyleChanged;
+		}
+
+		private void UnregisterIfValid(StyleField field)
+		{
+			if (field == null) return;
+			if (string.IsNullOrEmpty(field.StylePath)) return;
+			field.Member.OnValueChanged -= OnStyleChanged;
+			field.Unregister();
 		}
 
 		#endregion
@@ -83,12 +97,12 @@ namespace XericUI.OverrideUI
 			if (m_TextureStyle != null)
 			{
 				StyleValue val = m_TextureStyle.GetValue();
-				Sprite sp = val?.GetValueAs<Sprite>();
-				if (sp != null) { m_ResolvedSprite = sp; sprite = sp; }
-				else
+				if (val != null)
 				{
-					Texture2D tex = val?.GetValueAs<Texture2D>();
-					if (tex != null)
+					// 通过 Unity Object 基类获取并类型判断，抑制 Color→Object 转换的日志错误
+					Object obj = SafeGetObject<Object>(val);
+					if (obj is Sprite sp) { m_ResolvedSprite = sp; sprite = sp; }
+					else if (obj is Texture2D tex)
 					{
 						m_ResolvedSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
 						sprite = m_ResolvedSprite;
@@ -99,8 +113,11 @@ namespace XericUI.OverrideUI
 			if (m_MaterialStyle != null)
 			{
 				StyleValue val = m_MaterialStyle.GetValue();
-				Material mat = val?.GetValueAs<Material>();
-				if (mat != null) material = mat;
+				if (val != null)
+				{
+					Object obj = SafeGetObject<Object>(val);
+					if (obj is Material mat) material = mat;
+				}
 			}
 		}
 
@@ -108,6 +125,23 @@ namespace XericUI.OverrideUI
 		{
 			if (gameObject.activeInHierarchy)
 				ApplyAllStyles();
+		}
+
+		#endregion
+
+		#region 辅助
+
+		/// <summary>
+		/// 安全获取 UnityEngine.Object 类型值——临时关闭日志以抑制 StyleValue 内部的类型不匹配错误。
+		/// </summary>
+		private static T SafeGetObject<T>(StyleValue val) where T : Object
+		{
+			if (val == null) return null;
+			var logger = Debug.unityLogger;
+			bool prev = logger.logEnabled;
+			logger.logEnabled = false;
+			try { return val.GetValueAs<T>(); }
+			finally { logger.logEnabled = prev; }
 		}
 
 		#endregion

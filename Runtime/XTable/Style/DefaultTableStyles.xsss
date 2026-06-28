@@ -6,33 +6,33 @@
 namespace: xeric_table_default
 
 // ---- 单元格背景 ----
-/cell/bg/color = (1,1,1,1):UnityEngine.Color @Desc:单元格背景颜色
+cell/bg/color = (1,1,1,1):UnityEngine.Color @Desc:单元格背景颜色
 
 // ---- 单元格前景 ----
-/cell/fg/color = (0.1,0.1,0.1,1):UnityEngine.Color @Desc:单元格前景文字颜色
+cell/fg/color = (0.1,0.1,0.1,1):UnityEngine.Color @Desc:单元格前景文字颜色
 
 // ---- 边框 ----
-/cell/border/top/color = (0.8,0.8,0.8,1):UnityEngine.Color @Desc:上边框颜色
-/cell/border/top/width = 1:System.Single @Desc:上边框宽度
-/cell/border/bottom/color = (0.8,0.8,0.8,1):UnityEngine.Color @Desc:下边框颜色
-/cell/border/bottom/width = 1:System.Single @Desc:下边框宽度
-/cell/border/left/color = (0.8,0.8,0.8,1):UnityEngine.Color @Desc:左边框颜色
-/cell/border/left/width = 1:System.Single @Desc:左边框宽度
-/cell/border/right/color = (0.8,0.8,0.8,1):UnityEngine.Color @Desc:右边框颜色
-/cell/border/right/width = 1:System.Single @Desc:右边框宽度
+cell/border/top/color = (0.8,0.8,0.8,1):UnityEngine.Color @Desc:上边框颜色
+cell/border/top/width = 1:System.Single @Desc:上边框宽度
+cell/border/bottom/color = (0.8,0.8,0.8,1):UnityEngine.Color @Desc:下边框颜色
+cell/border/bottom/width = 1:System.Single @Desc:下边框宽度
+cell/border/left/color = (0.8,0.8,0.8,1):UnityEngine.Color @Desc:左边框颜色
+cell/border/left/width = 1:System.Single @Desc:左边框宽度
+cell/border/right/color = (0.8,0.8,0.8,1):UnityEngine.Color @Desc:右边框颜色
+cell/border/right/width = 1:System.Single @Desc:右边框宽度
 
 // ---- 选中高亮 ----
-/cell/selection/bg/color = (0.2,0.5,1,0.3):UnityEngine.Color @Desc:选中单元格高亮颜色
+cell/selection/bg/color = (0.2,0.5,1,0.3):UnityEngine.Color @Desc:选中单元格高亮颜色
 
 // ---- 表头样式 ----
-/header/bg/color = (0.9,0.9,0.9,1):UnityEngine.Color @Desc:表头背景颜色
-/header/fg/color = (0,0,0,1):UnityEngine.Color @Desc:表头文字颜色
+header/bg/color = (0.9,0.9,0.9,1):UnityEngine.Color @Desc:表头背景颜色
+header/fg/color = (0,0,0,1):UnityEngine.Color @Desc:表头文字颜色
 
 // ---- 字体 ----
-/cell/font/size = 14:System.Int32 @Desc:默认字体大小
-/cell/font/alignment = MiddleCenter:UnityEngine.TextAnchor @Desc:默认文本对齐
-/cell/font/richText = true:System.Boolean @Desc:是否启用富文本
+cell/font/size = 14:System.Int32 @Desc:默认字体大小
+cell/font/alignment = MiddleCenter:UnityEngine.TextAnchor @Desc:默认文本对齐
+cell/font/richText = true:System.Boolean @Desc:是否启用富文本
 
 // ---- 行高 / 列宽（缺省值） ----
-/cell/default/height = 40:System.Single @Desc:默认行高
-/cell/default/width = 100:System.Single @Desc:默认列宽
+cell/default/height = 40:System.Single @Desc:默认行高
+cell/default/width = 100:System.Single @Desc:默认列宽

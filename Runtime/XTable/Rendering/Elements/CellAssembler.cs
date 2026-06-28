@@ -42,6 +42,12 @@ namespace XericUI.XTable.Rendering.Elements
 		/// <summary>池根节点（所有回收对象均挂在此节点下，节点本身处于 inactive）</summary>
 		public Transform PoolRoot => m_PoolRoot;
 
+		/// <summary>运行时的默认样式命名空间（编辑器下为 null，不绑定）</summary>
+		private string m_DefaultStyleNamespace;
+
+		/// <summary>所有已绑定的 StyleBoundElement 回调集合（用于样式变更时通知外部）</summary>
+		public event System.Action OnStyleChangeDetected;
+
 		private Stack<PooledImage> m_ImagePool = new Stack<PooledImage>();
 		private Stack<PooledText> m_TextPool = new Stack<PooledText>();
 		private List<PooledImage> m_ActiveImages = new List<PooledImage>();
@@ -54,9 +60,10 @@ namespace XericUI.XTable.Rendering.Elements
 
 		#region 构造函数与析构
 
-		public CellAssembler(Transform parent)
+		public CellAssembler(Transform parent, string defaultStyleNamespace = null)
 		{
 			m_Parent = parent;
+			m_DefaultStyleNamespace = defaultStyleNamespace;
 
 			GameObject poolRoot = new GameObject("_CellPool");
 			poolRoot.hideFlags = POOL_FLAGS;
@@ -120,7 +127,7 @@ namespace XericUI.XTable.Rendering.Elements
 
 		#region 池操作
 
-		public PooledImage GetImage(string name = "cell_img")
+		public PooledImage GetImage(string name = "cell_img", string styleNamespace = null)
 		{
 			PooledImage item;
 			if (m_ImagePool.Count > 0)
@@ -134,11 +141,12 @@ namespace XericUI.XTable.Rendering.Elements
 			{
 				item = CreateImage(name);
 			}
+			BindStyle(item.Style, styleNamespace);
 			m_ActiveImages.Add(item);
 			return item;
 		}
 
-		public PooledText GetText(string name = "cell_text")
+		public PooledText GetText(string name = "cell_text", string styleNamespace = null)
 		{
 			PooledText item;
 			if (m_TextPool.Count > 0)
@@ -152,8 +160,30 @@ namespace XericUI.XTable.Rendering.Elements
 			{
 				item = CreateText(name);
 			}
+			BindStyle(item.Style, styleNamespace);
 			m_ActiveTexts.Add(item);
 			return item;
+		}
+
+		/// <summary>运行时绑定样式到池元素的 StyleBoundElement，实现被动更新（push）</summary>
+		private void BindStyle(StyleBoundElement style, string cellNamespace)
+		{
+			if (!Application.isPlaying) return;
+
+			string ns = cellNamespace ?? m_DefaultStyleNamespace;
+			if (string.IsNullOrEmpty(ns)) return;
+
+			if (style != null && style.BoundNamespace != ns)
+			{
+				style.OnStyleChangedCallback -= OnStyleChangedNotify;
+				style.OnStyleChangedCallback += OnStyleChangedNotify;
+				style.Bind(ns);
+			}
+		}
+
+		private void OnStyleChangedNotify()
+		{
+			OnStyleChangeDetected?.Invoke();
 		}
 
 		public void ReturnAll()

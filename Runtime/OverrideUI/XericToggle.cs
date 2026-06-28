@@ -75,26 +75,77 @@ namespace XericUI
 
 
         private XericImage m_ximage;
+        private bool m_ximageCached;
 
         protected XericImage ximage
         {
             get
             {
+                if (m_ximageCached)
+                    return m_ximage;
+
+                if (m_ximage)
+                {
+                    m_ximageCached = true;
+                    return m_ximage;
+                }
+
+#if UNITY_EDITOR
+                if (!graphic)
+                {
+                    m_ximageCached = true;
+                    return null;
+                }
+#endif
+                m_ximage = graphic.GetComponent<XericImage>();
+                m_ximageCached = true;
                 if (m_ximage)
                     return m_ximage;
 #if UNITY_EDITOR
-                if (!graphic)
-                    return null;
-#endif
-                m_ximage = graphic.GetComponent<XericImage>();
-                if (m_ximage)
-                    return m_ximage;
                 Debug.Log("请替换toggle的checkmark为XericImage以支持更多的功能");
+#endif
                 return null;
             }
         }
 
         private bool bindXImage;
+
+#if UNITY_EDITOR
+        protected override void OnEnable()
+        {
+            EnsureXericImageCheckmark();
+            base.OnEnable();
+        }
+
+        private void EnsureXericImageCheckmark()
+        {
+            if (graphic == null || graphic is XericImage) return;
+
+            var img = graphic as Image;
+            if (img == null) return;
+
+            var go = img.gameObject;
+            var sprite = img.sprite;
+            var color = img.color;
+            var material = img.material;
+            var raycastTarget = img.raycastTarget;
+            var type = img.type;
+
+            UnityEditor.Undo.DestroyObjectImmediate(img);
+            var ximg = UnityEditor.Undo.AddComponent<XericImage>(go);
+            ximg.sprite = sprite;
+            ximg.color = color;
+            ximg.material = material;
+            ximg.raycastTarget = raycastTarget;
+            ximg.type = type;
+            UnityEditor.EditorUtility.SetDirty(go);
+#if dUI_TextMeshPro
+            Debug.Log("已将 Toggle 的 Checkmark 自动替换为 XericImage，以支持更多功能");
+#else
+            Debug.Log("已将 Toggle 的 Checkmark 自动替换为 XericImage");
+#endif
+        }
+#endif
 
         protected override void InstantClearState()
         {

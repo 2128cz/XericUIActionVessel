@@ -32,12 +32,19 @@ namespace XericUI.XTable.Rendering.Elements
 		/// <summary>是否已绑定</summary>
 		private bool m_IsBound;
 
+		/// <summary>样式变更时触发（通知表格重绘）</summary>
+		public event System.Action OnStyleChangedCallback;
+
+		/// <summary>当前绑定的命名空间（空字符串表示未绑定）</summary>
+		public string BoundNamespace => m_IsBound ? (m_StyleNamespace ?? "") : "";
+
 		#endregion
 
 		#region 公开方法
 
 		/// <summary>
 		/// 绑定到指定命名空间并开始监听样式。
+		/// 运行时注册 StyleField 实现被动更新（push）；编辑器下在渲染时直接 pull。
 		/// </summary>
 		public void Bind(string styleNamespace)
 		{
@@ -45,6 +52,11 @@ namespace XericUI.XTable.Rendering.Elements
 			m_StyleNamespace = styleNamespace;
 
 			if (string.IsNullOrEmpty(styleNamespace)) return;
+
+			// 检查命名空间是否存在，避免 Register → GetValue 报错
+			var namespaces = StyleManager.GetAvailableNamespaces();
+			if (namespaces == null || !namespaces.Contains(styleNamespace))
+				return;
 
 			// 预注册常用路径
 			RegisterField("/cell/bg/color", OnStyleChanged);
@@ -72,7 +84,7 @@ namespace XericUI.XTable.Rendering.Elements
 			{
 				if (kvp.Value != null)
 				{
-					kvp.Value.OnValueChanged -= OnStyleChanged;
+					kvp.Value.Member.OnValueChanged -= OnStyleChanged;
 					kvp.Value.Unregister();
 				}
 			}
@@ -125,7 +137,7 @@ namespace XericUI.XTable.Rendering.Elements
 				StylePath = path
 			};
 			field.Register();
-			field.OnValueChanged += callback;
+			field.Member.OnValueChanged += callback;
 			m_Fields[path] = field;
 		}
 
@@ -137,6 +149,7 @@ namespace XericUI.XTable.Rendering.Elements
 		private void OnStyleChanged(StyleValue val)
 		{
 			RefreshAll();
+			OnStyleChangedCallback?.Invoke();
 		}
 
 		#endregion
