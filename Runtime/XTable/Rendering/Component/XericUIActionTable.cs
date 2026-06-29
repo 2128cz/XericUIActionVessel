@@ -766,6 +766,34 @@ namespace XericUI.XTable.Rendering.Component
             RefreshView();
         }
 
+        /// <summary>构建剪贴板数据对象（尺寸 + 单元格文本 + 合并信息）</summary>
+        public XTableClipboardData BuildClipboardData()
+        {
+            return XTableClipboardData.FromTable(this);
+        }
+
+        /// <summary>将剪贴板数据应用到表格——覆盖尺寸、命名空间、单元格文本、合并信息并刷新</summary>
+        public void ApplyClipboardData(XTableClipboardData data)
+        {
+            if (data == null) return;
+
+            // 应用尺寸与默认命名空间
+            if (data.RowHeights != null && data.RowHeights.Length > 0)
+                m_RowHeights = data.RowHeights;
+            if (data.ColWidths != null && data.ColWidths.Length > 0)
+                m_ColWidths = data.ColWidths;
+            if (!string.IsNullOrEmpty(data.DefaultStyleNamespace))
+                m_DefaultStyleNamespace = data.DefaultStyleNamespace;
+
+            // 写回单元格文本与合并信息
+            data.PopulateToTable(this);
+
+            MarkDirty(TableDirtyType.DataChanged);
+            RecalculateTotalSize();
+            RefreshView();
+            SetChildrenVisible(m_ChildrenVisible);
+        }
+
         #endregion
 
         #region 单元格渲染

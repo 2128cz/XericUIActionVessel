@@ -43,7 +43,7 @@ namespace XericUI.Core.StyleSheetUI
 		/// </summary>
 		public static void ForceRefreshAll()
 		{
-#if XERIC_STYLESHEET_ENABLED
+#if XericLibrary
 			XericLibrary.Runtime.SuperStyleSheet.StyleManager.ForceRefresh();
 #endif
 

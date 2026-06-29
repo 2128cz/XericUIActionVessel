@@ -1,6 +1,8 @@
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
+using XericLibrary.Runtime.MacroLibrary;
+using XericUI.XTable.Core;
 using XericUI.XTable.Rendering.Component;
 
 namespace XericUIEditor.XTable
@@ -89,6 +91,33 @@ namespace XericUIEditor.XTable
                     m_Table.ForceStyleRefresh();
                     m_Table.SetChildrenVisible(m_ShowChildren);
                 }
+
+                EditorGUILayout.Space(4);
+
+                EditorGUILayout.BeginHorizontal();
+                if (GUILayout.Button("导出到剪贴板", GUILayout.Height(26)))
+                {
+                    var data = m_Table.BuildClipboardData();
+                    MacroFile.SetClipboardObject(data, MacroFile.JsonSerializerFormatter.formatterWithZip);
+                    Debug.Log($"[XTable] 表格数据已导出到剪贴板 ({data.Cells?.Count ?? 0} 个单元格, {data.Merges?.Count ?? 0} 个合并)");
+                }
+                if (GUILayout.Button("从剪贴板导入", GUILayout.Height(26)))
+                {
+                    var data = MacroFile.GetClipboardObject<XTableClipboardData>(MacroFile.JsonSerializerFormatter.formatterWithZip);
+                    if (data != null)
+                    {
+                        Undo.RecordObject(m_Table, "Import Table from Clipboard");
+                        m_Table.ApplyClipboardData(data);
+                        serializedObject.Update();
+                        Repaint();
+                        Debug.Log($"[XTable] 已从剪贴板导入表格数据 ({data.Cells?.Count ?? 0} 个单元格, {data.Merges?.Count ?? 0} 个合并)");
+                    }
+                    else
+                    {
+                        Debug.LogWarning("[XTable] 剪贴板中没有有效的表格数据");
+                    }
+                }
+                EditorGUILayout.EndHorizontal();
 
                 EditorGUILayout.Space(4);
 
