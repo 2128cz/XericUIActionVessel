@@ -777,6 +777,10 @@ namespace XericUI.XTable.Rendering.Component
         {
             if (data == null) return;
 
+            // 确保数据层存在
+            if (m_TableData == null)
+                m_TableData = new XTableData();
+
             // 应用尺寸与默认命名空间
             if (data.RowHeights != null && data.RowHeights.Length > 0)
                 m_RowHeights = data.RowHeights;

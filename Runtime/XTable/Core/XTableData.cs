@@ -285,6 +285,18 @@ namespace XericUI.XTable.Core
 		}
 
 		/// <summary>
+		/// 清除所有块的全部合并描述
+		/// </summary>
+		public void ClearAllMerges()
+		{
+			foreach (var kv in BlockMap)
+			{
+				if (kv.Value.MergeDescriptors != null)
+					kv.Value.MergeDescriptors.Clear();
+			}
+		}
+
+		/// <summary>
 		/// 取消指定坐标所在合并——同时处理"点击源坐标"和"点击被合并坐标"两种情况。
 		/// 遍历所有块，移除所有指向该源的合并描述。
 		/// </summary>

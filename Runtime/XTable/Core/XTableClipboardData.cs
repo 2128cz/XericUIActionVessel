@@ -158,9 +158,10 @@ namespace XericUI.XTable.Core
 				}
 			}
 
-			// 合并信息
+			// 合并信息——先清除再重建，防止残留描述干扰
 			if (Merges != null)
 			{
+				td.ClearAllMerges();
 				foreach (var merge in Merges)
 				{
 					if (merge.RowSpan > 1 || merge.ColSpan > 1)
