@@ -12,7 +12,7 @@ using XericLibrary.Runtime.SuperStyleSheet;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
-
+//233333Git666
 namespace XericUI.XTable.Rendering.Component
 {
     /// <summary>
@@ -22,7 +22,7 @@ namespace XericUI.XTable.Rendering.Component
     /// </summary>
     [ExecuteAlways]
     [AddComponentMenu("Xeric UI Vessel/Table/Xeric UI Action Table", 60)]
-    public class XericUIActionTable : XericUIBehaciour, IPointerClickHandler
+    public partial class XericUIActionTable : XericUIBehaciour, IPointerClickHandler
     {
         #region 常量
 
