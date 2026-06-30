@@ -22,7 +22,7 @@ namespace XericUI.XTable.Rendering.Component
     /// </summary>
     [ExecuteAlways]
     [AddComponentMenu("Xeric UI Vessel/Table/Xeric UI Action Table", 60)]
-    public class XericUIActionTable : XericUIBehaciour, IPointerClickHandler
+    public partial class XericUIActionTable : XericUIBehaciour, IPointerClickHandler
     {
         #region 常量
 
@@ -660,7 +660,7 @@ namespace XericUI.XTable.Rendering.Component
             bgRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
 
             var bgImg = m_BackgroundGo.GetComponent<Image>();
-            bgImg.color = GetStyleColor(m_DefaultStyleNamespace, "/cell/bg/color", new Color(0.18f, 0.18f, 0.18f, 1f));
+            bgImg.color = GetCellBgColor(m_DefaultStyleNamespace);
             bgImg.raycastTarget = false;
         }
 
@@ -800,16 +800,15 @@ namespace XericUI.XTable.Rendering.Component
 
         private void RenderCells(int sr, int er, int sc, int ec)
         {
-            Color fgFallback = new Color(0.05f, 0.05f, 0.05f);
             string ns = m_DefaultStyleNamespace;
 
             // 编辑器模式：从样式表 pull 所有颜色值
 #if UNITY_EDITOR
             if (!Application.isPlaying)
             {
-                Color selectionColor = GetStyleColor(ns, "/cell/selection/bg/color", new Color(0.2f, 0.5f, 1f, 0.3f));
-                Color borderColor = GetStyleColor(ns, "/cell/border/bottom/color", new Color(0.35f, 0.35f, 0.35f, 0.5f));
-                float borderWidth = GetStyleFloat(ns, "/cell/border/bottom/width", 1f);
+                Color selectionColor = GetCellSelectionBgColor(ns);
+                Color borderColor = GetCellBorderColor(ns);
+                float borderWidth = GetCellBorderWidth(ns);
 
                 Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * 0.4f);
                 Color focusColor = new Color(selectionColor.r + 0.04f, selectionColor.g + 0.13f, selectionColor.b + 0.13f, selectionColor.a * 1.4f);
@@ -876,10 +875,10 @@ namespace XericUI.XTable.Rendering.Component
                             txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
                             txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
                             txt.Text.text = data.Text;
-                            txt.Text.color = GetStyleColor(cellNS, "/cell/fg/color", fgFallback);
-                            txt.Text.fontSize = GetStyleInt(cellNS, "/cell/font/size", 14);
+                            txt.Text.color = GetCellFgColor(cellNS);
+                            txt.Text.fontSize = GetCellFontSize(cellNS);
                             txt.Text.alignment = TextAlignmentOptions.Midline;
-                            txt.Text.font = GetStyleFontAsset(cellNS, "/cell/font/fontAsset") ?? txt.Text.font;
+                            txt.Text.font = GetCellFontAsset(cellNS) ?? txt.Text.font;
                         }
                     }
                 }
@@ -888,9 +887,9 @@ namespace XericUI.XTable.Rendering.Component
 #endif
 
             // 运行时模式
-            Color rtSelectionColor = new Color(0.18f, 0.42f, 0.82f, 0.25f);
-            Color rtMultiSelectColor = new Color(0.18f, 0.42f, 0.82f, 0.12f);
-            Color rtFocusColor = new Color(0.22f, 0.55f, 0.95f, 0.35f);
+            Color rtSelectionColor = RT_SELECTION_COLOR;
+            Color rtMultiSelectColor = RT_MULTI_SELECT_COLOR;
+            Color rtFocusColor = RT_FOCUS_COLOR;
 
             for (int r = sr; r < er && r < m_RowHeights.Length; r++)
             {
@@ -935,13 +934,13 @@ namespace XericUI.XTable.Rendering.Component
 
                     var hLine = m_Assembler.GetImage("cell_hline");
                     hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
-                    hLine.Rect.sizeDelta = new Vector2(cellW, 1f);
-                    hLine.Image.color = new Color(0.35f, 0.35f, 0.35f, 0.5f);
+                    hLine.Rect.sizeDelta = new Vector2(cellW, RT_BORDER_WIDTH);
+                    hLine.Image.color = RT_BORDER_COLOR;
 
                     var vLine = m_Assembler.GetImage("cell_vline");
-                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - 1, cellY);
-                    vLine.Rect.sizeDelta = new Vector2(1f, cellH);
-                    vLine.Image.color = new Color(0.35f, 0.35f, 0.35f, 0.5f);
+                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - RT_BORDER_WIDTH, cellY);
+                    vLine.Rect.sizeDelta = new Vector2(RT_BORDER_WIDTH, cellH);
+                    vLine.Image.color = RT_BORDER_COLOR;
 
                     if (data == null) continue;
 
@@ -951,16 +950,7 @@ namespace XericUI.XTable.Rendering.Component
                         txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
                         txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
                         txt.Text.text = data.Text;
-
-#if UNITY_EDITOR
-                        if (!Application.isPlaying)
-                        {
-                            txt.Text.color = GetStyleColor(cellNS, "/cell/fg/color", fgFallback);
-                            txt.Text.fontSize = GetStyleInt(cellNS, "/cell/font/size", 14);
-                            txt.Text.alignment = TextAlignmentOptions.Midline;
-                            txt.Text.font = GetStyleFontAsset(cellNS, "/cell/font/fontAsset") ?? txt.Text.font;
-                        }
-#endif
+                        // 运行时样式由 StyleBoundElement 被动更新，此处仅设置文本内容
                     }
                 }
             }
@@ -1090,45 +1080,32 @@ namespace XericUI.XTable.Rendering.Component
 
         private void EnsureDefaultStyleNamespace()
         {
-            // 避免在样式表尚未加载时触发 HasStyle → GetValue 的命名空间不存在错误
-            var namespaces = StyleManager.GetAvailableNamespaces();
-            if (namespaces == null || !namespaces.Contains(m_DefaultStyleNamespace))
+            // 检查命名空间是否已存在，避免 HasStyle → GetValue 对不存在的命名空间报错
+            bool nsExists = StyleManager.GetAvailableNamespaces()?.Contains(m_DefaultStyleNamespace) == true;
+
+            // 命名空间已存在且样式已加载（来自 .xsss），无需添加回退值
+            if (nsExists && StyleManager.HasStyle(m_DefaultStyleNamespace, STYLE_CELL_BG_COLOR))
                 return;
 
-            if (!StyleManager.HasStyle(m_DefaultStyleNamespace, "/cell/bg/color"))
-            {
-                // 回退默认值匹配 DefaultTableStyles.xsss
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/bg/color", Color.white);
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/fg/color",
-                    new Color(0.1f, 0.1f, 0.1f));
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/top/color",
-                    new Color(0.8f, 0.8f, 0.8f));
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/top/width", 1f);
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/bottom/color",
-                    new Color(0.8f, 0.8f, 0.8f));
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/bottom/width", 1f);
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/left/color",
-                    new Color(0.8f, 0.8f, 0.8f));
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/left/width", 1f);
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/right/color",
-                    new Color(0.8f, 0.8f, 0.8f));
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/border/right/width", 1f);
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/selection/bg/color",
-                    new Color(0.2f, 0.5f, 1f, 0.3f));
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/font/size", 14);
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/font/alignment", "MiddleCenter");
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/font/richText", true);
-#if UNITY_EDITOR
-                // 编辑器下尝试加载默认字体资源
-                var defaultFont = UnityEditor.AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(
-                    "Packages/com.lrss3.xericuiactionvessel/Runtime/Font/SourceHanSansSC-Regular-2 SDF.asset");
-                if (defaultFont != null)
-                    StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/font/fontAsset", defaultFont);
-#endif
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/default/height", 40f);
-                StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/default/width", 100f);
-                StyleManager.ForceRefresh();
-            }
+            // 回退默认值匹配 DefaultTableStyles.xsss
+            // AddDynamicStyle 自动创建命名空间（如果尚不存在）
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BG_COLOR, DEFAULT_BG_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_FG_COLOR, DEFAULT_FG_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_TOP_COLOR, DEFAULT_BORDER_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_TOP_WIDTH, DEFAULT_BORDER_WIDTH);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_BOTTOM_COLOR, DEFAULT_BORDER_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_BOTTOM_WIDTH, DEFAULT_BORDER_WIDTH);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_LEFT_COLOR, DEFAULT_BORDER_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_LEFT_WIDTH, DEFAULT_BORDER_WIDTH);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_RIGHT_COLOR, DEFAULT_BORDER_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_RIGHT_WIDTH, DEFAULT_BORDER_WIDTH);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_SELECTION_BG_COLOR, DEFAULT_SELECTION_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_FONT_SIZE, DEFAULT_FONT_SIZE);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_FONT_ALIGNMENT, DEFAULT_FONT_ALIGNMENT);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_FONT_RICH_TEXT, DEFAULT_FONT_RICH_TEXT);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_DEFAULT_HEIGHT, DEFAULT_CELL_HEIGHT);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_DEFAULT_WIDTH, DEFAULT_CELL_WIDTH);
+            StyleManager.ForceRefresh();
         }
 
         #endregion
