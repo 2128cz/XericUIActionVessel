@@ -1,7 +1,7 @@
 using UnityEditor;
 
 using UnityEngine;
-
+using XericLibrary.Runtime.MacroLibrary;
 using XericLibrary.Runtime.SuperStyleSheet;
 using XericUI.XTable.Core;
 using XericUI.XTable.Mapping;
@@ -179,7 +179,9 @@ namespace XericUIEditor.XTable
 			Canvas.ForceUpdateCanvases();
 #endif
 
-			RectTransform tableRt = table.GetComponent<RectTransform>();
+			// 使用 Content 的 RectTransform 进行定位计算（而非表格组件所在的 ScrollRect 根节点）
+			RectTransform tableRt = table.ContentTransform.RectTransform();
+			if (tableRt == null) tableRt = table.GetComponent<RectTransform>();
 			float[] rh = table.RowHeights;
 			float[] cw = table.ColWidths;
 			if (rh == null || cw == null || rh.Length == 0 || cw.Length == 0) return;
@@ -361,31 +363,32 @@ namespace XericUIEditor.XTable
 					s_DragStartCol = col;
 
 					if (Event.current.shift && table.SelectedRow >= 0)
-					{
-						if (!table.HasMultiSelection)
-							table.StartMultiSelect(table.SelectedRow, table.SelectedCol);
-						table.ExtendMultiSelect(r, col);
-					}
+				{
+					if (!table.HasMultiSelection)
+						table.SelectCell(table.SelectedRow, table.SelectedCol, r, col);
 					else
-					{
-						table.StartMultiSelect(r, col);
-					}
-
-					table.RefreshView();
-					SyncEditText(table);
-					Event.current.Use();
-					SceneView.RepaintAll();
+						table.SelectionHandle.ExtendTo(r, col);
+				}
+				else
+				{
+					table.SelectCell(r, col);
 				}
 
-				y += cellH;
+				table.RefreshView();
+				SyncEditText(table);
+				Event.current.Use();
+				SceneView.RepaintAll();
 			}
+
+			y += cellH;
 		}
+	}
 
-		#endregion
+	#endregion
 
-		#region 列标签
+	#region 列标签
 
-		private static void DrawColumnLabels(float[] cw, Rect tableRect,
+	private static void DrawColumnLabels(float[] cw, Rect tableRect,
 			float xScale, float yScale, XericUIActionTable table)
 		{
 			var style = new GUIStyle(GUI.skin.label)
@@ -436,25 +439,26 @@ namespace XericUIEditor.XTable
 					s_DragStartCol = c;
 
 					if (Event.current.shift && table.SelectedCol >= 0)
-					{
-						if (!table.HasMultiSelection)
-							table.StartMultiSelect(table.SelectedRow, table.SelectedCol);
-						table.ExtendMultiSelect(row, c);
-					}
+				{
+					if (!table.HasMultiSelection)
+						table.SelectCell(table.SelectedRow, table.SelectedCol, row, c);
 					else
-					{
-						table.StartMultiSelect(row, c);
-					}
-
-					table.RefreshView();
-					SyncEditText(table);
-					Event.current.Use();
-					SceneView.RepaintAll();
+						table.SelectionHandle.ExtendTo(row, c);
+				}
+				else
+				{
+					table.SelectCell(row, c);
 				}
 
-				x += cellW;
+				table.RefreshView();
+				SyncEditText(table);
+				Event.current.Use();
+				SceneView.RepaintAll();
 			}
+
+			x += cellW;
 		}
+	}
 
 		#endregion
 
@@ -972,15 +976,16 @@ namespace XericUIEditor.XTable
 					s_DragStartCol = mdCol;
 
 					if (e.shift && table.SelectedRow >= 0 && table.SelectedCol >= 0)
-					{
-						if (!table.HasMultiSelection)
-							table.StartMultiSelect(table.SelectedRow, table.SelectedCol);
-						table.ExtendMultiSelect(mdRow, mdCol);
-					}
+				{
+					if (!table.HasMultiSelection)
+						table.SelectCell(table.SelectedRow, table.SelectedCol, mdRow, mdCol);
 					else
-					{
-						table.StartMultiSelect(mdRow, mdCol);
-					}
+						table.SelectionHandle.ExtendTo(mdRow, mdCol);
+				}
+				else
+				{
+					table.SelectCell(mdRow, mdCol);
+				}
 
 					table.RefreshView();
 					SyncEditText(table);
@@ -994,7 +999,7 @@ namespace XericUIEditor.XTable
 					CellFromMouse(tr, xScale, yScale, out int dragRow, out int dragCol);
 					if (dragRow < 0 || dragCol < 0) break;
 
-					table.ExtendMultiSelect(dragRow, dragCol);
+					table.SelectionHandle.ExtendTo(dragRow, dragCol);
 					table.RefreshView();
 					SyncEditText(table);
 					e.Use();
@@ -1127,16 +1132,17 @@ namespace XericUIEditor.XTable
 			}
 
 			if (shift)
-			{
-				if (!table.HasMultiSelection && table.SelectedRow >= 0 && table.SelectedCol >= 0)
-					table.StartMultiSelect(table.SelectedRow, table.SelectedCol);
-				table.ExtendMultiSelect(row, col);
-			}
+		{
+			if (!table.HasMultiSelection && table.SelectedRow >= 0 && table.SelectedCol >= 0)
+				table.SelectCell(table.SelectedRow, table.SelectedCol, row, col);
 			else
-			{
-				RedirectToMergeSource(ref row, ref col);
-				table.SelectCell(row, col);
-			}
+				table.SelectionHandle.ExtendTo(row, col);
+		}
+		else
+		{
+			RedirectToMergeSource(ref row, ref col);
+			table.SelectCell(row, col);
+		}
 
 			table.RefreshView();
 			SyncEditText(table);

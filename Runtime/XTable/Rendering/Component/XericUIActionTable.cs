@@ -9,6 +9,7 @@ using XericUI.XTable.Core;
 using XericUI.XTable.Mapping;
 using XericUI.XTable.Rendering.Elements;
 using XericLibrary.Runtime.SuperStyleSheet;
+using XericUI.XTable.Core;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -53,16 +54,15 @@ namespace XericUI.XTable.Rendering.Component
         [System.NonSerialized] private CellAssembler m_Assembler;
         [System.NonSerialized] private XTableDirtyFlag m_DirtyFlag;
 
-        private int m_SelectedRow = -1;
-        private int m_SelectedCol = -1;
-
-        // 多选范围
-        private int m_SelectStartRow = -1;
-        private int m_SelectStartCol = -1;
-        private int m_SelectEndRow = -1;
-        private int m_SelectEndCol = -1;
+        [System.NonSerialized] private XTableSelectionHandle m_SelectionHandle;
 
         [System.NonSerialized] private GameObject m_BackgroundGo;
+
+        /// <summary>预制体实例缓存，key 为 (row, col)，用于复用已实例化的预制体</summary>
+        [System.NonSerialized] private Dictionary<(int, int), GameObject> m_PrefabInstances;
+
+        /// <summary>表格四叉树——按 StyleNamespace 分区，渲染阶段查询可见象限</summary>
+        [System.NonSerialized] private XTableQuadtree m_Quadtree;
 
         private float m_TotalWidth;
         private float m_TotalHeight;
@@ -100,14 +100,26 @@ namespace XericUI.XTable.Rendering.Component
         public float[] ColWidths => m_ColWidths;
 
         public string DefaultStyleNamespace => m_DefaultStyleNamespace;
-        public int SelectedRow => m_SelectedRow;
-        public int SelectedCol => m_SelectedCol;
 
-        public int SelectStartRow => m_SelectStartRow;
-        public int SelectStartCol => m_SelectStartCol;
-        public int SelectEndRow => m_SelectEndRow;
-        public int SelectEndCol => m_SelectEndCol;
-        public bool HasMultiSelection => m_SelectStartRow >= 0 && m_SelectEndRow >= 0;
+        /// <summary>选中操作句柄——外部可通过此句柄控制选区，或直接操作 StartRow/StartCol 等属性</summary>
+        public XTableSelectionHandle SelectionHandle
+        {
+            get
+            {
+                if (m_SelectionHandle == null)
+                    m_SelectionHandle = new XTableSelectionHandle();
+                return m_SelectionHandle;
+            }
+        }
+
+        // ── 向后兼容属性（供 Editor 脚本使用）──
+        public int SelectedRow => SelectionHandle.StartRow;
+        public int SelectedCol => SelectionHandle.StartCol;
+        public int SelectStartRow => SelectionHandle.StartRow;
+        public int SelectStartCol => SelectionHandle.StartCol;
+        public int SelectEndRow => SelectionHandle.EndRow;
+        public int SelectEndCol => SelectionHandle.EndCol;
+        public bool HasMultiSelection => SelectionHandle.HasMultiSelection;
 
         /// <summary>动态子对象在 Hierarchy 中是否可见（仅编辑器有效）</summary>
         public bool ChildrenVisible
@@ -119,12 +131,214 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>判断单元格是否在多选范围内</summary>
         public bool IsInSelectionRange(int row, int col)
         {
-            if (!HasMultiSelection) return false;
-            int minR = Mathf.Min(m_SelectStartRow, m_SelectEndRow);
-            int maxR = Mathf.Max(m_SelectStartRow, m_SelectEndRow);
-            int minC = Mathf.Min(m_SelectStartCol, m_SelectEndCol);
-            int maxC = Mathf.Max(m_SelectStartCol, m_SelectEndCol);
-            return row >= minR && row <= maxR && col >= minC && col <= maxC;
+            return SelectionHandle.IsInRange(row, col);
+        }
+
+        /// <summary>
+        /// 动态子对象挂载的父节点。
+        /// 若绑定了 ScrollRect 则使用其 Content，否则回退到自身的 rectTransform。
+        /// </summary>
+        public Transform ContentTransform
+        {
+            get
+            {
+                if (m_ScrollRect != null && m_ScrollRect.content != null)
+                    return m_ScrollRect.content;
+                return rectTransform;
+            }
+        }
+
+        /// <summary>
+        /// 基于四叉树查询结果渲染可见象限。
+        /// 每个均匀象限渲染整块背景+边框，然后遍历象限内单元格渲染文本/预制体/选择高亮。
+        /// </summary>
+        private void RenderQuadrants(List<QuadrantResult> quadrants)
+        {
+            string ns = m_DefaultStyleNamespace;
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                Color borderColor = GetCellBorderColor(ns);
+                float borderWidth = GetCellBorderWidth(ns);
+                Color selectionColor = GetCellSelectionBgColor(ns);
+                Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * 0.4f);
+                Color focusColor = new Color(selectionColor.r + 0.04f, selectionColor.g + 0.13f, selectionColor.b + 0.13f, selectionColor.a * 1.4f);
+
+                foreach (var q in quadrants)
+                {
+                    if (string.IsNullOrEmpty(q.Namespace)) continue;
+
+                    Rect r = q.Region;
+                    string qNs = q.Namespace;
+
+                    // 象限整块背景
+                    var bgImg = m_Assembler.GetImage("quad_bg", qNs);
+                    bgImg.Rect.anchoredPosition = new Vector2(r.x, -r.y);
+                    bgImg.Rect.sizeDelta = new Vector2(r.width, r.height);
+                    bgImg.Image.color = GetCellBgColor(qNs);
+
+                    // 象限底部边框
+                    var hLine = m_Assembler.GetImage("quad_hline");
+                    hLine.Rect.anchoredPosition = new Vector2(r.x, -r.y - r.height);
+                    hLine.Rect.sizeDelta = new Vector2(r.width, borderWidth);
+                    hLine.Image.color = borderColor;
+
+                    // 象限右侧边框
+                    var vLine = m_Assembler.GetImage("quad_vline");
+                    vLine.Rect.anchoredPosition = new Vector2(r.x + r.width - borderWidth, -r.y);
+                    vLine.Rect.sizeDelta = new Vector2(borderWidth, r.height);
+                    vLine.Image.color = borderColor;
+
+                    // 渲染象限内各单元格的文本/预制体/选择高亮
+                    if (q.Cells != null)
+                    {
+                        foreach (var (row, col) in q.Cells)
+                        {
+                            // 跳过被合并覆盖的单元格
+                            if (TableData.IsCellMerged(row, col)) continue;
+
+                            float cellX = GetColLeftX(col);
+                            float cellY = -GetRowTopY(row);
+                            float cellW = m_ColWidths[col];
+                            float cellH = m_RowHeights[row];
+
+                            // 合并源：扩展尺寸
+                            if (TableData.IsMergeSource(row, col, out int mergeRS, out int mergeCS))
+                            {
+                                for (int i = 1; i < mergeCS && col + i < m_ColWidths.Length; i++)
+                                    cellW += m_ColWidths[col + i];
+                                for (int i = 1; i < mergeRS && row + i < m_RowHeights.Length; i++)
+                                    cellH += m_RowHeights[row + i];
+                            }
+
+                            XTableCellData data = TableData.GetCell(row, col);
+                            string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
+                                ? data.StyleNamespace : ns;
+
+                            // 选择高亮
+                            if (IsInSelectionRange(row, col))
+                            {
+                                var selImg = m_Assembler.GetImage("cell_multiselect");
+                                selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                                selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                                selImg.Image.color = (row == SelectionHandle.StartRow && col == SelectionHandle.StartCol)
+                                    ? focusColor : multiSelectColor;
+                            }
+                            else if (row == SelectionHandle.StartRow && col == SelectionHandle.StartCol)
+                            {
+                                var selImg = m_Assembler.GetImage("cell_select");
+                                selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                                selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                                selImg.Image.color = selectionColor;
+                            }
+
+                            if (data == null) continue;
+
+                            if (!string.IsNullOrEmpty(data.Text))
+                            {
+                                var txt = m_Assembler.GetText("cell_text", cellNS);
+                                txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
+                                txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                txt.Text.text = data.Text;
+                                txt.Text.color = GetCellFgColor(cellNS);
+                                txt.Text.fontSize = GetCellFontSize(cellNS);
+                                txt.Text.alignment = TextAlignmentOptions.Midline;
+                                txt.Text.font = GetCellFontAsset(cellNS) ?? txt.Text.font;
+                            }
+
+                            if (data.Prefab != null)
+                                PositionPrefabInstance(row, col, data.Prefab, cellX, cellY, cellW, cellH);
+                        }
+                    }
+                }
+                return;
+            }
+#endif
+
+            // 运行时模式
+            Color rtSelectionColor = RT_SELECTION_COLOR;
+            Color rtMultiSelectColor = RT_MULTI_SELECT_COLOR;
+            Color rtFocusColor = RT_FOCUS_COLOR;
+
+            foreach (var q in quadrants)
+            {
+                if (string.IsNullOrEmpty(q.Namespace)) continue;
+
+                Rect r = q.Region;
+                string qNs = q.Namespace;
+
+                var bgImg = m_Assembler.GetImage("quad_bg", qNs);
+                bgImg.Rect.anchoredPosition = new Vector2(r.x, -r.y);
+                bgImg.Rect.sizeDelta = new Vector2(r.width, r.height);
+                bgImg.Image.color = GetCellBgColor(qNs);
+
+                var hLine = m_Assembler.GetImage("quad_hline");
+                hLine.Rect.anchoredPosition = new Vector2(r.x, -r.y - r.height);
+                hLine.Rect.sizeDelta = new Vector2(r.width, RT_BORDER_WIDTH);
+                hLine.Image.color = RT_BORDER_COLOR;
+
+                var vLine = m_Assembler.GetImage("quad_vline");
+                vLine.Rect.anchoredPosition = new Vector2(r.x + r.width - RT_BORDER_WIDTH, -r.y);
+                vLine.Rect.sizeDelta = new Vector2(RT_BORDER_WIDTH, r.height);
+                vLine.Image.color = RT_BORDER_COLOR;
+
+                if (q.Cells != null)
+                {
+                    foreach (var (row, col) in q.Cells)
+                    {
+                        // 跳过被合并覆盖的单元格
+                        if (TableData.IsCellMerged(row, col)) continue;
+
+                        float cellX = GetColLeftX(col);
+                        float cellY = -GetRowTopY(row);
+                        float cellW = m_ColWidths[col];
+                        float cellH = m_RowHeights[row];
+
+                        // 合并源：扩展尺寸
+                        if (TableData.IsMergeSource(row, col, out int mergeRS, out int mergeCS))
+                        {
+                            for (int i = 1; i < mergeCS && col + i < m_ColWidths.Length; i++)
+                                cellW += m_ColWidths[col + i];
+                            for (int i = 1; i < mergeRS && row + i < m_RowHeights.Length; i++)
+                                cellH += m_RowHeights[row + i];
+                        }
+
+                        XTableCellData data = TableData.GetCell(row, col);
+                        string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
+                            ? data.StyleNamespace : ns;
+
+                        if (IsInSelectionRange(row, col))
+                        {
+                            var selImg = m_Assembler.GetImage("cell_multiselect");
+                            selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                            selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                            selImg.Image.color = (row == SelectionHandle.StartRow && col == SelectionHandle.StartCol)
+                                ? rtFocusColor : rtMultiSelectColor;
+                        }
+                        else if (row == SelectionHandle.StartRow && col == SelectionHandle.StartCol)
+                        {
+                            var selImg = m_Assembler.GetImage("cell_select");
+                            selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                            selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                            selImg.Image.color = rtSelectionColor;
+                        }
+
+                        if (data == null) continue;
+
+                        if (!string.IsNullOrEmpty(data.Text))
+                        {
+                            var txt = m_Assembler.GetText("cell_text", cellNS);
+                            txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
+                            txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                            txt.Text.text = data.Text;
+                        }
+
+                        if (data.Prefab != null)
+                            PositionPrefabInstance(row, col, data.Prefab, cellX, cellY, cellW, cellH);
+                    }
+                }
+            }
         }
 
         #endregion
@@ -141,7 +355,7 @@ namespace XericUI.XTable.Rendering.Component
             if (m_TableData == null)
                 m_TableData = new XTableData();
 
-            m_Assembler = new CellAssembler(rectTransform, m_DefaultStyleNamespace);
+            m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
             RecalculateTotalSize();
             EnsureDefaultStyleNamespace();
             CreateDefaultSampleData();
@@ -191,6 +405,7 @@ namespace XericUI.XTable.Rendering.Component
             // 销毁所有动态生成的对象
             if (m_Assembler != null)
                 m_Assembler.DestroyAll();
+            ClearPrefabInstances();
             if (m_BackgroundGo != null)
             {
                 if (Application.isPlaying) Destroy(m_BackgroundGo);
@@ -422,13 +637,8 @@ namespace XericUI.XTable.Rendering.Component
                 newArr[i] = m_RowHeights[i + 1];
             m_RowHeights = newArr;
 
-            // 更新选中状态
-            if (m_SelectedRow >= m_RowHeights.Length)
-                m_SelectedRow = Mathf.Max(-1, m_RowHeights.Length - 1);
-            if (m_SelectStartRow >= m_RowHeights.Length)
-                m_SelectStartRow = Mathf.Max(-1, m_RowHeights.Length - 1);
-            if (m_SelectEndRow >= m_RowHeights.Length)
-                m_SelectEndRow = Mathf.Max(-1, m_RowHeights.Length - 1);
+            // 裁剪选区到新尺寸
+            ClampSelectionToBounds();
 
             MarkDirty(TableDirtyType.LayoutChanged | TableDirtyType.DataChanged | TableDirtyType.SelectionChanged);
 #if UNITY_EDITOR
@@ -474,13 +684,8 @@ namespace XericUI.XTable.Rendering.Component
                 newArr[i] = m_ColWidths[i + 1];
             m_ColWidths = newArr;
 
-            // 更新选中状态
-            if (m_SelectedCol >= m_ColWidths.Length)
-                m_SelectedCol = Mathf.Max(-1, m_ColWidths.Length - 1);
-            if (m_SelectStartCol >= m_ColWidths.Length)
-                m_SelectStartCol = Mathf.Max(-1, m_ColWidths.Length - 1);
-            if (m_SelectEndCol >= m_ColWidths.Length)
-                m_SelectEndCol = Mathf.Max(-1, m_ColWidths.Length - 1);
+            // 裁剪选区到新尺寸
+            ClampSelectionToBounds();
 
             MarkDirty(TableDirtyType.LayoutChanged | TableDirtyType.DataChanged | TableDirtyType.SelectionChanged);
 #if UNITY_EDITOR
@@ -488,51 +693,36 @@ namespace XericUI.XTable.Rendering.Component
 #endif
         }
 
+        /// <summary>设置外部选择句柄（替换内部句柄）</summary>
+        public void SetSelectionHandle(XTableSelectionHandle handle)
+        {
+            if (m_SelectionHandle != null)
+                m_SelectionHandle.OnSelectionChanged -= OnHandleSelectionChanged;
+            m_SelectionHandle = handle;
+            if (m_SelectionHandle != null)
+                m_SelectionHandle.OnSelectionChanged += OnHandleSelectionChanged;
+            MarkDirty(TableDirtyType.SelectionChanged);
+        }
+
+        /// <summary>单选一个单元格</summary>
         public void SelectCell(int row, int col)
         {
-            ClearMultiSelection();
-            m_SelectedRow = row;
-            m_SelectedCol = col;
+            SelectionHandle.Select(row, col);
             MarkDirty(TableDirtyType.SelectionChanged);
         }
 
+        /// <summary>多选一个范围</summary>
+        public void SelectCell(int startRow, int startCol, int endRow, int endCol)
+        {
+            SelectionHandle.Select(startRow, startCol, endRow, endCol);
+            MarkDirty(TableDirtyType.SelectionChanged);
+        }
+
+        /// <summary>清除选择</summary>
         public void ClearSelection()
         {
-            m_SelectedRow = -1;
-            m_SelectedCol = -1;
-            ClearMultiSelection();
+            SelectionHandle.Clear();
             MarkDirty(TableDirtyType.SelectionChanged);
-        }
-
-        /// <summary>开始多选（以当前格为锚点）</summary>
-        public void StartMultiSelect(int row, int col)
-        {
-            m_SelectStartRow = row;
-            m_SelectStartCol = col;
-            m_SelectEndRow = row;
-            m_SelectEndCol = col;
-            m_SelectedRow = row;
-            m_SelectedCol = col;
-            MarkDirty(TableDirtyType.SelectionChanged);
-        }
-
-        /// <summary>扩展多选范围到目标格</summary>
-        public void ExtendMultiSelect(int row, int col)
-        {
-            m_SelectEndRow = row;
-            m_SelectEndCol = col;
-            m_SelectedRow = row;
-            m_SelectedCol = col;
-            MarkDirty(TableDirtyType.SelectionChanged);
-        }
-
-        /// <summary>清除多选范围</summary>
-        public void ClearMultiSelection()
-        {
-            m_SelectStartRow = -1;
-            m_SelectStartCol = -1;
-            m_SelectEndRow = -1;
-            m_SelectEndCol = -1;
         }
 
         /// <summary>通过文本选择一个单元格（如 "A0"）</summary>
@@ -551,30 +741,36 @@ namespace XericUI.XTable.Rendering.Component
                     out int sr, out int sc, out int er, out int ec))
                 return false;
 
-            ClearSelection();
-            m_SelectStartRow = sr;
-            m_SelectStartCol = sc;
-            m_SelectEndRow = er;
-            m_SelectEndCol = ec;
-            m_SelectedRow = sr;
-            m_SelectedCol = sc;
-            MarkDirty(TableDirtyType.SelectionChanged);
+            SelectCell(sr, sc, er, ec);
             return true;
         }
 
         /// <summary>获取当前选区的文本描述（单格 "A0"，多格 "A0:B1"）</summary>
         public string GetSelectionText()
         {
-            if (m_SelectedRow < 0 || m_SelectedCol < 0) return string.Empty;
-            if (HasMultiSelection &&
-                (m_SelectStartRow != m_SelectEndRow || m_SelectStartCol != m_SelectEndCol))
+            if (!SelectionHandle.HasSelection) return string.Empty;
+            if (SelectionHandle.HasMultiSelection)
             {
                 return XTableCoordinateFormat.RangeToText(
-                    m_SelectStartRow, m_SelectStartCol,
-                    m_SelectEndRow, m_SelectEndCol);
+                    SelectionHandle.MinRow, SelectionHandle.MinCol,
+                    SelectionHandle.MaxRow, SelectionHandle.MaxCol);
             }
 
-            return XTableCoordinateFormat.CellToText(m_SelectedRow, m_SelectedCol);
+            return XTableCoordinateFormat.CellToText(
+                SelectionHandle.StartRow, SelectionHandle.StartCol);
+        }
+
+        private void OnHandleSelectionChanged(XTableSelectionHandle handle)
+        {
+            MarkDirty(TableDirtyType.SelectionChanged);
+        }
+
+        /// <summary>裁剪选区到当前行列尺寸范围内</summary>
+        private void ClampSelectionToBounds()
+        {
+            int maxR = (m_RowHeights?.Length ?? 0) - 1;
+            int maxC = (m_ColWidths?.Length ?? 0) - 1;
+            SelectionHandle.ClampTo(maxR, maxC);
         }
 
         public void RefreshView()
@@ -583,7 +779,7 @@ namespace XericUI.XTable.Rendering.Component
             if (m_Assembler == null)
             {
                 if (rectTransform != null)
-                    m_Assembler = new CellAssembler(rectTransform, m_DefaultStyleNamespace);
+                    m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
                 else return;
             }
 
@@ -607,14 +803,18 @@ namespace XericUI.XTable.Rendering.Component
                 bgRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
             }
 
+            // 清理上一次渲染的预制体实例
+            ClearPrefabInstances();
+
             // 回收池
             m_Assembler.ReturnAll();
 
             // 额外清理孤立的直接子对象（防止域重载或异常流程产生的残留）
             Transform poolRoot = m_Assembler.PoolRoot;
-            for (int i = rectTransform.childCount - 1; i >= 0; i--)
+            Transform contentT = ContentTransform;
+            for (int i = contentT.childCount - 1; i >= 0; i--)
             {
-                var child = rectTransform.GetChild(i);
+                var child = contentT.GetChild(i);
                 if ((poolRoot != null && child == poolRoot)) continue;
                 if (m_BackgroundGo != null && child.gameObject == m_BackgroundGo) continue;
 
@@ -625,14 +825,21 @@ namespace XericUI.XTable.Rendering.Component
                     DestroyImmediate(child.gameObject);
             }
 
-            // 计算可见范围
-            int sr, er, sc, ec;
-            CalcVisibleRange(out sr, out er, out sc, out ec);
-
-            if (er <= sr || ec <= sc) return;
-
-            // 渲染每个可见单元格
-            RenderCells(sr, er, sc, ec);
+            // 渲染可见单元格：优先使用四叉树查询
+            if (m_Quadtree != null && m_Quadtree.IsBuilt)
+            {
+                var quadrants = new List<QuadrantResult>();
+                m_Quadtree.QueryVisible(m_VisibleRect, quadrants);
+                RenderQuadrants(quadrants);
+            }
+            else
+            {
+                // 回退：传统行列遍历
+                int sr, er, sc, ec;
+                CalcVisibleRange(out sr, out er, out sc, out ec);
+                if (er > sr && ec > sc)
+                    RenderCells(sr, er, sc, ec);
+            }
 
             m_DirtyFlag.Clear();
             OnTableRefreshed?.Invoke();
@@ -667,13 +874,14 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>销毁 transform 下所有子对象（用于域重载后清理残留）</summary>
         private void ClearAllChildren()
         {
-            if (rectTransform == null) return;
+            Transform t = ContentTransform;
+            if (t == null) return;
 
 #if UNITY_EDITOR
             // 编辑器模式下先重置 HideFlags 再销毁，防止 DontSave 对象拒绝销毁
-            while (rectTransform.childCount > 0)
+            while (t.childCount > 0)
             {
-                var child = rectTransform.GetChild(0);
+                var child = t.GetChild(0);
                 child.gameObject.hideFlags = HideFlags.None;
                 if (Application.isPlaying)
                     Destroy(child.gameObject);
@@ -681,9 +889,9 @@ namespace XericUI.XTable.Rendering.Component
                     DestroyImmediate(child.gameObject);
             }
 #else
-			for (int i = rectTransform.childCount - 1; i >= 0; i--)
+			for (int i = t.childCount - 1; i >= 0; i--)
 			{
-				var child = rectTransform.GetChild(i);
+				var child = t.GetChild(i);
 				Destroy(child.gameObject);
 			}
 #endif
@@ -694,10 +902,11 @@ namespace XericUI.XTable.Rendering.Component
         {
             m_ChildrenVisible = visible;
 #if UNITY_EDITOR
-            if (rectTransform == null) return;
-            for (int i = rectTransform.childCount - 1; i >= 0; i--)
+            Transform t = ContentTransform;
+            if (t == null) return;
+            for (int i = t.childCount - 1; i >= 0; i--)
             {
-                var child = rectTransform.GetChild(i);
+                var child = t.GetChild(i);
                 child.gameObject.hideFlags = visible
                     ? HideFlags.DontSave
                     : HideFlags.DontSave | HideFlags.HideInHierarchy;
@@ -715,7 +924,7 @@ namespace XericUI.XTable.Rendering.Component
 
             m_TableData = new XTableData();
 
-            m_Assembler = new CellAssembler(rectTransform, m_DefaultStyleNamespace);
+            m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
             RecalculateTotalSize();
             CreateDefaultSampleData();
             CreateBackground();
@@ -754,6 +963,48 @@ namespace XericUI.XTable.Rendering.Component
                     m_TableData.GetOrCreateCell(r, c).Text = kv.Value;
             }
 
+            RefreshView();
+            SetChildrenVisible(m_ChildrenVisible);
+        }
+
+        /// <summary>
+        /// 清空所有数据（单元格文本、合并信息），但保留行列排布和样式。
+        /// 等价于"清空内容但不改变表格结构"。
+        /// </summary>
+        public void ClearData()
+        {
+            if (m_TableData != null)
+            {
+                m_TableData.ClearAllMerges();
+                m_TableData.BlockMap.Clear();
+            }
+            ClearPrefabInstances();
+            m_Quadtree?.Clear();
+            ClearSelection();
+            MarkDirty(TableDirtyType.DataChanged);
+            RefreshView();
+        }
+
+        /// <summary>
+        /// 清空表格所有内容——数据、行列、样式，等同 <see cref="FullRebuild"/> 但不创建默认示例数据。
+        /// </summary>
+        public void ClearTable()
+        {
+            m_Assembler?.DestroyAll();
+            ClearPrefabInstances();
+            m_Quadtree?.Clear();
+            ClearAllChildren();
+            m_BackgroundGo = null;
+
+            m_TableData = new XTableData();
+            m_RowHeights = null;
+            m_ColWidths = null;
+            ClearSelection();
+
+            m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+            MarkDirty(TableDirtyType.All);
+            RecalculateTotalSize();
+            CreateBackground();
             RefreshView();
             SetChildrenVisible(m_ChildrenVisible);
         }
@@ -848,10 +1099,10 @@ namespace XericUI.XTable.Rendering.Component
                             var selImg = m_Assembler.GetImage("cell_multiselect");
                             selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
                             selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
-                            selImg.Image.color = (r == m_SelectedRow && c == m_SelectedCol)
+                            selImg.Image.color = (r == SelectionHandle.StartRow && c == SelectionHandle.StartCol)
                                 ? focusColor : multiSelectColor;
                         }
-                        else if (r == m_SelectedRow && c == m_SelectedCol)
+                        else if (r == SelectionHandle.StartRow && c == SelectionHandle.StartCol)
                         {
                             var selImg = m_Assembler.GetImage("cell_select");
                             selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
@@ -884,6 +1135,10 @@ namespace XericUI.XTable.Rendering.Component
                             txt.Text.alignment = TextAlignmentOptions.Midline;
                             txt.Text.font = GetCellFontAsset(cellNS) ?? txt.Text.font;
                         }
+
+                        // 预制体渲染
+                        if (data.Prefab != null)
+                            PositionPrefabInstance(r, c, data.Prefab, cellX, cellY, cellW, cellH);
                     }
                 }
                 return;
@@ -925,10 +1180,10 @@ namespace XericUI.XTable.Rendering.Component
                         var selImg = m_Assembler.GetImage("cell_multiselect");
                         selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
                         selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
-                        selImg.Image.color = (r == m_SelectedRow && c == m_SelectedCol)
+                        selImg.Image.color = (r == SelectionHandle.StartRow && c == SelectionHandle.StartCol)
                             ? rtFocusColor : rtMultiSelectColor;
                     }
-                    else if (r == m_SelectedRow && c == m_SelectedCol)
+                    else if (r == SelectionHandle.StartRow && c == SelectionHandle.StartCol)
                     {
                         var selImg = m_Assembler.GetImage("cell_select");
                         selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
@@ -956,8 +1211,67 @@ namespace XericUI.XTable.Rendering.Component
                         txt.Text.text = data.Text;
                         // 运行时样式由 StyleBoundElement 被动更新，此处仅设置文本内容
                     }
+
+                    // 预制体渲染
+                    if (data.Prefab != null)
+                        PositionPrefabInstance(r, c, data.Prefab, cellX, cellY, cellW, cellH);
                 }
             }
+        }
+
+        #endregion
+
+        #region 预制体管理
+
+        /// <summary>获取或创建指定单元格的预制体实例</summary>
+        private GameObject GetOrCreatePrefabInstance(int row, int col, GameObject prefab)
+        {
+            if (m_PrefabInstances == null)
+                m_PrefabInstances = new Dictionary<(int, int), GameObject>();
+
+            var key = (row, col);
+            if (m_PrefabInstances.TryGetValue(key, out GameObject existing) && existing != null)
+                return existing;
+
+            GameObject instance = Instantiate(prefab, ContentTransform);
+            instance.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
+            instance.name = $"_prefab_{row}_{col}";
+            m_PrefabInstances[key] = instance;
+            return instance;
+        }
+
+        /// <summary>定位预制体实例到指定单元格区域（锚点左上角，枢轴左上角）</summary>
+        private void PositionPrefabInstance(int row, int col, GameObject prefab, float cellX, float cellY, float cellW, float cellH)
+        {
+            GameObject instance = GetOrCreatePrefabInstance(row, col, prefab);
+            if (instance == null) return;
+
+            RectTransform prt = instance.GetComponent<RectTransform>();
+            if (prt == null) prt = instance.AddComponent<RectTransform>();
+
+            prt.anchorMin = new Vector2(0, 1);
+            prt.anchorMax = new Vector2(0, 1);
+            prt.pivot = new Vector2(0, 1);
+            prt.anchoredPosition = new Vector2(cellX, cellY);
+            prt.sizeDelta = new Vector2(cellW, cellH);
+        }
+
+        /// <summary>销毁所有已缓存的预制体实例</summary>
+        private void ClearPrefabInstances()
+        {
+            if (m_PrefabInstances == null) return;
+
+            foreach (var kv in m_PrefabInstances)
+            {
+                if (kv.Value != null)
+                {
+                    if (Application.isPlaying)
+                        Destroy(kv.Value);
+                    else
+                        DestroyImmediate(kv.Value);
+                }
+            }
+            m_PrefabInstances.Clear();
         }
 
         #endregion
@@ -1116,12 +1430,59 @@ namespace XericUI.XTable.Rendering.Component
 
         #region 其他
 
-        private void MarkDirty(TableDirtyType type) => m_DirtyFlag.Mark(type);
+        private void MarkDirty(TableDirtyType type)
+        {
+            m_DirtyFlag.Mark(type);
+
+            // 数据或布局变更时重建四叉树
+            if ((type & (TableDirtyType.DataChanged | TableDirtyType.LayoutChanged)) != 0)
+                MaintainQuadtree();
+        }
 
         /// <summary>运行时样式变更回调：标记脏数据，下一帧重绘</summary>
         private void OnPoolStyleChanged() => MarkDirty(TableDirtyType.StyleChanged);
 
         private void OnScrollValueChanged(Vector2 _) => MarkDirty(TableDirtyType.ViewChanged);
+
+        #endregion
+
+        #region 四叉树
+
+        /// <summary>强制重建四叉树（外部调用入口，适合编辑器调试或手动刷新）</summary>
+        public void ForceRebuildQuadtree()
+        {
+            if (m_Quadtree == null)
+                m_Quadtree = new XTableQuadtree();
+            MaintainQuadtree();
+        }
+
+        /// <summary>从当前 XTableData 收集单元格信息并重建四叉树</summary>
+        private void MaintainQuadtree()
+        {
+            if (m_TableData == null || m_RowHeights == null || m_ColWidths == null)
+                return;
+            if (m_Quadtree == null)
+                m_Quadtree = new XTableQuadtree();
+
+            // 收集所有有数据的单元格（跳过被合并覆盖的子单元格）
+            var cells = new List<XTableQuadtreeCell>();
+            for (int r = 0; r < m_RowHeights.Length; r++)
+            {
+                for (int c = 0; c < m_ColWidths.Length; c++)
+                {
+                    if (m_TableData.IsCellMerged(r, c)) continue;
+
+                    var data = m_TableData.GetCell(r, c);
+                    if (data == null) continue;
+
+                    string ns = !string.IsNullOrEmpty(data.StyleNamespace)
+                        ? data.StyleNamespace : m_DefaultStyleNamespace;
+                    cells.Add(new XTableQuadtreeCell { Row = r, Col = c, Namespace = ns });
+                }
+            }
+
+            m_Quadtree.Build(m_TotalWidth, m_TotalHeight, m_RowHeights, m_ColWidths, cells);
+        }
 
         #endregion
 

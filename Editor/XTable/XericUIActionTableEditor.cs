@@ -176,18 +176,26 @@ namespace XericUIEditor.XTable
         [MenuItem("GameObject/Xeric UI/Table/Xeric UI Action Table", false, 60)]
         private static void CreateTable(MenuCommand menuCommand)
         {
-            // 1. 创建表格内容节点
-            GameObject contentGo = new GameObject("Content",
-                typeof(RectTransform), typeof(CanvasRenderer), typeof(XericUIActionTable));
+            // 1. 创建根节点：ScrollRect + Image + XericUIActionTable 共存于同一 GameObject
+            GameObject rootGo = new GameObject("Xeric UI Action Table",
+                typeof(RectTransform), typeof(ScrollRect), typeof(Image), typeof(XericUIActionTable));
+            RectTransform rootRt = rootGo.GetComponent<RectTransform>();
+            rootRt.sizeDelta = new Vector2(800, 600);
+            rootGo.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.1f, 0.3f);
+
+            ScrollRect scrollRect = rootGo.GetComponent<ScrollRect>();
+            XericUIActionTable table = rootGo.GetComponent<XericUIActionTable>();
+
+            // 2. 创建 Content（纯 RectTransform，由表格组件管理动态子对象）
+            GameObject contentGo = new GameObject("Content", typeof(RectTransform));
             RectTransform contentRt = contentGo.GetComponent<RectTransform>();
             contentRt.anchorMin = new Vector2(0, 1);
             contentRt.anchorMax = new Vector2(0, 1);
             contentRt.pivot = new Vector2(0, 1);
             contentRt.anchoredPosition = Vector2.zero;
             contentRt.sizeDelta = new Vector2(800, 600);
-            XericUIActionTable table = contentGo.GetComponent<XericUIActionTable>();
 
-            // 2. 创建 Viewport（Mask 裁剪区域）
+            // 3. 创建 Viewport（Mask 裁剪区域）
             GameObject viewportGo = new GameObject("Viewport",
                 typeof(RectTransform), typeof(Image), typeof(Mask));
             viewportGo.GetComponent<Image>().color = new Color(1, 1, 1, 0.01f);
@@ -197,7 +205,7 @@ namespace XericUIEditor.XTable
             vpRt.sizeDelta = Vector2.zero;
             contentRt.SetParent(vpRt, false);
 
-            // 3. 创建水平滚动条
+            // 4. 创建水平滚动条
             GameObject hScrollbarGo = new GameObject("Scrollbar Horizontal",
                 typeof(RectTransform), typeof(Scrollbar), typeof(Image));
             RectTransform hBarRt = hScrollbarGo.GetComponent<RectTransform>();
@@ -217,7 +225,7 @@ namespace XericUIEditor.XTable
             RectTransform hSlidingRt = hSlidingGo.GetComponent<RectTransform>();
             hSlidingRt.anchorMin = Vector2.zero;
             hSlidingRt.anchorMax = Vector2.one;
-            hSlidingRt.sizeDelta = new Vector2(-20, -20);
+            hSlidingRt.sizeDelta = new Vector2(-20, 0);
 
             GameObject hHandleGo = new GameObject("Handle",
                 typeof(RectTransform), typeof(Image));
@@ -225,11 +233,11 @@ namespace XericUIEditor.XTable
             RectTransform hHandleRt = hHandleGo.GetComponent<RectTransform>();
             hHandleRt.anchorMin = Vector2.zero;
             hHandleRt.anchorMax = Vector2.one;
-            hHandleRt.sizeDelta = new Vector2(-20, -20);
+            hHandleRt.sizeDelta = new Vector2(-10, -10);
             hHandleGo.GetComponent<Image>().color = new Color(0.4f, 0.4f, 0.4f, 0.8f);
             hBar.handleRect = hHandleRt;
 
-            // 4. 创建垂直滚动条
+            // 5. 创建垂直滚动条
             GameObject vScrollbarGo = new GameObject("Scrollbar Vertical",
                 typeof(RectTransform), typeof(Scrollbar), typeof(Image));
             RectTransform vBarRt = vScrollbarGo.GetComponent<RectTransform>();
@@ -249,7 +257,7 @@ namespace XericUIEditor.XTable
             RectTransform vSlidingRt = vSlidingGo.GetComponent<RectTransform>();
             vSlidingRt.anchorMin = Vector2.zero;
             vSlidingRt.anchorMax = Vector2.one;
-            vSlidingRt.sizeDelta = new Vector2(-20, -20);
+            vSlidingRt.sizeDelta = new Vector2(0, -20);
 
             GameObject vHandleGo = new GameObject("Handle",
                 typeof(RectTransform), typeof(Image));
@@ -257,18 +265,11 @@ namespace XericUIEditor.XTable
             RectTransform vHandleRt = vHandleGo.GetComponent<RectTransform>();
             vHandleRt.anchorMin = Vector2.zero;
             vHandleRt.anchorMax = Vector2.one;
-            vHandleRt.sizeDelta = new Vector2(-20, -20);
+            vHandleRt.sizeDelta = new Vector2(-10, -10);
             vHandleGo.GetComponent<Image>().color = new Color(0.4f, 0.4f, 0.4f, 0.8f);
             vBar.handleRect = vHandleRt;
 
-            // 5. 创建 ScrollView 根节点
-            GameObject scrollGo = new GameObject("Xeric UI Action Table",
-                typeof(RectTransform), typeof(ScrollRect), typeof(Image));
-            RectTransform scrollRt = scrollGo.GetComponent<RectTransform>();
-            scrollRt.sizeDelta = new Vector2(800, 600);
-            scrollGo.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.1f, 0.3f);
-
-            ScrollRect scrollRect = scrollGo.GetComponent<ScrollRect>();
+            // 6. 配置 ScrollRect
             scrollRect.content = contentRt;
             scrollRect.viewport = vpRt;
             scrollRect.horizontalScrollbar = hBar;
@@ -278,11 +279,11 @@ namespace XericUIEditor.XTable
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
 
             // 组装层级
-            vpRt.SetParent(scrollRt, false);
-            hScrollbarGo.transform.SetParent(scrollRt, false);
-            vScrollbarGo.transform.SetParent(scrollRt, false);
+            vpRt.SetParent(rootRt, false);
+            hScrollbarGo.transform.SetParent(rootRt, false);
+            vScrollbarGo.transform.SetParent(rootRt, false);
 
-            // 绑定 ScrollRect 到表格（通过 SerializedObject 正确回写）
+            // 绑定 ScrollRect 到表格
             using (SerializedObject so = new SerializedObject(table))
             {
                 SerializedProperty prop = so.FindProperty("m_ScrollRect");
@@ -295,10 +296,10 @@ namespace XericUIEditor.XTable
 
             // 挂载到 Canvas
             GameObject parent = GetOrCreateCanvas();
-            scrollRt.SetParent(parent.transform, false);
+            rootRt.SetParent(parent.transform, false);
 
-            Undo.RegisterCreatedObjectUndo(scrollGo, "Create Xeric UI Action Table");
-            Selection.activeGameObject = scrollGo;
+            Undo.RegisterCreatedObjectUndo(rootGo, "Create Xeric UI Action Table");
+            Selection.activeGameObject = rootGo;
         }
 
         private static GameObject GetOrCreateCanvas()
