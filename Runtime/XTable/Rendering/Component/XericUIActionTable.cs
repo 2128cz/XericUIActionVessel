@@ -9,6 +9,9 @@ using XericUI.XTable.Core;
 using XericUI.XTable.Mapping;
 using XericUI.XTable.Rendering.Elements;
 using XericLibrary.Runtime.SuperStyleSheet;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace XericUI.XTable.Rendering.Component
 {
@@ -723,6 +726,48 @@ namespace XericUI.XTable.Rendering.Component
             SetChildrenVisible(m_ChildrenVisible);
         }
 
+        /// <summary>重新生成表格但保留已有文本数据——先保存，重建后再回填</summary>
+        public void FullRebuildPreservingData()
+        {
+            // 保存当前单元格文本
+            var savedTexts = new Dictionary<(int, int), string>();
+            if (m_TableData != null)
+            {
+                int rows = m_RowHeights?.Length ?? 0;
+                int cols = m_ColWidths?.Length ?? 0;
+                for (int r = 0; r < rows; r++)
+                {
+                    for (int c = 0; c < cols; c++)
+                    {
+                        var cell = m_TableData.GetCell(r, c);
+                        if (cell != null && !string.IsNullOrEmpty(cell.Text))
+                            savedTexts[(r, c)] = cell.Text;
+                    }
+                }
+            }
+
+            FullRebuild();
+
+            // 恢复文本数据
+            foreach (var kv in savedTexts)
+            {
+                int r = kv.Key.Item1, c = kv.Key.Item2;
+                if (r < (m_RowHeights?.Length ?? 0) && c < (m_ColWidths?.Length ?? 0))
+                    m_TableData.GetOrCreateCell(r, c).Text = kv.Value;
+            }
+
+            RefreshView();
+            SetChildrenVisible(m_ChildrenVisible);
+        }
+
+        /// <summary>仅强制刷新样式，不重建数据结构</summary>
+        public void ForceStyleRefresh()
+        {
+            StyleManager.ForceRefresh();
+            MarkDirty(TableDirtyType.StyleChanged);
+            RefreshView();
+        }
+
         #endregion
 
         #region 单元格渲染
@@ -808,6 +853,7 @@ namespace XericUI.XTable.Rendering.Component
                             txt.Text.color = GetStyleColor(cellNS, "/cell/fg/color", fgFallback);
                             txt.Text.fontSize = GetStyleInt(cellNS, "/cell/font/size", 14);
                             txt.Text.alignment = TextAlignmentOptions.Midline;
+                            txt.Text.font = GetStyleFontAsset(cellNS, "/cell/font/fontAsset") ?? txt.Text.font;
                         }
                     }
                 }
@@ -886,6 +932,7 @@ namespace XericUI.XTable.Rendering.Component
                             txt.Text.color = GetStyleColor(cellNS, "/cell/fg/color", fgFallback);
                             txt.Text.fontSize = GetStyleInt(cellNS, "/cell/font/size", 14);
                             txt.Text.alignment = TextAlignmentOptions.Midline;
+                            txt.Text.font = GetStyleFontAsset(cellNS, "/cell/font/fontAsset") ?? txt.Text.font;
                         }
 #endif
                     }
@@ -1007,6 +1054,14 @@ namespace XericUI.XTable.Rendering.Component
             return val != null ? (float)val : fallback;
         }
 
+        private TMP_FontAsset GetStyleFontAsset(string ns, string path, TMP_FontAsset fallback = null)
+        {
+            StyleValue val = StyleManager.GetValue(ns, path);
+            if (val == null) return fallback;
+            try { return val.GetValueAs<TMP_FontAsset>(); }
+            catch { return fallback; }
+        }
+
         private void EnsureDefaultStyleNamespace()
         {
             // 避免在样式表尚未加载时触发 HasStyle → GetValue 的命名空间不存在错误
@@ -1037,6 +1092,13 @@ namespace XericUI.XTable.Rendering.Component
                 StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/font/size", 14);
                 StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/font/alignment", "MiddleCenter");
                 StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/font/richText", true);
+#if UNITY_EDITOR
+                // 编辑器下尝试加载默认字体资源
+                var defaultFont = UnityEditor.AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(
+                    "Packages/com.lrss3.xericuiactionvessel/Runtime/Font/SourceHanSansSC-Regular-2 SDF.asset");
+                if (defaultFont != null)
+                    StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/font/fontAsset", defaultFont);
+#endif
                 StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/default/height", 40f);
                 StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, "/cell/default/width", 100f);
                 StyleManager.ForceRefresh();

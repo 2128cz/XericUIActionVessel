@@ -80,14 +80,13 @@ namespace XericUIEditor.XTable
 
                 if (GUILayout.Button("重新生成表格", GUILayout.Height(26)))
                 {
-                    m_Table.FullRebuild();
+                    m_Table.FullRebuildPreservingData();
                     m_Table.SetChildrenVisible(m_ShowChildren);
                 }
 
                 if (GUILayout.Button("强制刷新样式", GUILayout.Height(26)))
                 {
-                    XericLibrary.Runtime.SuperStyleSheet.StyleManager.ForceRefresh();
-                    m_Table.FullRebuild();
+                    m_Table.ForceStyleRefresh();
                     m_Table.SetChildrenVisible(m_ShowChildren);
                 }
 

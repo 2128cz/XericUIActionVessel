@@ -217,6 +217,25 @@ namespace XericUIEditor.XTable
 			// ★ 状态机：必须最先执行，后续所有逻辑依赖 s_State
 			UpdateState();
 
+			// Unity 2021 兼容：阻止鼠标事件穿透 overlay 到背后 UI 对象
+			// 原理：在 overlay 区域注册默认控件，Scene View 拣选系统检测到控件后
+			//       不再选中背后 GameObject（Canvas、ScrollRect 等）
+			if (s_State == EditorState.TableNavigation)
+			{
+				// 覆盖区域：行标签 + 列表头 + 表格主体 + 底部工具栏
+				Rect overlayArea = new Rect(
+					tableRect.x - COL_W - MARGIN,                    // 包含行标签
+					tableRect.y - ROW_H - MARGIN,                    // 包含列表头
+					tableRect.width + COL_W + MARGIN + 4,            // 包含行标签
+					tableRect.height + ROW_H + MARGIN + 56);         // 包含列表头+工具栏
+
+				if (overlayArea.Contains(Event.current.mousePosition))
+				{
+					int blockId = GUIUtility.GetControlID(FocusType.Passive);
+					HandleUtility.AddDefaultControl(blockId);
+				}
+			}
+
 			DrawRowLabels(rh, tableRect, xScale, yScale, table);
 			DrawColumnLabels(cw, tableRect, xScale, yScale, table);
 			DrawGridLines(rh, cw, tableRect, xScale, yScale);
