@@ -168,7 +168,7 @@ namespace XericUI.XTable.Core
 						int endRow = merge.StartRow + merge.RowSpan - 1;
 						int endCol = merge.StartCol + merge.ColSpan - 1;
 						if (endRow < rows && endCol < cols)
-							td.MergeCells(merge.StartRow, merge.StartCol, endRow, endCol);
+							td.MergeCells(merge.StartRow, merge.StartCol, merge.RowSpan, merge.ColSpan);
 					}
 				}
 			}

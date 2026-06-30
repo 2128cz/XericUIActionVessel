@@ -12,7 +12,7 @@ using XericLibrary.Runtime.SuperStyleSheet;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
-//233333Git666
+
 namespace XericUI.XTable.Rendering.Component
 {
     /// <summary>

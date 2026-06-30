@@ -3,7 +3,7 @@
 using UnityEditor;
 
 using UnityEngine;
-
+using XericLibrary.Runtime.MacroLibrary;
 using XericUI.XTable.Rendering.Component;
 
 namespace XericUIEditor.XTable
@@ -47,10 +47,10 @@ namespace XericUIEditor.XTable
 			GameObject selected = Selection.activeGameObject;
 			if (selected == null) return;
 
-			XericUIActionTable table = selected.GetComponent<XericUIActionTable>();
+			var table = selected.GetComponent<XericUIActionTable>();
 			if (table == null) return;
 
-			RectTransform rect = table.GetComponent<RectTransform>();
+			var rect = table.RectTransform();
 			if (rect == null) return;
 
 			DrawGridOverlay(table, rect);
