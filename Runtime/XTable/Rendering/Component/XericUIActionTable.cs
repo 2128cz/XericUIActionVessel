@@ -96,6 +96,8 @@ namespace XericUI.XTable.Rendering.Component
             }
         }
 
+        public XTableCellData this[int row, int col] => TableData.GetOrCreateCell(row, col);
+
         public float[] RowHeights => m_RowHeights;
         public float[] ColWidths => m_ColWidths;
 

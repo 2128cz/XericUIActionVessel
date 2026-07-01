@@ -26,6 +26,11 @@ namespace XericUIEditor
 
 		public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
 		{
+			var nsProp = property.FindPropertyRelative("Namespace");
+			var pathProp = property.FindPropertyRelative("StylePath");
+			if (nsProp == null || pathProp == null)
+				return LINE_HEIGHT + PADDING * 2;
+
 			string key = GetFoldKey(property);
 			bool expanded = s_FoldoutStates.TryGetValue(key, out bool f) && f;
 
@@ -37,7 +42,7 @@ namespace XericUIEditor
 
 			// 有值才显示值类型行
 			string ns = GetNamespace(property);
-			string path = property.FindPropertyRelative("StylePath").stringValue;
+			string path = pathProp.stringValue;
 			StyleValue val = StyleManager.GetValue(ns, path);
 			if (val != null && val.ValueType != null)
 				rowCount++;
@@ -58,6 +63,12 @@ namespace XericUIEditor
 			// 获取子属性
 			SerializedProperty nsProp = property.FindPropertyRelative("Namespace");
 			SerializedProperty pathProp = property.FindPropertyRelative("StylePath");
+
+			if (nsProp == null || pathProp == null)
+			{
+				EditorGUI.LabelField(position, label, "(StyleField 未初始化)");
+				return;
+			}
 
 			// === 标题行：折叠箭头 + 标签 + 路径下拉 ===
 			Rect headerRect = new Rect(position.x, position.y + PADDING, position.width, LINE_HEIGHT);
@@ -213,7 +224,8 @@ namespace XericUIEditor
 
 		private static string GetNamespace(SerializedProperty property)
 		{
-			string ns = property.FindPropertyRelative("Namespace").stringValue;
+			var nsProp = property.FindPropertyRelative("Namespace");
+			string ns = nsProp?.stringValue;
 			return string.IsNullOrEmpty(ns) ? "default" : ns;
 		}
 

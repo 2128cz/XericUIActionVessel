@@ -11,3 +11,19 @@ namespace: default
 .SelectedColor = (0.96,0.96,0.96,1)
 .DisabledColor = (0.6,0.6,0.6,0.8)
 }
+
+/toggle/TargetGraphic/ColorTint:UnityEngine.UI.ColorBlock/ {
+.NormalColor = (1,1,1,1)
+.HighlightedColor = (0.96,0.96,0.96,1)
+.PressedColor = (0.78,0.78,0.78,1)
+.SelectedColor = (0.96,0.96,0.96,1)
+.DisabledColor = (0.6,0.6,0.6,0.8)
+}
+
+/image/ColorTint:UnityEngine.UI.ColorBlock/ {
+.NormalColor = (1,1,1,1)
+.HighlightedColor = (0.96,0.96,0.96,1)
+.PressedColor = (0.78,0.78,0.78,1)
+.SelectedColor = (0.96,0.96,0.96,1)
+.DisabledColor = (0.6,0.6,0.6,0.8)
+}
