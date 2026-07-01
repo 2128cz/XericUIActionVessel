@@ -857,7 +857,8 @@ namespace XericUI.XTable.Rendering.Component
             m_BackgroundGo = new GameObject("_TableBackground",
                 typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             m_BackgroundGo.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
-            m_BackgroundGo.transform.SetParent(rectTransform, false);
+            m_BackgroundGo.transform.SetParent(ContentTransform, false);
+            m_BackgroundGo.transform.SetAsFirstSibling();
 
             RectTransform bgRt = m_BackgroundGo.GetComponent<RectTransform>();
             bgRt.anchorMin = new Vector2(0, 1);

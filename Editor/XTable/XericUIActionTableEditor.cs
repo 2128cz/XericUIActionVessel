@@ -84,12 +84,14 @@ namespace XericUIEditor.XTable
                 {
                     m_Table.FullRebuildPreservingData();
                     m_Table.SetChildrenVisible(m_ShowChildren);
+                    EditorApplication.RepaintHierarchyWindow();
                 }
 
                 if (GUILayout.Button("强制刷新样式", GUILayout.Height(26)))
                 {
                     m_Table.ForceStyleRefresh();
                     m_Table.SetChildrenVisible(m_ShowChildren);
+                    EditorApplication.RepaintHierarchyWindow();
                 }
 
                 EditorGUILayout.Space(4);
@@ -126,6 +128,7 @@ namespace XericUIEditor.XTable
                 {
                     m_ShowChildren = newShow;
                     m_Table.SetChildrenVisible(m_ShowChildren);
+                    EditorApplication.RepaintHierarchyWindow();
                 }
 
                 if (m_ShowChildren)
