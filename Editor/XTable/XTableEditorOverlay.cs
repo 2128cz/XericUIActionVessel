@@ -17,7 +17,7 @@ namespace XericUIEditor.XTable
 		/// <summary>是否启用覆盖层（可通过菜单开关）</summary>
 		private static bool s_Enabled = true;
 
-		private const string MENU_PATH = "Xeric UI/表格编辑器覆盖层";
+		private const string MENU_PATH = "XericLibrary/UI/Table/表格编辑器覆盖层";
 
 		[MenuItem(MENU_PATH, false, 200)]
 		private static void ToggleOverlay()
