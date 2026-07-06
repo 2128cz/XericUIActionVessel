@@ -30,13 +30,13 @@ namespace XericUIEditor
             var nsProp = property.FindPropertyRelative(PROP_NAMESPACE);
             var pathProp = property.FindPropertyRelative(PROP_STYLEPATH);
             if (nsProp == null || pathProp == null)
-                return LINE_HEIGHT + PADDING * 2;
+                return PADDING + (LINE_HEIGHT + PADDING);
 
             string key = GetFoldKey(property);
             bool expanded = s_FoldoutStates.TryGetValue(key, out bool f) && f;
 
             if (!expanded)
-                return LINE_HEIGHT + PADDING * 2;
+                return PADDING + (LINE_HEIGHT + PADDING);
 
             // 基础：命名空间 + 路径 = 2 行
             int rowCount = 2;
@@ -53,7 +53,7 @@ namespace XericUIEditor
             if (annotations != null && annotations.Count > 0)
                 rowCount++;
 
-            return (LINE_HEIGHT + PADDING) * rowCount + PADDING;
+            return PADDING + (1 + rowCount) * (LINE_HEIGHT + PADDING);
         }
 
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
@@ -93,6 +93,9 @@ namespace XericUIEditor
                 headerRect.width - EditorGUIUtility.labelWidth - 8f, LINE_HEIGHT);
 
             string currentNs = GetNamespace(property);
+
+            // 首次绘制时 xsss 可能尚未加载，当前命名空间若无效则自动切换
+            EnsureValidNamespace(nsProp, ref currentNs);
 
             DrawPathDropdown(pathRect, pathProp, currentNs);
 
@@ -240,6 +243,30 @@ namespace XericUIEditor
                 case "String": return "string";
                 case "Boolean": return "bool";
                 default: return type.Name;
+            }
+        }
+
+        /// <summary>
+        /// 若当前命名空间无可用路径（xsss 尚未加载），自动切换至首个有路径的命名空间。
+        /// </summary>
+        private static void EnsureValidNamespace(SerializedProperty nsProp, ref string currentNs)
+        {
+            var paths = StyleManager.GetPathsForNamespace(currentNs);
+            if (paths.Count > 0)
+                return;
+
+            // 当前命名空间不可用，尝试其他命名空间
+            var allNs = StyleManager.GetAvailableNamespaces();
+            foreach (var ns in allNs)
+            {
+                if (ns == currentNs) continue;
+                var altPaths = StyleManager.GetPathsForNamespace(ns);
+                if (altPaths.Count > 0)
+                {
+                    currentNs = ns;
+                    nsProp.stringValue = ns;
+                    return;
+                }
             }
         }
 
