@@ -24,9 +24,7 @@ namespace XericUIEditor.OverrideUI
 		private SerializedProperty m_ColorProp;
 
 		// 折叠状态
-		private static bool s_ColorFoldout = false;
 		private static bool s_TextureFoldout = false;
-		private static bool s_MaterialFoldout = false;
 
 		protected override void OnEnable()
 		{

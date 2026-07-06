@@ -19,7 +19,6 @@ namespace XericUI.Core.StyleSheetUI
 
 		#region 序列化字段
 
-		[Header("五态样式路径")]
 		[SerializeField]
 		[Tooltip("正常状态")]
 		private StyleField m_Normal = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/NormalColor" };
@@ -40,7 +39,6 @@ namespace XericUI.Core.StyleSheetUI
 		[Tooltip("禁用状态")]
 		private StyleField m_Disabled = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/DisabledColor" };
 
-		[Header("过渡")]
 		[SerializeField]
 		[Range(0.001f, 1f)]
 		[Tooltip("渐变持续时间")]

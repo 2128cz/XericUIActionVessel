@@ -42,11 +42,11 @@ namespace XericUI.OverrideUI
                     t.onValueChanged = d.onValueChanged;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle", true)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle (Attribute)", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericUIrAttributeToggle;
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle", false, 100)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle (Attribute)", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<XericUIrAttributeToggle, Toggle,
                 (Graphic graphic, ToggleGroup group, Toggle.ToggleEvent onValueChanged)>(

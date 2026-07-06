@@ -47,3 +47,21 @@ cell/default/ {
   height = 40:System.Single @Desc:默认行高
   width = 100:System.Single @Desc:默认列宽
 }
+
+
+/button/TargetGraphic/ColorTint:UnityEngine.UI.ColorBlock/ {
+.NormalColor = (1,1,1,1)
+.HighlightedColor = (0.96,0.96,0.96,1)
+.PressedColor = (0.78,0.78,0.78,1)
+.SelectedColor = (0.96,0.96,0.96,1)
+.DisabledColor = (0.6,0.6,0.6,0.8)
+}
+
+/toggle/TargetGraphic/ColorTint:UnityEngine.UI.ColorBlock/ {
+.NormalColor = (1,1,1,1)
+.HighlightedColor = (0.96,0.96,0.96,1)
+.PressedColor = (0.78,0.78,0.78,1)
+.SelectedColor = (0.96,0.96,0.96,1)
+.DisabledColor = (0.6,0.6,0.6,0.8)
+.DisabledColor = (0.6,0.6,0.6,0.8)
+}

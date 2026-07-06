@@ -41,11 +41,11 @@ namespace XericUI.OverrideUI
                     t.sprite = d;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image", true)]
+        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image (Native)", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericImage;
 
-        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image", false, 100)]
+        [UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image (Native)", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command) 
             => command.ReplaceCommandContext<XericImage, Image, Sprite>(
                 o =>

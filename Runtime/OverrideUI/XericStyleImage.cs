@@ -16,7 +16,6 @@ namespace XericUI.OverrideUI
 	{
 		#region 序列化字段
 
-		[Header("图像样式")]
 		[SerializeField]
 		[Tooltip("颜色样式路径")]
 		private StyleField m_ColorStyle = new StyleField();
@@ -176,11 +175,11 @@ namespace XericUI.OverrideUI
 				o => o.sprite,
 				(t, d) => { t.sprite = d; });
 
-		[UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image", true)]
+		[UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image (Style)", true)]
 		private static bool ValidateReplaceStyleImageToUnity(UnityEditor.MenuCommand command)
 			=> command.context is XericStyleImage;
 
-		[UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image", false, 100)]
+		[UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image (Style)", false, 100)]
 		private static void ReplaceStyleImageToUnity(UnityEditor.MenuCommand command)
 			=> command.ReplaceCommandContext<XericStyleImage, Image, Sprite>(
 				o => o.sprite,

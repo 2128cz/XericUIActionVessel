@@ -253,11 +253,11 @@ namespace XericUI.OverrideUI
 				o => (o.graphic, o.group, o.onValueChanged, o.navigation),
 				(t, d) => { t.graphic = d.graphic; t.group = d.group; t.onValueChanged = d.onValueChanged; t.navigation = d.navigation; });
 
-		[UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle", true)]
+		[UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle (Style)", true)]
 		private static bool ValidateReplaceStyleToggleToUnity(UnityEditor.MenuCommand command)
 			=> command.context is XericStyleToggle;
 
-		[UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle", false, 100)]
+		[UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle (Style)", false, 100)]
 		private static void ReplaceStyleToggleToUnity(UnityEditor.MenuCommand command)
 			=> command.ReplaceCommandContext<XericStyleToggle, Toggle,
 				(Graphic graphic, ToggleGroup group, ToggleEvent onValueChanged, Navigation navigation)>(

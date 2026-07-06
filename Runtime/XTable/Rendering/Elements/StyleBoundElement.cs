@@ -66,7 +66,6 @@ namespace XericUI.XTable.Rendering.Elements
             RegisterField("/cell/font/size", OnStyleChanged);
             RegisterField("/cell/font/alignment", OnStyleChanged);
             RegisterField("/cell/font/richText", OnStyleChanged);
-            RegisterField("/cell/font/fontAsset", OnStyleChanged);
 
             m_IsBound = true;
             RefreshAll();
@@ -123,20 +122,6 @@ namespace XericUI.XTable.Rendering.Elements
             StyleValue richVal = GetStyleValue("/cell/font/richText");
             if (richVal != null && TextComponent != null)
                 TextComponent.richText = (bool)richVal;
-
-            // 字体资源
-            StyleValue fontVal = GetStyleValue("/cell/font/fontAsset");
-            if (fontVal != null && TextComponent != null)
-            {
-                try
-                {
-                    TextComponent.font = fontVal.GetValueAs<TMP_FontAsset>();
-                }
-                catch
-                {
-                    /* 类型不匹配时忽略 */
-                }
-            }
         }
 
         #endregion

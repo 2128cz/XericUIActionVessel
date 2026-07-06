@@ -299,11 +299,11 @@ namespace XericUI
             Debug.Log("请手动替换toggle下的Checkmark Image组件为XericImage，这样Toggle关闭时取消选中的状态会保持为ison状态");
         }
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle", true)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle (Native)", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericToggle;
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle", false, 100)]
+        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle (Native)", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command) 
             => command.ReplaceCommandContext<XericToggle, Toggle,
                 (Graphic graphic, ToggleGroup group, ToggleEvent onValueChanged)>(

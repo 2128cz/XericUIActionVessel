@@ -35,7 +35,6 @@ namespace XericUIEditor.XTable
 		private static string s_EditText = "";
 		private static string s_SizeEditText = "";    // 气泡输入框当前编辑文本
 		private static int s_SizeEditTargetIndex = -1;
-		private static bool s_SizeEditIsColumn;
 		private static string s_LastFocusedControl = "";
 
 		// 拖拽框选状态
@@ -120,7 +119,6 @@ namespace XericUIEditor.XTable
 			{
 				if (int.TryParse(newFocus.Substring("XTableColSizeEdit_".Length), out int idx))
 				{
-					s_SizeEditIsColumn = true;
 					s_SizeEditTargetIndex = idx;
 					s_SizeEditText = s_ColWidths != null && idx < s_ColWidths.Length
 						? s_ColWidths[idx].ToString("F0") : "";
@@ -130,7 +128,6 @@ namespace XericUIEditor.XTable
 			{
 				if (int.TryParse(newFocus.Substring("XTableRowSizeEdit_".Length), out int idx))
 				{
-					s_SizeEditIsColumn = false;
 					s_SizeEditTargetIndex = idx;
 					s_SizeEditText = s_RowHeights != null && idx < s_RowHeights.Length
 						? s_RowHeights[idx].ToString("F0") : "";

@@ -198,11 +198,11 @@ namespace XericUI.OverrideUI
                     t.navigation = d.navigation;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button", true)]
+        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button (Style)", true)]
         private static bool ValidateReplaceStyleToUnity(UnityEditor.MenuCommand command)
             => command.context is XericStyleButton;
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button", false, 100)]
+        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button (Style)", false, 100)]
         private static void ReplaceStyleToUnity(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<XericStyleButton, Button,
                 (Graphic targetGraphic, ButtonClickedEvent onClick, Navigation navigation)>(
