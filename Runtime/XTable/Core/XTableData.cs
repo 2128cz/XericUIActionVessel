@@ -407,5 +407,170 @@ namespace XericUI.XTable.Core
 		public int BlockCount => BlockMap.Count;
 
 		#endregion
+
+		#region 边框缓存
+
+		/// <summary>
+		/// 外边框样式管理器——维护 -1 行 / -1 列的边框样式命名空间。
+		/// key = (row, col)，其中 row / col 可为 -1。
+		/// (-1, -1) = 表格最外框,
+		/// (-1, c) = 第 c 列顶部边框,
+		/// (r, -1) = 第 r 行左侧边框。
+		/// </summary>
+		[NonSerialized] public Dictionary<(int row, int col), string> OuterBorderNs;
+
+		// OuterBorderNs 序列化代理
+		[SerializeField] private List<int> m_OuterBorderRows = new List<int>();
+		[SerializeField] private List<int> m_OuterBorderCols = new List<int>();
+		[SerializeField] private List<string> m_OuterBorderValues = new List<string>();
+
+		/// <summary>
+		/// 获取右侧边框样式命名空间。
+		/// col < 0 时退回到 OuterBorderNs。
+		/// </summary>
+		public string GetBorderRightNs(int row, int col)
+		{
+			if (col < 0 || row < 0)
+				return GetOuterBorderNs(row, col);
+
+			XTableCoordinateUtility.CellToBlockCoordinate(row, col, BlockSizeX, BlockSizeY,
+				out int blockRow, out int blockCol,
+				out int localRow, out int localCol);
+			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
+
+			if (!BlockMap.TryGetValue(zIndex, out XTableBlock block))
+				return null;
+			return block.GetBorderRight(localRow, localCol);
+		}
+
+		/// <summary>
+		/// 设置右侧边框样式命名空间。
+		/// col < 0 时写入 OuterBorderNs。
+		/// </summary>
+		public void SetBorderRightNs(int row, int col, string ns)
+		{
+			if (col < 0 || row < 0)
+			{
+				SetOuterBorderNs(row, col, ns);
+				return;
+			}
+
+			XTableCoordinateUtility.CellToBlockCoordinate(row, col, BlockSizeX, BlockSizeY,
+				out int blockRow, out int blockCol,
+				out int localRow, out int localCol);
+			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
+
+			if (!BlockMap.TryGetValue(zIndex, out XTableBlock block))
+			{
+				block = new XTableBlock(BlockSizeX, BlockSizeY, blockRow, blockCol);
+				BlockMap[zIndex] = block;
+			}
+			block.SetBorderRight(localRow, localCol, ns);
+		}
+
+		/// <summary>
+		/// 获取底部边框样式命名空间。
+		/// row < 0 时退回到 OuterBorderNs。
+		/// </summary>
+		public string GetBorderBottomNs(int row, int col)
+		{
+			if (col < 0 || row < 0)
+				return GetOuterBorderNs(row, col);
+
+			XTableCoordinateUtility.CellToBlockCoordinate(row, col, BlockSizeX, BlockSizeY,
+				out int blockRow, out int blockCol,
+				out int localRow, out int localCol);
+			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
+
+			if (!BlockMap.TryGetValue(zIndex, out XTableBlock block))
+				return null;
+			return block.GetBorderBottom(localRow, localCol);
+		}
+
+		/// <summary>
+		/// 设置底部边框样式命名空间。
+		/// row < 0 时写入 OuterBorderNs。
+		/// </summary>
+		public void SetBorderBottomNs(int row, int col, string ns)
+		{
+			if (col < 0 || row < 0)
+			{
+				SetOuterBorderNs(row, col, ns);
+				return;
+			}
+
+			XTableCoordinateUtility.CellToBlockCoordinate(row, col, BlockSizeX, BlockSizeY,
+				out int blockRow, out int blockCol,
+				out int localRow, out int localCol);
+			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
+
+			if (!BlockMap.TryGetValue(zIndex, out XTableBlock block))
+			{
+				block = new XTableBlock(BlockSizeX, BlockSizeY, blockRow, blockCol);
+				BlockMap[zIndex] = block;
+			}
+			block.SetBorderBottom(localRow, localCol, ns);
+		}
+
+		/// <summary>获取外边框样式（-1 行 / -1 列）</summary>
+		public string GetOuterBorderNs(int row, int col)
+		{
+			if (OuterBorderNs == null) return null;
+			OuterBorderNs.TryGetValue((row, col), out string ns);
+			return ns;
+		}
+
+		/// <summary>设置外边框样式（-1 行 / -1 列）</summary>
+		public void SetOuterBorderNs(int row, int col, string ns)
+		{
+			if (OuterBorderNs == null)
+				OuterBorderNs = new Dictionary<(int, int), string>();
+			OuterBorderNs[(row, col)] = ns;
+		}
+
+		/// <summary>清空所有边框缓存</summary>
+		public void ClearAllBorderCache()
+		{
+			OuterBorderNs?.Clear();
+			foreach (var kv in BlockMap)
+			{
+				var b = kv.Value;
+				if (b.BorderRightNs != null)
+					System.Array.Clear(b.BorderRightNs, 0, b.BorderRightNs.Length);
+				if (b.BorderBottomNs != null)
+					System.Array.Clear(b.BorderBottomNs, 0, b.BorderBottomNs.Length);
+			}
+		}
+
+		// ── OuterBorderNs 序列化 ──
+		private void SerializeOuterBorder()
+		{
+			m_OuterBorderRows.Clear();
+			m_OuterBorderCols.Clear();
+			m_OuterBorderValues.Clear();
+			if (OuterBorderNs != null)
+			{
+				foreach (var kv in OuterBorderNs)
+				{
+					m_OuterBorderRows.Add(kv.Key.row);
+					m_OuterBorderCols.Add(kv.Key.col);
+					m_OuterBorderValues.Add(kv.Value);
+				}
+			}
+		}
+
+		private void DeserializeOuterBorder()
+		{
+			OuterBorderNs = new Dictionary<(int, int), string>();
+			int count = System.Math.Min(m_OuterBorderRows.Count,
+				System.Math.Min(m_OuterBorderCols.Count, m_OuterBorderValues.Count));
+			for (int i = 0; i < count; i++)
+			{
+				if (m_OuterBorderValues[i] != null)
+					OuterBorderNs[(m_OuterBorderRows[i], m_OuterBorderCols[i])] = m_OuterBorderValues[i];
+			}
+		}
+
+		#endregion
 	}
 }

@@ -33,6 +33,11 @@ namespace XericUI.XTable.Core
 		/// <summary>合并单元格描述列表</summary>
 		public List<XTableMergeDescriptor> MergeDescriptors;
 
+		/// <summary>每个单元格右侧边框的样式命名空间缓存（线性数组，同 Cells[] 布局）</summary>
+		public string[] BorderRightNs;
+		/// <summary>每个单元格底部边框的样式命名空间缓存（线性数组，同 Cells[] 布局）</summary>
+		public string[] BorderBottomNs;
+
 		/// <summary>
 		/// 创建指定尺寸的块
 		/// </summary>
@@ -42,6 +47,8 @@ namespace XericUI.XTable.Core
 			BlockSizeY = blockSizeY;
 			Cells = new XTableCellData[blockSizeX * blockSizeY];
 			MergeDescriptors = new List<XTableMergeDescriptor>();
+			BorderRightNs = new string[blockSizeX * blockSizeY];
+			BorderBottomNs = new string[blockSizeX * blockSizeY];
 		}
 
 		/// <summary>
@@ -74,6 +81,38 @@ namespace XericUI.XTable.Core
 			Cells[index] = data;
 		}
 
+		/// <summary>通过块内局部坐标获取右侧边框缓存</summary>
+		public string GetBorderRight(int localRow, int localCol)
+		{
+			int index = localRow * BlockSizeX + localCol;
+			if (index < 0 || index >= (BorderRightNs?.Length ?? 0)) return null;
+			return BorderRightNs[index];
+		}
+
+		/// <summary>通过块内局部坐标设置右侧边框缓存</summary>
+		public void SetBorderRight(int localRow, int localCol, string ns)
+		{
+			int index = localRow * BlockSizeX + localCol;
+			if (index < 0 || index >= (BorderRightNs?.Length ?? 0)) return;
+			BorderRightNs[index] = ns;
+		}
+
+		/// <summary>通过块内局部坐标获取底部边框缓存</summary>
+		public string GetBorderBottom(int localRow, int localCol)
+		{
+			int index = localRow * BlockSizeX + localCol;
+			if (index < 0 || index >= (BorderBottomNs?.Length ?? 0)) return null;
+			return BorderBottomNs[index];
+		}
+
+		/// <summary>通过块内局部坐标设置底部边框缓存</summary>
+		public void SetBorderBottom(int localRow, int localCol, string ns)
+		{
+			int index = localRow * BlockSizeX + localCol;
+			if (index < 0 || index >= (BorderBottomNs?.Length ?? 0)) return;
+			BorderBottomNs[index] = ns;
+		}
+
 		/// <summary>
 		/// 检查是否有合并描述重定向此单元格
 		/// </summary>
@@ -103,6 +142,10 @@ namespace XericUI.XTable.Core
 			// 确保数组和列表非空
 			if (Cells == null) Cells = new XTableCellData[BlockSizeX * BlockSizeY];
 			if (MergeDescriptors == null) MergeDescriptors = new List<XTableMergeDescriptor>();
+			if (BorderRightNs == null || BorderRightNs.Length != BlockSizeX * BlockSizeY)
+				BorderRightNs = new string[BlockSizeX * BlockSizeY];
+			if (BorderBottomNs == null || BorderBottomNs.Length != BlockSizeX * BlockSizeY)
+				BorderBottomNs = new string[BlockSizeX * BlockSizeY];
 		}
 
 		#endregion

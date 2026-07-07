@@ -914,17 +914,24 @@ namespace XericUIEditor.XTable
 					table.SelectedRow, table.SelectedCol) ?? "";
 
 				var namespaces = StyleManager.GetAvailableNamespaces();
-				int currentIdx = namespaces.IndexOf(currentNS);
+				// 构建显示列表：如果当前命名空间不在可用列表中则追加到末尾
+				var displayNamespaces = new System.Collections.Generic.List<string>(namespaces);
+				int currentIdx = displayNamespaces.IndexOf(currentNS);
+				if (currentIdx < 0 && !string.IsNullOrEmpty(currentNS))
+				{
+					displayNamespaces.Add(currentNS);
+					currentIdx = displayNamespaces.Count - 1;
+				}
 				if (currentIdx < 0) currentIdx = 0;
 
 				Rect dropRect = new Rect(barRect.x + 44, row2Y, barW - 44 - pad, rowH);
 				int newIdx = UnityEditor.EditorGUI.Popup(dropRect, currentIdx,
-					namespaces.ToArray(), UnityEditor.EditorStyles.popup);
+					displayNamespaces.ToArray(), UnityEditor.EditorStyles.popup);
 
-				if (newIdx != currentIdx && newIdx >= 0 && newIdx < namespaces.Count)
+				if (newIdx != currentIdx && newIdx >= 0 && newIdx < displayNamespaces.Count)
 				{
 					table.SetCellStyleNamespace(table.SelectedRow, table.SelectedCol,
-						namespaces[newIdx]);
+						displayNamespaces[newIdx]);
 				}
 			}
 			else

@@ -474,12 +474,36 @@ namespace XericUI.XTable.Rendering.Component
         public XTableCellData GetCellData(int row, int col)
             => TableData.GetOrCreateCell(row, col);
 
-        /// <summary>设置单元格的样式命名空间</summary>
+        /// <summary>设置单元格的样式命名空间，同时写入边框缓存（谁最后设置归谁）</summary>
         public void SetCellStyleNamespace(int row, int col, string styleNamespace)
         {
-            var data = TableData.GetOrCreateCell(row, col);
-            data.StyleNamespace = styleNamespace;
+            // 合并源：遍历所有被合并单元格，全部写入该样式
+            if (TableData.IsMergeSource(row, col, out int rowSpan, out int colSpan))
+            {
+                for (int r = row; r < row + rowSpan; r++)
+                {
+                    for (int c = col; c < col + colSpan; c++)
+                    {
+                        if (r < m_RowHeights.Length && c < m_ColWidths.Length)
+                            ApplyCellStyleToCell(r, c, styleNamespace);
+                    }
+                }
+            }
+            else
+            {
+                ApplyCellStyleToCell(row, col, styleNamespace);
+            }
+
             MarkDirty(TableDirtyType.StyleChanged);
+        }
+
+        /// <summary>在单个单元格上设置样式，同时写入其右侧和底部的边框缓存</summary>
+        private void ApplyCellStyleToCell(int row, int col, string ns)
+        {
+            var data = TableData.GetOrCreateCell(row, col);
+            data.StyleNamespace = ns;
+            TableData.SetBorderRightNs(row, col, ns);
+            TableData.SetBorderBottomNs(row, col, ns);
         }
 
         /// <summary>获取单元格的样式命名空间</summary>
@@ -1514,8 +1538,9 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>
         /// 重建表格的全部边框线段。
-        /// 遍历所有非合并覆盖的单元格，为每个单元格的右边界和下边界生成线段，
-        /// 合并源单元格的线段位置取合并范围的最外沿，内部边界自动跳过。
+        /// 第一阶段：从 OuterBorderNs 绘制 -1 行（顶部外框）和 -1 列（左侧外框）。
+        /// 第二阶段：遍历非合并覆盖单元格，从边框缓存读取样式命名空间，按 per-cell 样式绘制右侧和底部边框。
+        /// 合并源在最外沿绘制，内部边框自动跳过。
         /// </summary>
         private void RebuildBorders()
         {
@@ -1525,30 +1550,49 @@ namespace XericUI.XTable.Rendering.Component
             var renderer = GetOrCreateBorderRenderer();
             renderer.ClearAll();
 
-            // 更新边框渲染器的尺寸，使其覆盖整个表格区域
             var borderRt = renderer.GetComponent<RectTransform>();
             borderRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
 
-#if UNITY_EDITOR
-            Color borderColor;
-            float borderWidth;
-            if (!Application.isPlaying)
-            {
-                borderColor = GetCellBorderColor(m_DefaultStyleNamespace);
-                borderWidth = GetCellBorderWidth(m_DefaultStyleNamespace);
-            }
-            else
-            {
-                borderColor = RT_BORDER_COLOR;
-                borderWidth = RT_BORDER_WIDTH;
-            }
-#else
-            Color borderColor = RT_BORDER_COLOR;
-            float borderWidth = RT_BORDER_WIDTH;
-#endif
-
             int rows = m_RowHeights.Length;
             int cols = m_ColWidths.Length;
+
+            // ════════════════════════════════════════════
+            // 阶段 1：-1 行（顶部外框）和 -1 列（左侧外框）
+            // ════════════════════════════════════════════
+
+            // 顶部外框：从 col=0 到 col=cols-1，每列一段
+            float topY = 0;
+            for (int c = 0; c < cols; c++)
+            {
+                string ns = m_TableData?.GetOuterBorderNs(-1, c);
+                if (string.IsNullOrEmpty(ns)) ns = m_DefaultStyleNamespace;
+                Color color = GetCellBorderColor(ns);
+                float width = GetCellBorderWidth(ns);
+                float leftX = GetColLeftX(c);
+                renderer.DrawLine(
+                    new Vector2(leftX, topY),
+                    new Vector2(leftX + m_ColWidths[c], topY),
+                    color, width, UVMode.ByDistance);
+            }
+
+            // 左侧外框：从 row=0 到 row=rows-1，每行一段
+            float xEdge = 0;
+            for (int r = 0; r < rows; r++)
+            {
+                string ns = m_TableData?.GetOuterBorderNs(r, -1);
+                if (string.IsNullOrEmpty(ns)) ns = m_DefaultStyleNamespace;
+                Color color = GetCellBorderColor(ns);
+                float width = GetCellBorderWidth(ns);
+                float rowTopY = -GetRowTopY(r);
+                renderer.DrawLine(
+                    new Vector2(xEdge, rowTopY),
+                    new Vector2(xEdge, rowTopY - m_RowHeights[r]),
+                    color, width, UVMode.ByDistance);
+            }
+
+            // ════════════════════════════════════════════
+            // 阶段 2：每个单元格的右侧和底部边框
+            // ════════════════════════════════════════════
 
             for (int r = 0; r < rows; r++)
             {
@@ -1576,21 +1620,35 @@ namespace XericUI.XTable.Rendering.Component
                     float rightX = cellX + cellW;
                     float bottomY = cellY - cellH;
 
-                    // 右侧边框：右边有单元格时绘制
+                    // —— 右侧边框 ——
+                    string rightNs = m_TableData?.GetBorderRightNs(r, c);
+                    if (string.IsNullOrEmpty(rightNs)) rightNs = m_DefaultStyleNamespace;
+                    Color rightColor = GetCellBorderColor(rightNs);
+                    float rightWidth = GetCellBorderWidth(rightNs);
+
                     int rightCol = c + mergeCS;
                     if (rightCol < cols)
+                    {
                         renderer.DrawLine(
                             new Vector2(rightX, cellY),
                             new Vector2(rightX, bottomY),
-                            borderColor, borderWidth, UVMode.ByDistance);
+                            rightColor, rightWidth, UVMode.ByDistance);
+                    }
 
-                    // 底部边框：下边有单元格时绘制
+                    // —— 底部边框 ——
+                    string bottomNs = m_TableData?.GetBorderBottomNs(r, c);
+                    if (string.IsNullOrEmpty(bottomNs)) bottomNs = m_DefaultStyleNamespace;
+                    Color bottomColor = GetCellBorderColor(bottomNs);
+                    float bottomWidth = GetCellBorderWidth(bottomNs);
+
                     int bottomRow = r + mergeRS;
                     if (bottomRow < rows)
+                    {
                         renderer.DrawLine(
                             new Vector2(cellX, bottomY),
                             new Vector2(rightX, bottomY),
-                            borderColor, borderWidth, UVMode.ByDistance);
+                            bottomColor, bottomWidth, UVMode.ByDistance);
+                    }
                 }
             }
         }
