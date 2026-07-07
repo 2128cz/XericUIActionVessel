@@ -9,6 +9,7 @@ using XericUI.XTable.Core;
 using XericUI.XTable.Mapping;
 using XericUI.XTable.Rendering.Elements;
 using XericLibrary.Runtime.SuperStyleSheet;
+using XericLibrary.Runtime.UIGraph;
 using XericUI.XTable.Core;
 #if UNITY_EDITOR
 using UnityEditor;
@@ -63,6 +64,9 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>表格四叉树——按 StyleNamespace 分区，渲染阶段查询可见象限</summary>
         [System.NonSerialized] private XTableQuadtree m_Quadtree;
+
+        /// <summary>边框线段渲染器——使用 UILineRendererV2 的坐标线段绘制</summary>
+        [System.NonSerialized] private UILineRendererV2 m_BorderRenderer;
 
         private float m_TotalWidth;
         private float m_TotalHeight;
@@ -151,8 +155,8 @@ namespace XericUI.XTable.Rendering.Component
         }
 
         /// <summary>
-        /// 基于四叉树查询结果渲染可见象限。
-        /// 每个均匀象限渲染整块背景+边框，然后遍历象限内单元格渲染文本/预制体/选择高亮。
+        /// 基于四叉树查询结果渲染可见象限内的单元格内容（文本/预制体/选择高亮）。
+        /// 边框由 <see cref="RebuildBorders"/> 统一绘制。
         /// </summary>
         private void RenderQuadrants(List<QuadrantResult> quadrants)
         {
@@ -161,8 +165,6 @@ namespace XericUI.XTable.Rendering.Component
 #if UNITY_EDITOR
             if (!Application.isPlaying)
             {
-                Color borderColor = GetCellBorderColor(ns);
-                float borderWidth = GetCellBorderWidth(ns);
                 Color selectionColor = GetCellSelectionBgColor(ns);
                 Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * 0.4f);
                 Color focusColor = new Color(selectionColor.r + 0.04f, selectionColor.g + 0.13f, selectionColor.b + 0.13f, selectionColor.a * 1.4f);
@@ -173,24 +175,6 @@ namespace XericUI.XTable.Rendering.Component
 
                     Rect r = q.Region;
                     string qNs = q.Namespace;
-
-                    // 象限整块背景
-                    var bgImg = m_Assembler.GetImage("quad_bg", qNs);
-                    bgImg.Rect.anchoredPosition = new Vector2(r.x, -r.y);
-                    bgImg.Rect.sizeDelta = new Vector2(r.width, r.height);
-                    bgImg.Image.color = GetCellBgColor(qNs);
-
-                    // 象限底部边框
-                    var hLine = m_Assembler.GetImage("quad_hline");
-                    hLine.Rect.anchoredPosition = new Vector2(r.x, -r.y - r.height);
-                    hLine.Rect.sizeDelta = new Vector2(r.width, borderWidth);
-                    hLine.Image.color = borderColor;
-
-                    // 象限右侧边框
-                    var vLine = m_Assembler.GetImage("quad_vline");
-                    vLine.Rect.anchoredPosition = new Vector2(r.x + r.width - borderWidth, -r.y);
-                    vLine.Rect.sizeDelta = new Vector2(borderWidth, r.height);
-                    vLine.Image.color = borderColor;
 
                     // 渲染象限内各单元格的文本/预制体/选择高亮
                     if (q.Cells != null)
@@ -269,21 +253,6 @@ namespace XericUI.XTable.Rendering.Component
 
                 Rect r = q.Region;
                 string qNs = q.Namespace;
-
-                var bgImg = m_Assembler.GetImage("quad_bg", qNs);
-                bgImg.Rect.anchoredPosition = new Vector2(r.x, -r.y);
-                bgImg.Rect.sizeDelta = new Vector2(r.width, r.height);
-                bgImg.Image.color = GetCellBgColor(qNs);
-
-                var hLine = m_Assembler.GetImage("quad_hline");
-                hLine.Rect.anchoredPosition = new Vector2(r.x, -r.y - r.height);
-                hLine.Rect.sizeDelta = new Vector2(r.width, RT_BORDER_WIDTH);
-                hLine.Image.color = RT_BORDER_COLOR;
-
-                var vLine = m_Assembler.GetImage("quad_vline");
-                vLine.Rect.anchoredPosition = new Vector2(r.x + r.width - RT_BORDER_WIDTH, -r.y);
-                vLine.Rect.sizeDelta = new Vector2(RT_BORDER_WIDTH, r.height);
-                vLine.Image.color = RT_BORDER_COLOR;
 
                 if (q.Cells != null)
                 {
@@ -408,6 +377,7 @@ namespace XericUI.XTable.Rendering.Component
             if (m_Assembler != null)
                 m_Assembler.DestroyAll();
             ClearPrefabInstances();
+            DestroyBorderRenderer();
             if (m_BackgroundGo != null)
             {
                 if (Application.isPlaying) Destroy(m_BackgroundGo);
@@ -843,6 +813,9 @@ namespace XericUI.XTable.Rendering.Component
                     RenderCells(sr, er, sc, ec);
             }
 
+            // 重建边框线段
+            RebuildBorders();
+
             m_DirtyFlag.Clear();
             OnTableRefreshed?.Invoke();
             SetChildrenVisible(m_ChildrenVisible);
@@ -924,6 +897,7 @@ namespace XericUI.XTable.Rendering.Component
             m_Assembler?.DestroyAll();
             ClearAllChildren();
             m_BackgroundGo = null;
+            m_BorderRenderer = null;
 
             m_TableData = new XTableData();
 
@@ -998,6 +972,7 @@ namespace XericUI.XTable.Rendering.Component
             m_Quadtree?.Clear();
             ClearAllChildren();
             m_BackgroundGo = null;
+            m_BorderRenderer = null;
 
             m_TableData = new XTableData();
             m_RowHeights = null;
@@ -1485,6 +1460,139 @@ namespace XericUI.XTable.Rendering.Component
             }
 
             m_Quadtree.Build(m_TotalWidth, m_TotalHeight, m_RowHeights, m_ColWidths, cells);
+        }
+
+        #endregion
+
+        #region 边框渲染
+
+        /// <summary>
+        /// 获取或创建边框渲染器 GameObject 和 <see cref="UILineRendererV2"/> 组件。
+        /// </summary>
+        private UILineRendererV2 GetOrCreateBorderRenderer()
+        {
+            if (m_BorderRenderer != null)
+                return m_BorderRenderer;
+
+            Transform contentT = ContentTransform;
+            // 查找已有对象
+            var existing = contentT.Find("_TableBorders");
+            if (existing != null)
+            {
+                m_BorderRenderer = existing.GetComponent<UILineRendererV2>();
+                if (m_BorderRenderer != null) return m_BorderRenderer;
+            }
+
+            var go = new GameObject("_TableBorders",
+                typeof(RectTransform), typeof(CanvasRenderer), typeof(UILineRendererV2));
+            go.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
+            go.transform.SetParent(contentT, false);
+
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0, 1);
+            rt.anchorMax = new Vector2(0, 1);
+            rt.pivot = new Vector2(0, 1);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+
+            m_BorderRenderer = go.GetComponent<UILineRendererV2>();
+            return m_BorderRenderer;
+        }
+
+        /// <summary>销毁边框渲染器</summary>
+        private void DestroyBorderRenderer()
+        {
+            if (m_BorderRenderer != null)
+            {
+                if (Application.isPlaying)
+                    Destroy(m_BorderRenderer.gameObject);
+                else
+                    DestroyImmediate(m_BorderRenderer.gameObject);
+                m_BorderRenderer = null;
+            }
+        }
+
+        /// <summary>
+        /// 重建表格的全部边框线段。
+        /// 遍历所有非合并覆盖的单元格，为每个单元格的右边界和下边界生成线段，
+        /// 合并源单元格的线段位置取合并范围的最外沿，内部边界自动跳过。
+        /// </summary>
+        private void RebuildBorders()
+        {
+            if (m_RowHeights == null || m_ColWidths == null) return;
+            if (m_RowHeights.Length == 0 || m_ColWidths.Length == 0) return;
+
+            var renderer = GetOrCreateBorderRenderer();
+            renderer.ClearAll();
+
+            // 更新边框渲染器的尺寸，使其覆盖整个表格区域
+            var borderRt = renderer.GetComponent<RectTransform>();
+            borderRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+
+#if UNITY_EDITOR
+            Color borderColor;
+            float borderWidth;
+            if (!Application.isPlaying)
+            {
+                borderColor = GetCellBorderColor(m_DefaultStyleNamespace);
+                borderWidth = GetCellBorderWidth(m_DefaultStyleNamespace);
+            }
+            else
+            {
+                borderColor = RT_BORDER_COLOR;
+                borderWidth = RT_BORDER_WIDTH;
+            }
+#else
+            Color borderColor = RT_BORDER_COLOR;
+            float borderWidth = RT_BORDER_WIDTH;
+#endif
+
+            int rows = m_RowHeights.Length;
+            int cols = m_ColWidths.Length;
+
+            for (int r = 0; r < rows; r++)
+            {
+                for (int c = 0; c < cols; c++)
+                {
+                    // 跳过被合并覆盖的单元格
+                    if (m_TableData != null && m_TableData.IsCellMerged(r, c))
+                        continue;
+
+                    float cellX = GetColLeftX(c);
+                    float cellY = -GetRowTopY(r);
+                    float cellW = m_ColWidths[c];
+                    float cellH = m_RowHeights[r];
+
+                    int mergeRS = 1, mergeCS = 1;
+                    if (m_TableData != null)
+                        m_TableData.IsMergeSource(r, c, out mergeRS, out mergeCS);
+
+                    // 扩展合并尺寸
+                    for (int i = 1; i < mergeCS && c + i < cols; i++)
+                        cellW += m_ColWidths[c + i];
+                    for (int i = 1; i < mergeRS && r + i < rows; i++)
+                        cellH += m_RowHeights[r + i];
+
+                    float rightX = cellX + cellW;
+                    float bottomY = cellY - cellH;
+
+                    // 右侧边框：右边有单元格时绘制
+                    int rightCol = c + mergeCS;
+                    if (rightCol < cols)
+                        renderer.DrawLine(
+                            new Vector2(rightX, cellY),
+                            new Vector2(rightX, bottomY),
+                            borderColor, borderWidth, UVMode.ByDistance);
+
+                    // 底部边框：下边有单元格时绘制
+                    int bottomRow = r + mergeRS;
+                    if (bottomRow < rows)
+                        renderer.DrawLine(
+                            new Vector2(cellX, bottomY),
+                            new Vector2(rightX, bottomY),
+                            borderColor, borderWidth, UVMode.ByDistance);
+                }
+            }
         }
 
         #endregion
