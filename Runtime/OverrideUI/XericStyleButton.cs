@@ -35,11 +35,11 @@ namespace XericUI.OverrideUI
 
         [Header("样式表状态")] [SerializeField]
 		[Tooltip("五态颜色样式块（ColorTint）")]
-		private StyleSheetState m_ColorState = StyleSheetState.Default;
+		private StyleSheetState m_ColorState = new StyleSheetState("button", Transition.ColorTint);
 
 		[SerializeField]
 		[Tooltip("五态纹理样式块（SpriteState）")]
-		private StyleSheetState m_TextureState = StyleSheetState.CreateTexture();
+		private StyleSheetState m_TextureState = new StyleSheetState("button", Transition.SpriteSwap);
 
         [SerializeField] [Tooltip("启用样式表驱动过渡（关闭则回退为 Unity ColorBlock）")]
         private bool m_EnableStyleTransition = true;

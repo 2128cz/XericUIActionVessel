@@ -36,11 +36,11 @@ namespace XericUI.OverrideUI
 		[Header("样式表状态")]
 		[SerializeField]
 		[Tooltip("五态颜色样式块（ColorTint）")]
-		private StyleSheetState m_ColorState = StyleSheetState.Default;
+		private StyleSheetState m_ColorState = new StyleSheetState("toggle", Transition.ColorTint);
 
 		[SerializeField]
 		[Tooltip("五态纹理样式块（SpriteState）")]
-		private StyleSheetState m_TextureState = StyleSheetState.CreateTexture();
+		private StyleSheetState m_TextureState = new StyleSheetState("toggle", Transition.SpriteSwap);
 
 		[Header("Toggle 专用")]
 		[SerializeField]

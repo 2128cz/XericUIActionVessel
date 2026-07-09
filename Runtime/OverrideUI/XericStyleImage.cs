@@ -18,15 +18,15 @@ namespace XericUI.OverrideUI
 
 		[SerializeField]
 		[Tooltip("颜色样式路径")]
-		private StyleField m_ColorStyle = new StyleField();
+		private StyleField m_ColorStyle = new StyleField("image/ColorTint/NormalColor");
 
 		[SerializeField]
 		[Tooltip("纹理/精灵样式路径")]
-		private StyleField m_TextureStyle = new StyleField();
+		private StyleField m_TextureStyle = new StyleField("image/ColorTint/Sprite");
 
 		[SerializeField]
 		[Tooltip("材质样式路径")]
-		private StyleField m_MaterialStyle = new StyleField();
+		private StyleField m_MaterialStyle = new StyleField("image/ColorTint/Material");
 
 		[SerializeField]
 		[Tooltip("启用样式表自动刷新")]
