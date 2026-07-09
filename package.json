@@ -1,7 +1,7 @@
 {
 	"name": "com.lrss3.xericuiactionvessel",
 	"displayName":"Xeric UI Action Vessel",
-	"version": "0.1.0",
+	"version": "0.1.6",
 	"unity": "2022.1",
 	"description": "",
 	"dependencies": {
