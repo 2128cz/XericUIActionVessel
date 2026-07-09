@@ -70,6 +70,15 @@ namespace XericUIEditor.XTable
                     EditorGUILayout.PropertyField(m_RowHeightsProp, new GUIContent("行高"), true);
                 if (m_ColWidthsProp != null)
                     EditorGUILayout.PropertyField(m_ColWidthsProp, new GUIContent("列宽"), true);
+
+                // 冻结行列
+                var freezeRowProp = serializedObject.FindProperty("m_FreezeRowCount");
+                var freezeColProp = serializedObject.FindProperty("m_FreezeColCount");
+                if (freezeRowProp != null)
+                    EditorGUILayout.PropertyField(freezeRowProp, new GUIContent("冻结行数"));
+                if (freezeColProp != null)
+                    EditorGUILayout.PropertyField(freezeColProp, new GUIContent("冻结列数"));
+
                 EditorGUI.indentLevel--;
             }
 
