@@ -1,4 +1,5 @@
 ﻿using System;
+using Deconstruction.Runtime;
 #if ODIN_INSPECTOR
 using Sirenix.OdinInspector;
 #endif
@@ -36,11 +37,9 @@ namespace XericUI.Core.Base
         {
             get
             {
-                if (_canvas == null)
-                    _canvas = GetComponentInParent<Canvas>();
+                if (!_canvas) _canvas = GetComponentInParent<Canvas>();
 #if UNITY_EDITOR
-                if (_canvas == null)
-                    Debug.LogError($"{name} 无法找到布局组件，接下来的流程可能会引发错误", this);
+                if (!_canvas) Debug.LogError($"{name} 无法找到布局组件，接下来的流程可能会引发错误", this);
 #endif
                 return _canvas;
             }
@@ -53,11 +52,9 @@ namespace XericUI.Core.Base
         {
             get
             {
-                if (_canvasScaler == null)
-                    _canvasScaler = GetComponentInParent<CanvasScaler>();
+                if (!_canvasScaler) _canvasScaler = GetComponentInParent<CanvasScaler>();
 #if UNITY_EDITOR
-                if (_canvas == null)
-                    Debug.LogError($"{name} 无法找到布局缩放组件，接下来的流程可能会引发错误", this);
+                if (_canvas == null) Debug.LogError($"{name} 无法找到布局缩放组件，接下来的流程可能会引发错误", this);
 #endif
                 return _canvasScaler;
             }
@@ -70,11 +67,9 @@ namespace XericUI.Core.Base
         {
             get
             {
-                if (_graphicRaycaster == null)
-                    _graphicRaycaster = GetComponentInParent<GraphicRaycaster>();
+                if (!_graphicRaycaster) _graphicRaycaster = GetComponentInParent<GraphicRaycaster>();
 #if UNITY_EDITOR
-                if (_canvas == null)
-                    Debug.LogError($"{name} 无法找到布局射线检测，接下来的流程可能会引发错误", this);
+                if (_canvas == null) Debug.LogError($"{name} 无法找到布局射线检测，接下来的流程可能会引发错误", this);
 #endif
                 return _graphicRaycaster;
             }
@@ -87,8 +82,7 @@ namespace XericUI.Core.Base
         {
             get
             {
-                if (_rect == null)
-                    _rect = GetComponent<RectTransform>();
+                if (!_rect) _rect = GetComponent<RectTransform>();
                 return _rect;
             }
         }
@@ -135,6 +129,7 @@ namespace XericUI.Core.Base
         /// </summary>
         public void SetHierarchyDirty()
         {
+            rectTransform.SetLayoutDirty();
             _canvas = null;
             _canvasScaler = null;
             _graphicRaycaster = null;
@@ -147,6 +142,29 @@ namespace XericUI.Core.Base
         public void ResetHierarchyDirty()
         {
             _hierarchyDirty = false;    
+            rectTransform.SetLayoutDirty();
+        }
+
+        #endregion
+
+        #region 显影
+
+        public virtual void Show()
+        {
+            gameObject.SetActive(true);            
+        }
+        
+        public void Show(bool isShow)
+        {
+            if (isShow)
+                Show();
+            else
+                Hide();
+        }
+
+        public virtual void Hide()
+        {
+            gameObject.SetActive(false);
         }
 
         #endregion

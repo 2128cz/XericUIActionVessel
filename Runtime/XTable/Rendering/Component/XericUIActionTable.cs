@@ -45,6 +45,14 @@ namespace XericUI.XTable.Rendering.Component
         [SerializeField] private ScrollRect m_ScrollRect;
 
         [SerializeField]
+        [Tooltip("冻结行数——顶部固定不滚动的行数")]
+        private int m_FreezeRowCount;
+
+        [SerializeField]
+        [Tooltip("冻结列数——左侧固定不滚动的列数")]
+        private int m_FreezeColCount;
+
+        [SerializeField]
         [Tooltip("在 Hierarchy 中显示动态生成的子对象（仅编辑器，不保存到场景）")]
         private bool m_ChildrenVisible;
 
@@ -55,12 +63,18 @@ namespace XericUI.XTable.Rendering.Component
         [System.NonSerialized] private CellAssembler m_Assembler;
         [System.NonSerialized] private XTableDirtyFlag m_DirtyFlag;
 
+        /// <summary>Viewport 层渲染器——用于绘制冻结行列单元格</summary>
+        [System.NonSerialized] private TableRenderer m_ViewportRenderer;
+
         [System.NonSerialized] private XTableSelectionHandle m_SelectionHandle;
 
         [System.NonSerialized] private GameObject m_BackgroundGo;
 
-        /// <summary>预制体实例缓存，key 为 (row, col)，用于复用已实例化的预制体</summary>
-        [System.NonSerialized] private Dictionary<(int, int), GameObject> m_PrefabInstances;
+		/// <summary>预制体对象池——按原型分组管理</summary>
+		[System.NonSerialized] private PrefabPrototypePool m_PrefabPool;
+
+		/// <summary>活跃预制体实例映射 (row, col) → instance，用于回调编排</summary>
+		[System.NonSerialized] private Dictionary<(int, int), GameObject> m_ActivePrefabMap;
 
         /// <summary>表格四叉树——按 StyleNamespace 分区，渲染阶段查询可见象限</summary>
         [System.NonSerialized] private XTableQuadtree m_Quadtree;
@@ -104,6 +118,21 @@ namespace XericUI.XTable.Rendering.Component
 
         public float[] RowHeights => m_RowHeights;
         public float[] ColWidths => m_ColWidths;
+
+        /// <summary>冻结行数</summary>
+        public int FreezeRowCount => m_FreezeRowCount;
+        /// <summary>冻结列数</summary>
+        public int FreezeColCount => m_FreezeColCount;
+
+        /// <summary>设置冻结行列数并重建视图</summary>
+        public void SetFreezeCount(int rows, int cols)
+        {
+            m_FreezeRowCount = Mathf.Max(0, rows);
+            m_FreezeColCount = Mathf.Max(0, cols);
+            CreateViewportRenderer();
+            MarkDirty(TableDirtyType.LayoutChanged);
+            RefreshView();
+        }
 
         public string DefaultStyleNamespace => m_DefaultStyleNamespace;
 
@@ -234,7 +263,14 @@ namespace XericUI.XTable.Rendering.Component
                             }
 
                             if (data.Prefab != null)
-                                PositionPrefabInstance(row, col, data.Prefab, cellX, cellY, cellW, cellH);
+                            {
+                                GameObject instance = m_PrefabPool.Acquire(data.Prefab, row, col);
+                                RectTransform prt = instance.GetComponent<RectTransform>();
+                                prt.anchoredPosition = new Vector2(cellX, cellY);
+                                prt.sizeDelta = new Vector2(cellW, cellH);
+                                m_ActivePrefabMap[(row, col)] = instance;
+                                data.OnPrefabAcquire?.Invoke(instance);
+                            }
                         }
                     }
                 }
@@ -306,7 +342,14 @@ namespace XericUI.XTable.Rendering.Component
                         }
 
                         if (data.Prefab != null)
-                            PositionPrefabInstance(row, col, data.Prefab, cellX, cellY, cellW, cellH);
+                        {
+                            GameObject instance = m_PrefabPool.Acquire(data.Prefab, row, col);
+                            RectTransform prt = instance.GetComponent<RectTransform>();
+                            prt.anchoredPosition = new Vector2(cellX, cellY);
+                            prt.sizeDelta = new Vector2(cellW, cellH);
+                            m_ActivePrefabMap[(row, col)] = instance;
+                            data.OnPrefabAcquire?.Invoke(instance);
+                        }
                     }
                 }
             }
@@ -327,10 +370,15 @@ namespace XericUI.XTable.Rendering.Component
                 m_TableData = new XTableData();
 
             m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+            m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+            m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
             RecalculateTotalSize();
             EnsureDefaultStyleNamespace();
             CreateDefaultSampleData();
             CreateBackground();
+
+            // 创建 Viewport 层渲染器（用于冻结单元格）
+            CreateViewportRenderer();
 
             if (m_ScrollRect != null)
                 m_ScrollRect.onValueChanged.AddListener(OnScrollValueChanged);
@@ -376,7 +424,8 @@ namespace XericUI.XTable.Rendering.Component
             // 销毁所有动态生成的对象
             if (m_Assembler != null)
                 m_Assembler.DestroyAll();
-            ClearPrefabInstances();
+            m_PrefabPool?.DestroyAll();
+            m_ActivePrefabMap?.Clear();
             DestroyBorderRenderer();
             if (m_BackgroundGo != null)
             {
@@ -384,6 +433,10 @@ namespace XericUI.XTable.Rendering.Component
                 else DestroyImmediate(m_BackgroundGo);
                 m_BackgroundGo = null;
             }
+
+            // 销毁 Viewport 冻结渲染器
+            m_ViewportRenderer?.DestroyAll();
+            m_ViewportRenderer = null;
 
             base.OnDestroy();
         }
@@ -464,15 +517,36 @@ namespace XericUI.XTable.Rendering.Component
             MarkDirty(TableDirtyType.DataChanged);
         }
 
-        public void SetCellText(int row, int col, string text)
+        public XTableCellData SetCellText(int row, int col, string text)
         {
             var data = TableData.GetOrCreateCell(row, col);
             data.Text = text;
             MarkDirty(TableDirtyType.DataChanged);
+            return data;
         }
 
         public XTableCellData GetCellData(int row, int col)
-            => TableData.GetOrCreateCell(row, col);
+			=> TableData.GetOrCreateCell(row, col);
+
+		/// <summary>为指定单元格设置预制体</summary>
+		public XTableCellData SetCellPrefab(int row, int col, GameObject prefab)
+		{
+			var data = TableData.GetOrCreateCell(row, col);
+			data.Prefab = prefab;
+			MarkDirty(TableDirtyType.DataChanged);
+            return data;
+		}
+
+		/// <summary>清除指定单元格的预制体</summary>
+		public void ClearCellPrefab(int row, int col)
+		{
+			var data = TableData.GetCell(row, col);
+			if (data == null) return;
+			data.Prefab = null;
+			data.OnPrefabAcquire = null;
+			data.OnPrefabRelease = null;
+			MarkDirty(TableDirtyType.DataChanged);
+		}
 
         /// <summary>设置单元格的样式命名空间，同时写入边框缓存（谁最后设置归谁）</summary>
         public void SetCellStyleNamespace(int row, int col, string styleNamespace)
@@ -799,19 +873,32 @@ namespace XericUI.XTable.Rendering.Component
                 bgRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
             }
 
-            // 清理上一次渲染的预制体实例
-            ClearPrefabInstances();
+            // 归还预制体前，触发所有活跃实例的释放回调
+            if (m_ActivePrefabMap != null)
+            {
+                foreach (var kv in m_ActivePrefabMap)
+                {
+                    var data = TableData.GetCell(kv.Key.Item1, kv.Key.Item2);
+                    data?.OnPrefabRelease?.Invoke(kv.Value);
+                }
+                m_ActivePrefabMap.Clear();
+            }
 
-            // 回收池
+            // 回收预制体池
+            m_PrefabPool?.ReturnAll();
+
+            // 回收 CellAssembler 池
             m_Assembler.ReturnAll();
 
             // 额外清理孤立的直接子对象（防止域重载或异常流程产生的残留）
             Transform poolRoot = m_Assembler.PoolRoot;
+            Transform prefabPoolRoot = m_PrefabPool?.PoolRoot;
             Transform contentT = ContentTransform;
             for (int i = contentT.childCount - 1; i >= 0; i--)
             {
                 var child = contentT.GetChild(i);
-                if ((poolRoot != null && child == poolRoot)) continue;
+                if (poolRoot != null && child == poolRoot) continue;
+                if (prefabPoolRoot != null && child == prefabPoolRoot) continue;
                 if (m_BackgroundGo != null && child.gameObject == m_BackgroundGo) continue;
 
                 child.gameObject.hideFlags = HideFlags.None;
@@ -839,6 +926,9 @@ namespace XericUI.XTable.Rendering.Component
 
             // 重建边框线段
             RebuildBorders();
+
+            // 渲染 Viewport 层冻结单元格
+            RenderFrozenCells();
 
             m_DirtyFlag.Clear();
             OnTableRefreshed?.Invoke();
@@ -919,6 +1009,7 @@ namespace XericUI.XTable.Rendering.Component
         public void FullRebuild()
         {
             m_Assembler?.DestroyAll();
+            m_PrefabPool?.DestroyAll();
             ClearAllChildren();
             m_BackgroundGo = null;
             m_BorderRenderer = null;
@@ -926,9 +1017,12 @@ namespace XericUI.XTable.Rendering.Component
             m_TableData = new XTableData();
 
             m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+            m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+            m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
             RecalculateTotalSize();
             CreateDefaultSampleData();
             CreateBackground();
+            CreateViewportRenderer();
             MarkDirty(TableDirtyType.All);
             RefreshView();
             SetChildrenVisible(m_ChildrenVisible);
@@ -979,7 +1073,8 @@ namespace XericUI.XTable.Rendering.Component
                 m_TableData.ClearAllMerges();
                 m_TableData.BlockMap.Clear();
             }
-            ClearPrefabInstances();
+            m_ActivePrefabMap?.Clear();
+            m_PrefabPool?.ReturnAll();
             m_Quadtree?.Clear();
             ClearSelection();
             MarkDirty(TableDirtyType.DataChanged);
@@ -992,7 +1087,8 @@ namespace XericUI.XTable.Rendering.Component
         public void ClearTable()
         {
             m_Assembler?.DestroyAll();
-            ClearPrefabInstances();
+            m_PrefabPool?.DestroyAll();
+            m_ActivePrefabMap?.Clear();
             m_Quadtree?.Clear();
             ClearAllChildren();
             m_BackgroundGo = null;
@@ -1004,9 +1100,12 @@ namespace XericUI.XTable.Rendering.Component
             ClearSelection();
 
             m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+            m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+            m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
             MarkDirty(TableDirtyType.All);
             RecalculateTotalSize();
             CreateBackground();
+            CreateViewportRenderer();
             RefreshView();
             SetChildrenVisible(m_ChildrenVisible);
         }
@@ -1140,7 +1239,14 @@ namespace XericUI.XTable.Rendering.Component
 
                         // 预制体渲染
                         if (data.Prefab != null)
-                            PositionPrefabInstance(r, c, data.Prefab, cellX, cellY, cellW, cellH);
+                        {
+                            GameObject instance = m_PrefabPool.Acquire(data.Prefab, r, c);
+                            RectTransform prt = instance.GetComponent<RectTransform>();
+                            prt.anchoredPosition = new Vector2(cellX, cellY);
+                            prt.sizeDelta = new Vector2(cellW, cellH);
+                            m_ActivePrefabMap[(r, c)] = instance;
+                            data.OnPrefabAcquire?.Invoke(instance);
+                        }
                     }
                 }
                 return;
@@ -1216,64 +1322,16 @@ namespace XericUI.XTable.Rendering.Component
 
                     // 预制体渲染
                     if (data.Prefab != null)
-                        PositionPrefabInstance(r, c, data.Prefab, cellX, cellY, cellW, cellH);
+                    {
+                        GameObject instance = m_PrefabPool.Acquire(data.Prefab, r, c);
+                        RectTransform prt = instance.GetComponent<RectTransform>();
+                        prt.anchoredPosition = new Vector2(cellX, cellY);
+                        prt.sizeDelta = new Vector2(cellW, cellH);
+                        m_ActivePrefabMap[(r, c)] = instance;
+                        data.OnPrefabAcquire?.Invoke(instance);
+                    }
                 }
             }
-        }
-
-        #endregion
-
-        #region 预制体管理
-
-        /// <summary>获取或创建指定单元格的预制体实例</summary>
-        private GameObject GetOrCreatePrefabInstance(int row, int col, GameObject prefab)
-        {
-            if (m_PrefabInstances == null)
-                m_PrefabInstances = new Dictionary<(int, int), GameObject>();
-
-            var key = (row, col);
-            if (m_PrefabInstances.TryGetValue(key, out GameObject existing) && existing != null)
-                return existing;
-
-            GameObject instance = Instantiate(prefab, ContentTransform);
-            instance.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
-            instance.name = $"_prefab_{row}_{col}";
-            m_PrefabInstances[key] = instance;
-            return instance;
-        }
-
-        /// <summary>定位预制体实例到指定单元格区域（锚点左上角，枢轴左上角）</summary>
-        private void PositionPrefabInstance(int row, int col, GameObject prefab, float cellX, float cellY, float cellW, float cellH)
-        {
-            GameObject instance = GetOrCreatePrefabInstance(row, col, prefab);
-            if (instance == null) return;
-
-            RectTransform prt = instance.GetComponent<RectTransform>();
-            if (prt == null) prt = instance.AddComponent<RectTransform>();
-
-            prt.anchorMin = new Vector2(0, 1);
-            prt.anchorMax = new Vector2(0, 1);
-            prt.pivot = new Vector2(0, 1);
-            prt.anchoredPosition = new Vector2(cellX, cellY);
-            prt.sizeDelta = new Vector2(cellW, cellH);
-        }
-
-        /// <summary>销毁所有已缓存的预制体实例</summary>
-        private void ClearPrefabInstances()
-        {
-            if (m_PrefabInstances == null) return;
-
-            foreach (var kv in m_PrefabInstances)
-            {
-                if (kv.Value != null)
-                {
-                    if (Application.isPlaying)
-                        Destroy(kv.Value);
-                    else
-                        DestroyImmediate(kv.Value);
-                }
-            }
-            m_PrefabInstances.Clear();
         }
 
         #endregion
@@ -1651,6 +1709,109 @@ namespace XericUI.XTable.Rendering.Component
                     }
                 }
             }
+        }
+
+        #endregion
+
+        #region Viewport 冻结渲染
+
+        /// <summary>创建或重新创建 Viewport 层冻结渲染器</summary>
+        private void CreateViewportRenderer()
+        {
+            if (m_ScrollRect == null || m_ScrollRect.viewport == null) return;
+            if (m_FreezeRowCount <= 0 && m_FreezeColCount <= 0) return;
+
+            // 清理旧渲染器
+            m_ViewportRenderer?.DestroyAll();
+
+            Transform viewportT = m_ScrollRect.viewport;
+            m_ViewportRenderer = new TableRenderer(viewportT, m_DefaultStyleNamespace, OnPoolStyleChanged);
+
+            // 配置委托
+            m_ViewportRenderer.GetStyleColor = (ns, path, fb) => GetStyleColor(ns, path, fb);
+            m_ViewportRenderer.GetStyleFloat = (ns, path, fb) => GetStyleFloat(ns, path, fb);
+            m_ViewportRenderer.GetStyleInt = (ns, path, fb) => GetStyleInt(ns, path, fb);
+            m_ViewportRenderer.GetStyleFontAsset = (ns, path) => GetStyleFontAsset(ns, path);
+            m_ViewportRenderer.GetRowHeights = () => m_RowHeights;
+            m_ViewportRenderer.GetColWidths = () => m_ColWidths;
+            m_ViewportRenderer.GetTableData = () => m_TableData;
+            m_ViewportRenderer.GetDefaultStyleNamespace = () => m_DefaultStyleNamespace;
+            m_ViewportRenderer.IsInSelectionRange = (r, c) => IsInSelectionRange(r, c);
+            m_ViewportRenderer.GetSelectedRow = () => SelectionHandle.StartRow;
+            m_ViewportRenderer.GetSelectedCol = () => SelectionHandle.StartCol;
+
+            // 仅渲染冻结范围
+            m_ViewportRenderer.StartRow = 0;
+            m_ViewportRenderer.EndRow = m_FreezeRowCount;
+            m_ViewportRenderer.StartCol = 0;
+            m_ViewportRenderer.EndCol = m_FreezeColCount;
+
+            // 共享预制体对象池
+            m_ViewportRenderer.PrefabPool = m_PrefabPool;
+            m_ViewportRenderer.ActivePrefabMap = m_ActivePrefabMap;
+        }
+
+        /// <summary>渲染 Viewport 层冻结单元格，随滚动偏移调整位置</summary>
+        private void RenderFrozenCells()
+        {
+            if (m_FreezeRowCount <= 0 && m_FreezeColCount <= 0)
+            {
+                // 无冻结需求时清理渲染器
+                if (m_ViewportRenderer != null)
+                {
+                    m_ViewportRenderer.DestroyAll();
+                    m_ViewportRenderer = null;
+                }
+                return;
+            }
+
+            // 检测冻结范围变更，重建渲染器
+            if (m_ViewportRenderer == null ||
+                m_ViewportRenderer.EndRow != m_FreezeRowCount ||
+                m_ViewportRenderer.EndCol != m_FreezeColCount)
+                CreateViewportRenderer();
+
+            // 计算冻结区域尺寸
+            float freezeW = 0, freezeH = 0;
+            for (int c = 0; c < m_FreezeColCount && c < m_ColWidths.Length; c++)
+                freezeW += m_ColWidths[c];
+            for (int r = 0; r < m_FreezeRowCount && r < m_RowHeights.Length; r++)
+                freezeH += m_RowHeights[r];
+
+            // 创建/更新背景
+            m_ViewportRenderer.CreateBackground(freezeW, freezeH, m_DefaultStyleNamespace);
+
+            // 获取滚动偏移
+            Vector2 scrollOffset = Vector2.zero;
+            if (m_ScrollRect != null && m_ScrollRect.content != null)
+            {
+                scrollOffset.x = Mathf.Max(0, -m_ScrollRect.content.anchoredPosition.x);
+                scrollOffset.y = Mathf.Max(0, m_ScrollRect.content.anchoredPosition.y);
+            }
+
+            // 调整背景位置（随滚动偏移移动，保持在视口可见范围内）
+            if (m_ViewportRenderer.BackgroundGo != null)
+            {
+                var bgRt = m_ViewportRenderer.BackgroundGo.GetComponent<RectTransform>();
+                bgRt.anchoredPosition = new Vector2(scrollOffset.x, -scrollOffset.y);
+            }
+
+            // 回收并重新渲染冻结单元格
+            m_ViewportRenderer.ReturnAll();
+            m_ViewportRenderer.RenderCells(
+                0, m_FreezeRowCount,
+                0, m_FreezeColCount,
+                !Application.isPlaying);
+
+            // 冻结单元格需要跟随滚动偏移（相对于 Viewport 定位）
+            if (m_ViewportRenderer.Assembler != null)
+            {
+                // 调整所有活跃的池对象的 anchoredPosition 以抵消滚动
+                // 这通过重新定位背景实现，单元格相对于背景 (0,0) 定位，所以随背景一起移动
+            }
+
+            // 背景始终可见
+            m_ViewportRenderer.BackgroundGo?.SetActive(true);
         }
 
         #endregion
