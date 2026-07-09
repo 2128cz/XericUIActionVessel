@@ -70,8 +70,11 @@ namespace XericUI.XTable.Rendering.Component
 
         [System.NonSerialized] private GameObject m_BackgroundGo;
 
-        /// <summary>预制体实例缓存，key 为 (row, col)，用于复用已实例化的预制体</summary>
-        [System.NonSerialized] private Dictionary<(int, int), GameObject> m_PrefabInstances;
+		/// <summary>预制体对象池——按原型分组管理</summary>
+		[System.NonSerialized] private PrefabPrototypePool m_PrefabPool;
+
+		/// <summary>活跃预制体实例映射 (row, col) → instance，用于回调编排</summary>
+		[System.NonSerialized] private Dictionary<(int, int), GameObject> m_ActivePrefabMap;
 
         /// <summary>表格四叉树——按 StyleNamespace 分区，渲染阶段查询可见象限</summary>
         [System.NonSerialized] private XTableQuadtree m_Quadtree;
@@ -260,7 +263,14 @@ namespace XericUI.XTable.Rendering.Component
                             }
 
                             if (data.Prefab != null)
-                                PositionPrefabInstance(row, col, data.Prefab, cellX, cellY, cellW, cellH);
+                            {
+                                GameObject instance = m_PrefabPool.Acquire(data.Prefab, row, col);
+                                RectTransform prt = instance.GetComponent<RectTransform>();
+                                prt.anchoredPosition = new Vector2(cellX, cellY);
+                                prt.sizeDelta = new Vector2(cellW, cellH);
+                                m_ActivePrefabMap[(row, col)] = instance;
+                                data.OnPrefabAcquire?.Invoke(instance);
+                            }
                         }
                     }
                 }
@@ -332,7 +342,14 @@ namespace XericUI.XTable.Rendering.Component
                         }
 
                         if (data.Prefab != null)
-                            PositionPrefabInstance(row, col, data.Prefab, cellX, cellY, cellW, cellH);
+                        {
+                            GameObject instance = m_PrefabPool.Acquire(data.Prefab, row, col);
+                            RectTransform prt = instance.GetComponent<RectTransform>();
+                            prt.anchoredPosition = new Vector2(cellX, cellY);
+                            prt.sizeDelta = new Vector2(cellW, cellH);
+                            m_ActivePrefabMap[(row, col)] = instance;
+                            data.OnPrefabAcquire?.Invoke(instance);
+                        }
                     }
                 }
             }
@@ -353,6 +370,8 @@ namespace XericUI.XTable.Rendering.Component
                 m_TableData = new XTableData();
 
             m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+            m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+            m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
             RecalculateTotalSize();
             EnsureDefaultStyleNamespace();
             CreateDefaultSampleData();
@@ -405,7 +424,8 @@ namespace XericUI.XTable.Rendering.Component
             // 销毁所有动态生成的对象
             if (m_Assembler != null)
                 m_Assembler.DestroyAll();
-            ClearPrefabInstances();
+            m_PrefabPool?.DestroyAll();
+            m_ActivePrefabMap?.Clear();
             DestroyBorderRenderer();
             if (m_BackgroundGo != null)
             {
@@ -497,15 +517,36 @@ namespace XericUI.XTable.Rendering.Component
             MarkDirty(TableDirtyType.DataChanged);
         }
 
-        public void SetCellText(int row, int col, string text)
+        public XTableCellData SetCellText(int row, int col, string text)
         {
             var data = TableData.GetOrCreateCell(row, col);
             data.Text = text;
             MarkDirty(TableDirtyType.DataChanged);
+            return data;
         }
 
         public XTableCellData GetCellData(int row, int col)
-            => TableData.GetOrCreateCell(row, col);
+			=> TableData.GetOrCreateCell(row, col);
+
+		/// <summary>为指定单元格设置预制体</summary>
+		public XTableCellData SetCellPrefab(int row, int col, GameObject prefab)
+		{
+			var data = TableData.GetOrCreateCell(row, col);
+			data.Prefab = prefab;
+			MarkDirty(TableDirtyType.DataChanged);
+            return data;
+		}
+
+		/// <summary>清除指定单元格的预制体</summary>
+		public void ClearCellPrefab(int row, int col)
+		{
+			var data = TableData.GetCell(row, col);
+			if (data == null) return;
+			data.Prefab = null;
+			data.OnPrefabAcquire = null;
+			data.OnPrefabRelease = null;
+			MarkDirty(TableDirtyType.DataChanged);
+		}
 
         /// <summary>设置单元格的样式命名空间</summary>
         public void SetCellStyleNamespace(int row, int col, string styleNamespace)
@@ -808,19 +849,32 @@ namespace XericUI.XTable.Rendering.Component
                 bgRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
             }
 
-            // 清理上一次渲染的预制体实例
-            ClearPrefabInstances();
+            // 归还预制体前，触发所有活跃实例的释放回调
+            if (m_ActivePrefabMap != null)
+            {
+                foreach (var kv in m_ActivePrefabMap)
+                {
+                    var data = TableData.GetCell(kv.Key.Item1, kv.Key.Item2);
+                    data?.OnPrefabRelease?.Invoke(kv.Value);
+                }
+                m_ActivePrefabMap.Clear();
+            }
 
-            // 回收池
+            // 回收预制体池
+            m_PrefabPool?.ReturnAll();
+
+            // 回收 CellAssembler 池
             m_Assembler.ReturnAll();
 
             // 额外清理孤立的直接子对象（防止域重载或异常流程产生的残留）
             Transform poolRoot = m_Assembler.PoolRoot;
+            Transform prefabPoolRoot = m_PrefabPool?.PoolRoot;
             Transform contentT = ContentTransform;
             for (int i = contentT.childCount - 1; i >= 0; i--)
             {
                 var child = contentT.GetChild(i);
-                if ((poolRoot != null && child == poolRoot)) continue;
+                if (poolRoot != null && child == poolRoot) continue;
+                if (prefabPoolRoot != null && child == prefabPoolRoot) continue;
                 if (m_BackgroundGo != null && child.gameObject == m_BackgroundGo) continue;
 
                 child.gameObject.hideFlags = HideFlags.None;
@@ -931,6 +985,7 @@ namespace XericUI.XTable.Rendering.Component
         public void FullRebuild()
         {
             m_Assembler?.DestroyAll();
+            m_PrefabPool?.DestroyAll();
             ClearAllChildren();
             m_BackgroundGo = null;
             m_BorderRenderer = null;
@@ -938,6 +993,8 @@ namespace XericUI.XTable.Rendering.Component
             m_TableData = new XTableData();
 
             m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+            m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+            m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
             RecalculateTotalSize();
             CreateDefaultSampleData();
             CreateBackground();
@@ -992,7 +1049,8 @@ namespace XericUI.XTable.Rendering.Component
                 m_TableData.ClearAllMerges();
                 m_TableData.BlockMap.Clear();
             }
-            ClearPrefabInstances();
+            m_ActivePrefabMap?.Clear();
+            m_PrefabPool?.ReturnAll();
             m_Quadtree?.Clear();
             ClearSelection();
             MarkDirty(TableDirtyType.DataChanged);
@@ -1005,7 +1063,8 @@ namespace XericUI.XTable.Rendering.Component
         public void ClearTable()
         {
             m_Assembler?.DestroyAll();
-            ClearPrefabInstances();
+            m_PrefabPool?.DestroyAll();
+            m_ActivePrefabMap?.Clear();
             m_Quadtree?.Clear();
             ClearAllChildren();
             m_BackgroundGo = null;
@@ -1017,6 +1076,8 @@ namespace XericUI.XTable.Rendering.Component
             ClearSelection();
 
             m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+            m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+            m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
             MarkDirty(TableDirtyType.All);
             RecalculateTotalSize();
             CreateBackground();
@@ -1154,7 +1215,14 @@ namespace XericUI.XTable.Rendering.Component
 
                         // 预制体渲染
                         if (data.Prefab != null)
-                            PositionPrefabInstance(r, c, data.Prefab, cellX, cellY, cellW, cellH);
+                        {
+                            GameObject instance = m_PrefabPool.Acquire(data.Prefab, r, c);
+                            RectTransform prt = instance.GetComponent<RectTransform>();
+                            prt.anchoredPosition = new Vector2(cellX, cellY);
+                            prt.sizeDelta = new Vector2(cellW, cellH);
+                            m_ActivePrefabMap[(r, c)] = instance;
+                            data.OnPrefabAcquire?.Invoke(instance);
+                        }
                     }
                 }
                 return;
@@ -1230,64 +1298,16 @@ namespace XericUI.XTable.Rendering.Component
 
                     // 预制体渲染
                     if (data.Prefab != null)
-                        PositionPrefabInstance(r, c, data.Prefab, cellX, cellY, cellW, cellH);
+                    {
+                        GameObject instance = m_PrefabPool.Acquire(data.Prefab, r, c);
+                        RectTransform prt = instance.GetComponent<RectTransform>();
+                        prt.anchoredPosition = new Vector2(cellX, cellY);
+                        prt.sizeDelta = new Vector2(cellW, cellH);
+                        m_ActivePrefabMap[(r, c)] = instance;
+                        data.OnPrefabAcquire?.Invoke(instance);
+                    }
                 }
             }
-        }
-
-        #endregion
-
-        #region 预制体管理
-
-        /// <summary>获取或创建指定单元格的预制体实例</summary>
-        private GameObject GetOrCreatePrefabInstance(int row, int col, GameObject prefab)
-        {
-            if (m_PrefabInstances == null)
-                m_PrefabInstances = new Dictionary<(int, int), GameObject>();
-
-            var key = (row, col);
-            if (m_PrefabInstances.TryGetValue(key, out GameObject existing) && existing != null)
-                return existing;
-
-            GameObject instance = Instantiate(prefab, ContentTransform);
-            instance.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
-            instance.name = $"_prefab_{row}_{col}";
-            m_PrefabInstances[key] = instance;
-            return instance;
-        }
-
-        /// <summary>定位预制体实例到指定单元格区域（锚点左上角，枢轴左上角）</summary>
-        private void PositionPrefabInstance(int row, int col, GameObject prefab, float cellX, float cellY, float cellW, float cellH)
-        {
-            GameObject instance = GetOrCreatePrefabInstance(row, col, prefab);
-            if (instance == null) return;
-
-            RectTransform prt = instance.GetComponent<RectTransform>();
-            if (prt == null) prt = instance.AddComponent<RectTransform>();
-
-            prt.anchorMin = new Vector2(0, 1);
-            prt.anchorMax = new Vector2(0, 1);
-            prt.pivot = new Vector2(0, 1);
-            prt.anchoredPosition = new Vector2(cellX, cellY);
-            prt.sizeDelta = new Vector2(cellW, cellH);
-        }
-
-        /// <summary>销毁所有已缓存的预制体实例</summary>
-        private void ClearPrefabInstances()
-        {
-            if (m_PrefabInstances == null) return;
-
-            foreach (var kv in m_PrefabInstances)
-            {
-                if (kv.Value != null)
-                {
-                    if (Application.isPlaying)
-                        Destroy(kv.Value);
-                    else
-                        DestroyImmediate(kv.Value);
-                }
-            }
-            m_PrefabInstances.Clear();
         }
 
         #endregion
@@ -1667,6 +1687,10 @@ namespace XericUI.XTable.Rendering.Component
             m_ViewportRenderer.EndRow = m_FreezeRowCount;
             m_ViewportRenderer.StartCol = 0;
             m_ViewportRenderer.EndCol = m_FreezeColCount;
+
+            // 共享预制体对象池
+            m_ViewportRenderer.PrefabPool = m_PrefabPool;
+            m_ViewportRenderer.ActivePrefabMap = m_ActivePrefabMap;
         }
 
         /// <summary>渲染 Viewport 层冻结单元格，随滚动偏移调整位置</summary>

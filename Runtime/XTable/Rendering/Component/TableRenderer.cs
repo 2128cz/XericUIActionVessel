@@ -17,11 +17,14 @@ namespace XericUI.XTable.Rendering.Component
         #region 内部字段
 
         private Transform m_Parent;
-        private CellAssembler m_Assembler;
-        private GameObject m_BackgroundGo;
+		private CellAssembler m_Assembler;
+		private GameObject m_BackgroundGo;
 
-        /// <summary>当前渲染器中所有预制体实例的缓存</summary>
-        private Dictionary<(int, int), GameObject> m_PrefabInstances;
+		/// <summary>共享预制体对象池引用（由 XericUIActionTable 传入）</summary>
+		public PrefabPrototypePool PrefabPool;
+
+		/// <summary>共享活跃预制体映射表（由 XericUIActionTable 传入）</summary>
+		public Dictionary<(int, int), GameObject> ActivePrefabMap;
 
         #endregion
 
@@ -88,7 +91,6 @@ namespace XericUI.XTable.Rendering.Component
         public void DestroyAll()
         {
             m_Assembler?.DestroyAll();
-            ClearPrefabInstances();
 
             if (m_BackgroundGo != null)
             {
@@ -262,8 +264,16 @@ namespace XericUI.XTable.Rendering.Component
                             XericUIActionTable.STYLE_CELL_FONT_ASSET) ?? txt.Text.font;
                     }
 
-                    if (data.Prefab != null)
-                        PositionPrefabInstance(r, c, data.Prefab, cellX, cellY, cellW, cellH);
+                    if (data.Prefab != null && PrefabPool != null)
+                    {
+                        GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
+                        RectTransform prt = instance.GetComponent<RectTransform>();
+                        prt.anchoredPosition = new Vector2(cellX, cellY);
+                        prt.sizeDelta = new Vector2(cellW, cellH);
+                        if (ActivePrefabMap != null)
+                            ActivePrefabMap[(r, c)] = instance;
+                        data.OnPrefabAcquire?.Invoke(instance);
+                    }
                 }
             }
         }
@@ -336,61 +346,18 @@ namespace XericUI.XTable.Rendering.Component
                         txt.Text.text = data.Text;
                     }
 
-                    if (data.Prefab != null)
-                        PositionPrefabInstance(r, c, data.Prefab, cellX, cellY, cellW, cellH);
+                    if (data.Prefab != null && PrefabPool != null)
+                    {
+                        GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
+                        RectTransform prt = instance.GetComponent<RectTransform>();
+                        prt.anchoredPosition = new Vector2(cellX, cellY);
+                        prt.sizeDelta = new Vector2(cellW, cellH);
+                        if (ActivePrefabMap != null)
+                            ActivePrefabMap[(r, c)] = instance;
+                        data.OnPrefabAcquire?.Invoke(instance);
+                    }
                 }
             }
-        }
-
-        #endregion
-
-        #region 预制体管理
-
-        private GameObject GetOrCreatePrefabInstance(int row, int col, GameObject prefab)
-        {
-            if (m_PrefabInstances == null)
-                m_PrefabInstances = new Dictionary<(int, int), GameObject>();
-
-            var key = (row, col);
-            if (m_PrefabInstances.TryGetValue(key, out GameObject existing) && existing != null)
-                return existing;
-
-            GameObject instance = Object.Instantiate(prefab, m_Parent);
-            instance.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
-            instance.name = $"_prefab_{row}_{col}";
-            m_PrefabInstances[key] = instance;
-            return instance;
-        }
-
-        private void PositionPrefabInstance(int row, int col, GameObject prefab,
-            float cellX, float cellY, float cellW, float cellH)
-        {
-            GameObject instance = GetOrCreatePrefabInstance(row, col, prefab);
-            if (instance == null) return;
-
-            RectTransform prt = instance.GetComponent<RectTransform>();
-            if (prt == null) prt = instance.AddComponent<RectTransform>();
-
-            prt.anchorMin = new Vector2(0, 1);
-            prt.anchorMax = new Vector2(0, 1);
-            prt.pivot = new Vector2(0, 1);
-            prt.anchoredPosition = new Vector2(cellX, cellY);
-            prt.sizeDelta = new Vector2(cellW, cellH);
-        }
-
-        /// <summary>销毁所有缓存预制体实例</summary>
-        public void ClearPrefabInstances()
-        {
-            if (m_PrefabInstances == null) return;
-            foreach (var kv in m_PrefabInstances)
-            {
-                if (kv.Value != null)
-                {
-                    if (Application.isPlaying) Object.Destroy(kv.Value);
-                    else Object.DestroyImmediate(kv.Value);
-                }
-            }
-            m_PrefabInstances.Clear();
         }
 
         #endregion

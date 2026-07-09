@@ -1,7 +1,7 @@
 using System;
 
 using UnityEngine;
-
+using UnityEngine.UI;
 using XericLibrary.Runtime.SuperStyleSheet;
 
 namespace XericUI.Core.StyleSheetUI
@@ -13,31 +13,31 @@ namespace XericUI.Core.StyleSheetUI
 	[Serializable]
 	public class StyleSheetState
 	{
-		private const string k_DefaultColorBasePath   = "/button/TargetGraphic/ColorTint";
-		private const string k_DefaultTextureBasePath = "/button/TargetGraphic/SpriteState";
+		private const string k_DefaultColorBasePath   = "/TargetGraphic/ColorTint";
+		private const string k_DefaultTextureBasePath = "/TargetGraphic/SpriteState";
 		private const string k_DefaultNamespace       = "default";
 
 		#region 序列化字段
 
 		[SerializeField]
 		[Tooltip("正常状态")]
-		private StyleField m_Normal = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/NormalColor" };
+		private StyleField m_Normal;
 
 		[SerializeField]
 		[Tooltip("高亮状态")]
-		private StyleField m_Highlighted = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/HighlightedColor" };
+		private StyleField m_Highlighted;
 
 		[SerializeField]
 		[Tooltip("按下状态")]
-		private StyleField m_Pressed = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/PressedColor" };
+		private StyleField m_Pressed;
 
 		[SerializeField]
 		[Tooltip("选中状态")]
-		private StyleField m_Selected = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/SelectedColor" };
+		private StyleField m_Selected;
 
 		[SerializeField]
 		[Tooltip("禁用状态")]
-		private StyleField m_Disabled = new StyleField { Namespace = k_DefaultNamespace, StylePath = k_DefaultColorBasePath + "/DisabledColor" };
+		private StyleField m_Disabled;
 
 		[SerializeField]
 		[Range(0.001f, 1f)]
@@ -46,6 +46,22 @@ namespace XericUI.Core.StyleSheetUI
 
 		#endregion
 
+		public StyleSheetState(string stylePathRoot, Selectable.Transition mode)
+		{
+			string state = mode switch
+			{
+				Selectable.Transition.ColorTint => "ColorTint",
+				Selectable.Transition.SpriteSwap => "SpriteState",
+				Selectable.Transition.Animation => "Animation",
+				_ => "None"
+			};
+			m_Normal = new StyleField($"{stylePathRoot}/TargetGraphic/{state}", k_DefaultNamespace);
+			m_Highlighted = new StyleField($"{stylePathRoot}/TargetGraphic/{state}", k_DefaultNamespace);
+			m_Pressed = new StyleField($"{stylePathRoot}/TargetGraphic/{state}", k_DefaultNamespace);
+			m_Selected = new StyleField($"{stylePathRoot}/TargetGraphic/{state}", k_DefaultNamespace);
+			m_Disabled = new StyleField($"{stylePathRoot}/TargetGraphic/{state}", k_DefaultNamespace);
+		}
+		
 		#region 公开属性
 
 		public StyleField Normal => m_Normal;
@@ -67,22 +83,7 @@ namespace XericUI.Core.StyleSheetUI
 		};
 
 		/// <summary>默认实例（五态默认匹配 ColorTint 颜色块）</summary>
-		public static StyleSheetState Default => new StyleSheetState();
-
-		/// <summary>
-		/// 创建纹理五态样式块，StylePath 默认匹配 SpriteState 块。
-		/// </summary>
-		public static StyleSheetState CreateTexture(string ns = k_DefaultNamespace)
-		{
-			var state = new StyleSheetState();
-			state.Normal.StylePath      = k_DefaultTextureBasePath + "/NormalSprite";
-			state.Highlighted.StylePath = k_DefaultTextureBasePath + "/HighlightedSprite";
-			state.Pressed.StylePath     = k_DefaultTextureBasePath + "/PressedSprite";
-			state.Selected.StylePath    = k_DefaultTextureBasePath + "/SelectedSprite";
-			state.Disabled.StylePath    = k_DefaultTextureBasePath + "/DisabledSprite";
-			foreach (var f in state.AllFields) f.Namespace = ns;
-			return state;
-		}
+		public static StyleSheetState Default => new StyleSheetState("button", Selectable.Transition.ColorTint);
 
 		#endregion
 

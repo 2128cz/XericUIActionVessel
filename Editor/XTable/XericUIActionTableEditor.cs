@@ -177,6 +177,44 @@ namespace XericUIEditor.XTable
                 if (GUILayout.Button("手动刷新视图", GUILayout.Height(22)))
                     EditorApplication.delayCall += () => m_Table.RefreshView();
 
+                // ── 预制体配置 ──
+                EditorGUILayout.Space(4);
+                EditorGUILayout.LabelField("单元格预制体配置", EditorStyles.boldLabel);
+                int selRow = m_Table.SelectedRow;
+                int selCol = m_Table.SelectedCol;
+                if (selRow < 0 || selCol < 0)
+                {
+                    EditorGUILayout.HelpBox("请先在 Scene View 中点击选中一个单元格", MessageType.Info);
+                }
+                else
+                {
+                    var data = m_Table.TableData?.GetCell(selRow, selCol);
+                    GameObject currentPrefab = data?.Prefab;
+                    EditorGUI.BeginDisabledGroup(true);
+                    EditorGUILayout.TextField("目标单元格", $"({selRow}, {selCol})");
+                    EditorGUI.EndDisabledGroup();
+
+                    GameObject newPrefab = (GameObject)EditorGUILayout.ObjectField(
+                        "预制体", currentPrefab, typeof(GameObject), false);
+
+                    EditorGUILayout.BeginHorizontal();
+                    if (GUILayout.Button("应用预制体", GUILayout.Height(22)))
+                    {
+                        Undo.RecordObject(m_Table, "Set Cell Prefab");
+                        m_Table.SetCellPrefab(selRow, selCol, newPrefab);
+                        EditorUtility.SetDirty(m_Table);
+                        Repaint();
+                    }
+                    if (GUILayout.Button("清除预制体", GUILayout.Height(22)))
+                    {
+                        Undo.RecordObject(m_Table, "Clear Cell Prefab");
+                        m_Table.ClearCellPrefab(selRow, selCol);
+                        EditorUtility.SetDirty(m_Table);
+                        Repaint();
+                    }
+                    EditorGUILayout.EndHorizontal();
+                }
+
                 EditorGUI.indentLevel--;
             }
 
