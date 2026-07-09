@@ -26,6 +26,9 @@ namespace XericUI.XTable.Rendering.Component
 		/// <summary>共享活跃预制体映射表（由 XericUIActionTable 传入）</summary>
 		public Dictionary<(int, int), GameObject> ActivePrefabMap;
 
+		/// <summary>Texture2D → Sprite 缓存，避免每帧分配</summary>
+		private Dictionary<Texture2D, Sprite> m_SpriteCache;
+
         #endregion
 
         #region 公开属性
@@ -249,30 +252,46 @@ namespace XericUI.XTable.Rendering.Component
 
                     if (data == null) continue;
 
-                    if (!string.IsNullOrEmpty(data.Text))
+                    switch (data.ContentType)
                     {
-                        var txt = m_Assembler.GetText("cell_text", cellNS);
-                        txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                        txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
-                        txt.Text.text = data.Text;
-                        txt.Text.color = GetStyleColor(cellNS, XericUIActionTable.STYLE_CELL_FG_COLOR,
-                            XericUIActionTable.FG_COLOR_FALLBACK);
-                        txt.Text.fontSize = GetStyleInt(cellNS, XericUIActionTable.STYLE_CELL_FONT_SIZE,
-                            XericUIActionTable.FONT_SIZE_FALLBACK);
-                        txt.Text.alignment = TextAlignmentOptions.Midline;
-                        txt.Text.font = GetStyleFontAsset?.Invoke(cellNS,
-                            XericUIActionTable.STYLE_CELL_FONT_ASSET) ?? txt.Text.font;
-                    }
-
-                    if (data.Prefab != null && PrefabPool != null)
-                    {
-                        GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
-                        RectTransform prt = instance.GetComponent<RectTransform>();
-                        prt.anchoredPosition = new Vector2(cellX, cellY);
-                        prt.sizeDelta = new Vector2(cellW, cellH);
-                        if (ActivePrefabMap != null)
-                            ActivePrefabMap[(r, c)] = instance;
-                        data.OnPrefabAcquire?.Invoke(instance);
+                        case CellContentType.Text:
+                            if (!string.IsNullOrEmpty(data.Text))
+                            {
+                                var txt = m_Assembler.GetText("cell_text", cellNS);
+                                txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
+                                txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                txt.Text.text = data.Text;
+                                txt.Text.color = GetStyleColor(cellNS, XericUIActionTable.STYLE_CELL_FG_COLOR,
+                                    XericUIActionTable.FG_COLOR_FALLBACK);
+                                txt.Text.fontSize = GetStyleInt(cellNS, XericUIActionTable.STYLE_CELL_FONT_SIZE,
+                                    XericUIActionTable.FONT_SIZE_FALLBACK);
+                                txt.Text.alignment = TextAlignmentOptions.Midline;
+                                txt.Text.font = GetStyleFontAsset?.Invoke(cellNS,
+                                    XericUIActionTable.STYLE_CELL_FONT_ASSET) ?? txt.Text.font;
+                            }
+                            break;
+                        case CellContentType.Image:
+                            if (data.Image != null)
+                            {
+                                Sprite sprite = GetOrCreateSprite(data.Image);
+                                var img = m_Assembler.GetImage("cell_image", cellNS);
+                                img.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
+                                img.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                img.Image.sprite = sprite;
+                            }
+                            break;
+                        case CellContentType.Prefab:
+                            if (data.Prefab != null && PrefabPool != null)
+                            {
+                                GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
+                                RectTransform prt = instance.GetComponent<RectTransform>();
+                                prt.anchoredPosition = new Vector2(cellX, cellY);
+                                prt.sizeDelta = new Vector2(cellW, cellH);
+                                if (ActivePrefabMap != null)
+                                    ActivePrefabMap[(r, c)] = instance;
+                                data.OnPrefabAcquire?.Invoke(instance);
+                            }
+                            break;
                     }
                 }
             }
@@ -338,26 +357,62 @@ namespace XericUI.XTable.Rendering.Component
 
                     if (data == null) continue;
 
-                    if (!string.IsNullOrEmpty(data.Text))
+                    switch (data.ContentType)
                     {
-                        var txt = m_Assembler.GetText("cell_text", cellNS);
-                        txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                        txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
-                        txt.Text.text = data.Text;
-                    }
-
-                    if (data.Prefab != null && PrefabPool != null)
-                    {
-                        GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
-                        RectTransform prt = instance.GetComponent<RectTransform>();
-                        prt.anchoredPosition = new Vector2(cellX, cellY);
-                        prt.sizeDelta = new Vector2(cellW, cellH);
-                        if (ActivePrefabMap != null)
-                            ActivePrefabMap[(r, c)] = instance;
-                        data.OnPrefabAcquire?.Invoke(instance);
+                        case CellContentType.Text:
+                            if (!string.IsNullOrEmpty(data.Text))
+                            {
+                                var txt = m_Assembler.GetText("cell_text", cellNS);
+                                txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
+                                txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                txt.Text.text = data.Text;
+                            }
+                            break;
+                        case CellContentType.Image:
+                            if (data.Image != null)
+                            {
+                                Sprite sprite = GetOrCreateSprite(data.Image);
+                                var img = m_Assembler.GetImage("cell_image", cellNS);
+                                img.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
+                                img.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                img.Image.sprite = sprite;
+                            }
+                            break;
+                        case CellContentType.Prefab:
+                            if (data.Prefab != null && PrefabPool != null)
+                            {
+                                GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
+                                RectTransform prt = instance.GetComponent<RectTransform>();
+                                prt.anchoredPosition = new Vector2(cellX, cellY);
+                                prt.sizeDelta = new Vector2(cellW, cellH);
+                                if (ActivePrefabMap != null)
+                                    ActivePrefabMap[(r, c)] = instance;
+                                data.OnPrefabAcquire?.Invoke(instance);
+                            }
+                            break;
                     }
                 }
             }
+        }
+
+        #endregion
+
+        #region 辅助方法
+
+        /// <summary>将 Texture2D 转为 Sprite（带缓存），用于 Image 类型单元格渲染</summary>
+        private Sprite GetOrCreateSprite(Texture2D texture)
+        {
+            if (texture == null) return null;
+
+            if (m_SpriteCache == null)
+                m_SpriteCache = new Dictionary<Texture2D, Sprite>();
+
+            if (!m_SpriteCache.TryGetValue(texture, out Sprite sprite))
+            {
+                sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                m_SpriteCache[texture] = sprite;
+            }
+            return sprite;
         }
 
         #endregion
