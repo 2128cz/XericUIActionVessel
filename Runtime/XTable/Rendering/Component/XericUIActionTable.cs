@@ -412,9 +412,31 @@ namespace XericUI.XTable.Rendering.Component
 
         #region 生命周期
 
+        private static bool s_StyleSheetsPreloaded;
+
+        /// <summary>
+        /// 预加载 Resources 目录下所有 XericStyleSheet 资产到 StyleManager。
+        /// 仅首次调用生效，后续调用直接跳过。
+        /// </summary>
+        private static void PreloadAllStyleSheets()
+        {
+            if (s_StyleSheetsPreloaded) return;
+            s_StyleSheetsPreloaded = true;
+
+            var sheets = Resources.LoadAll<XericStyleSheet>("");
+            foreach (var sheet in sheets)
+            {
+                if (sheet != null)
+                    StyleManager.LoadStyleSheet(sheet);
+            }
+        }
+
         protected override void Awake()
         {
             base.Awake();
+
+            // 预加载 Resources 中所有 .xsss 样式表到 StyleManager（仅首次）
+            PreloadAllStyleSheets();
 
             // 域重载后旧子对象可能残留在场景中（DontSave 不自动销毁），先清空再重建
             ClearAllChildren();
