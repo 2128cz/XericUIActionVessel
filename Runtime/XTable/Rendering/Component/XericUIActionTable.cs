@@ -215,6 +215,8 @@ namespace XericUI.XTable.Rendering.Component
                         {
                             // 跳过被合并覆盖的单元格
                             if (TableData.IsCellMerged(row, col)) continue;
+                            // 跳过不可见的单元格
+                            if (!IsCellVisible(row, col)) continue;
 
                             float cellX = GetColLeftX(col);
                             float cellY = -GetRowTopY(row);
@@ -315,6 +317,8 @@ namespace XericUI.XTable.Rendering.Component
                     {
                         // 跳过被合并覆盖的单元格
                         if (TableData.IsCellMerged(row, col)) continue;
+                        // 跳过不可见的单元格
+                        if (!IsCellVisible(row, col)) continue;
 
                         float cellX = GetColLeftX(col);
                         float cellY = -GetRowTopY(row);
@@ -932,6 +936,11 @@ namespace XericUI.XTable.Rendering.Component
             RecalculateTotalSize();
             UpdateVisibleRect();
 
+            // 确保 ScrollRect Content 尺寸正确（否则滚动时可能裁剪掉全部内容）
+            RectTransform ctRt = ContentTransform as RectTransform;
+            if (ctRt != null)
+                ctRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+
             // 更新背景尺寸
             if (m_BackgroundGo != null)
             {
@@ -960,12 +969,14 @@ namespace XericUI.XTable.Rendering.Component
             Transform poolRoot = m_Assembler.PoolRoot;
             Transform prefabPoolRoot = m_PrefabPool?.PoolRoot;
             Transform contentT = ContentTransform;
+            Transform borderT = contentT.Find("_TableBorders");
             for (int i = contentT.childCount - 1; i >= 0; i--)
             {
                 var child = contentT.GetChild(i);
                 if (poolRoot != null && child == poolRoot) continue;
                 if (prefabPoolRoot != null && child == prefabPoolRoot) continue;
                 if (m_BackgroundGo != null && child.gameObject == m_BackgroundGo) continue;
+                if (borderT != null && child == borderT) continue;
 
                 child.gameObject.hideFlags = HideFlags.None;
                 if (Application.isPlaying)
@@ -1433,6 +1444,18 @@ namespace XericUI.XTable.Rendering.Component
         #endregion
 
         #region 坐标计算
+
+        /// <summary>判断指定单元格是否与当前可见矩形有重叠（用于 RenderQuadrants 裁剪）</summary>
+        private bool IsCellVisible(int row, int col)
+        {
+            float cellTop = GetRowTopY(row);
+            float cellBottom = cellTop + m_RowHeights[row];
+            float cellLeft = GetColLeftX(col);
+            float cellRight = cellLeft + m_ColWidths[col];
+
+            return cellBottom > m_VisibleRect.y && cellTop < m_VisibleRect.yMax &&
+                   cellRight > m_VisibleRect.x && cellLeft < m_VisibleRect.xMax;
+        }
 
         private float GetRowTopY(int row)
         {
