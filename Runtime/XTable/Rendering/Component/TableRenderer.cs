@@ -29,6 +29,13 @@ namespace XericUI.XTable.Rendering.Component
 		/// <summary>Texture2D → Sprite 缓存，避免每帧分配</summary>
 		private Dictionary<Texture2D, Sprite> m_SpriteCache;
 
+		/// <summary>单元格内容水平内边距（单侧），由 XericUIActionTable 设置</summary>
+		public float CellPadding;
+		private float CellPadding2 => CellPadding * 2f;
+
+		/// <summary>表格全局配置资源，由 XericUIActionTable 设置</summary>
+		public XTableConfig Config;
+
         #endregion
 
         #region 公开属性
@@ -194,8 +201,8 @@ namespace XericUI.XTable.Rendering.Component
             float borderWidth = GetStyleFloat(defaultNs, XericUIActionTable.STYLE_CELL_BORDER_BOTTOM_WIDTH,
                 XericUIActionTable.BORDER_WIDTH_FALLBACK);
 
-            Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * 0.4f);
-            Color focusColor = new Color(selectionColor.r + 0.04f, selectionColor.g + 0.13f, selectionColor.b + 0.13f, selectionColor.a * 1.4f);
+            Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * Config.MultiSelectAlphaFactor);
+            Color focusColor = new Color(selectionColor.r + Config.FocusRAdd, selectionColor.g + Config.FocusGAdd, selectionColor.b + Config.FocusBAdd, selectionColor.a * Config.FocusAlphaMul);
 
             int selRow = GetSelectedRow();
             int selCol = GetSelectedCol();
@@ -258,8 +265,8 @@ namespace XericUI.XTable.Rendering.Component
                             if (!string.IsNullOrEmpty(data.Text))
                             {
                                 var txt = m_Assembler.GetText("cell_text", cellNS);
-                                txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                 txt.Text.text = data.Text;
                                 txt.Text.color = GetStyleColor(cellNS, XericUIActionTable.STYLE_CELL_FG_COLOR,
                                     XericUIActionTable.FG_COLOR_FALLBACK);
@@ -275,8 +282,8 @@ namespace XericUI.XTable.Rendering.Component
                             {
                                 Sprite sprite = GetOrCreateSprite(data.Image);
                                 var img = m_Assembler.GetImage("cell_image", cellNS);
-                                img.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                img.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                 img.Image.sprite = sprite;
                             }
                             break;
@@ -300,9 +307,9 @@ namespace XericUI.XTable.Rendering.Component
         private void RenderCellsRuntime(int sr, int er, int sc, int ec,
             float[] rowHeights, float[] colWidths, XTableData tableData, string defaultNs)
         {
-            Color rtSelectionColor = XericUIActionTable.RT_SELECTION_COLOR;
-            Color rtMultiSelectColor = XericUIActionTable.RT_MULTI_SELECT_COLOR;
-            Color rtFocusColor = XericUIActionTable.RT_FOCUS_COLOR;
+            Color rtSelectionColor = Config.RuntimeSelectionColor;
+            Color rtMultiSelectColor = Config.RuntimeMultiSelectColor;
+            Color rtFocusColor = Config.RuntimeFocusColor;
 
             int selRow = GetSelectedRow();
             int selCol = GetSelectedCol();
@@ -347,13 +354,13 @@ namespace XericUI.XTable.Rendering.Component
 
                     var hLine = m_Assembler.GetImage("cell_hline");
                     hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
-                    hLine.Rect.sizeDelta = new Vector2(cellW, XericUIActionTable.RT_BORDER_WIDTH);
-                    hLine.Image.color = XericUIActionTable.RT_BORDER_COLOR;
+                    hLine.Rect.sizeDelta = new Vector2(cellW, Config.RuntimeBorderWidth);
+                    hLine.Image.color = Config.RuntimeBorderColor;
 
                     var vLine = m_Assembler.GetImage("cell_vline");
-                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - XericUIActionTable.RT_BORDER_WIDTH, cellY);
-                    vLine.Rect.sizeDelta = new Vector2(XericUIActionTable.RT_BORDER_WIDTH, cellH);
-                    vLine.Image.color = XericUIActionTable.RT_BORDER_COLOR;
+                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - Config.RuntimeBorderWidth, cellY);
+                    vLine.Rect.sizeDelta = new Vector2(Config.RuntimeBorderWidth, cellH);
+                    vLine.Image.color = Config.RuntimeBorderColor;
 
                     if (data == null) continue;
 
@@ -363,8 +370,8 @@ namespace XericUI.XTable.Rendering.Component
                             if (!string.IsNullOrEmpty(data.Text))
                             {
                                 var txt = m_Assembler.GetText("cell_text", cellNS);
-                                txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                 txt.Text.text = data.Text;
                             }
                             break;
@@ -373,8 +380,8 @@ namespace XericUI.XTable.Rendering.Component
                             {
                                 Sprite sprite = GetOrCreateSprite(data.Image);
                                 var img = m_Assembler.GetImage("cell_image", cellNS);
-                                img.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                img.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                 img.Image.sprite = sprite;
                             }
                             break;

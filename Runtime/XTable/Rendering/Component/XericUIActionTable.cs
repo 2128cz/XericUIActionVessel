@@ -10,7 +10,6 @@ using XericUI.XTable.Mapping;
 using XericUI.XTable.Rendering.Elements;
 using XericLibrary.Runtime.SuperStyleSheet;
 using XericLibrary.Runtime.UIGraph;
-using XericUI.XTable.Core;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -26,12 +25,6 @@ namespace XericUI.XTable.Rendering.Component
     [AddComponentMenu("Xeric UI Vessel/Table/Xeric UI Action Table", 60)]
     public partial class XericUIActionTable : XericUIBehaciour, IPointerClickHandler
     {
-        #region 常量
-
-        private const string DEFAULT_STYLE_NS = "xeric_table_default";
-
-        #endregion
-
         #region 序列化字段
 
         [SerializeField] private XTableData m_TableData;
@@ -40,7 +33,11 @@ namespace XericUI.XTable.Rendering.Component
 
         [SerializeField] private float[] m_ColWidths = new float[] { 100f, 80f, 120f };
 
-        [SerializeField] private string m_DefaultStyleNamespace = DEFAULT_STYLE_NS;
+        [SerializeField] private string m_DefaultStyleNamespace = "";
+
+        [SerializeField]
+        [Tooltip("表格全局配置资源")]
+        private XTableConfig m_Config;
 
         [SerializeField] private ScrollRect m_ScrollRect;
 
@@ -186,6 +183,23 @@ namespace XericUI.XTable.Rendering.Component
             }
         }
 
+        /// <summary>表格全局配置资源</summary>
+        public XTableConfig Config
+        {
+            get
+            {
+                if (m_Config == null)
+                    m_Config = XTableConfig.LoadOrDefault();
+                return m_Config;
+            }
+            set => m_Config = value;
+        }
+
+        /// <summary>单元格内容水平内边距（单侧）</summary>
+        private float CellPadding => Config.CellHorizontalPadding;
+        /// <summary>单元格内容宽度扣除量</summary>
+        private float CellPadding2 => Config.CellHorizontalPadding * 2f;
+
         /// <summary>
         /// 基于四叉树查询结果渲染可见象限内的单元格内容（文本/预制体/选择高亮）。
         /// 边框由 <see cref="RebuildBorders"/> 统一绘制。
@@ -198,8 +212,8 @@ namespace XericUI.XTable.Rendering.Component
             if (!Application.isPlaying)
             {
                 Color selectionColor = GetCellSelectionBgColor(ns);
-                Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * 0.4f);
-                Color focusColor = new Color(selectionColor.r + 0.04f, selectionColor.g + 0.13f, selectionColor.b + 0.13f, selectionColor.a * 1.4f);
+                Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * Config.MultiSelectAlphaFactor);
+                Color focusColor = new Color(selectionColor.r + Config.FocusRAdd, selectionColor.g + Config.FocusGAdd, selectionColor.b + Config.FocusBAdd, selectionColor.a * Config.FocusAlphaMul);
 
                 foreach (var q in quadrants)
                 {
@@ -261,8 +275,8 @@ namespace XericUI.XTable.Rendering.Component
                                     if (!string.IsNullOrEmpty(data.Text))
                                     {
                                         var txt = m_Assembler.GetText("cell_text", cellNS);
-                                        txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                        txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                        txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                        txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                         txt.Text.text = data.Text;
                                         txt.Text.color = GetCellFgColor(cellNS);
                                         txt.Text.fontSize = GetCellFontSize(cellNS);
@@ -275,8 +289,8 @@ namespace XericUI.XTable.Rendering.Component
                                     {
                                         Sprite sprite = GetOrCreateSprite(data.Image);
                                         var img = m_Assembler.GetImage("cell_image", cellNS);
-                                        img.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                        img.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                        img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                        img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                         img.Image.sprite = sprite;
                                     }
                                     break;
@@ -300,9 +314,9 @@ namespace XericUI.XTable.Rendering.Component
 #endif
 
             // 运行时模式
-            Color rtSelectionColor = RT_SELECTION_COLOR;
-            Color rtMultiSelectColor = RT_MULTI_SELECT_COLOR;
-            Color rtFocusColor = RT_FOCUS_COLOR;
+            Color rtSelectionColor = Config.RuntimeSelectionColor;
+            Color rtMultiSelectColor = Config.RuntimeMultiSelectColor;
+            Color rtFocusColor = Config.RuntimeFocusColor;
 
             foreach (var q in quadrants)
             {
@@ -362,8 +376,8 @@ namespace XericUI.XTable.Rendering.Component
                                 if (!string.IsNullOrEmpty(data.Text))
                                 {
                                     var txt = m_Assembler.GetText("cell_text", cellNS);
-                                    txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                    txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                    txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                     txt.Text.text = data.Text;
                                 }
                                 break;
@@ -372,8 +386,8 @@ namespace XericUI.XTable.Rendering.Component
                                 {
                                     Sprite sprite = GetOrCreateSprite(data.Image);
                                     var img = m_Assembler.GetImage("cell_image", cellNS);
-                                    img.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                    img.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                    img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                     img.Image.sprite = sprite;
                                 }
                                 break;
@@ -404,6 +418,12 @@ namespace XericUI.XTable.Rendering.Component
 
             // 域重载后旧子对象可能残留在场景中（DontSave 不自动销毁），先清空再重建
             ClearAllChildren();
+
+            if (m_Config == null)
+                m_Config = XTableConfig.LoadOrDefault();
+
+            if (string.IsNullOrEmpty(m_DefaultStyleNamespace))
+                m_DefaultStyleNamespace = Config.DefaultStyleNamespace;
 
             if (m_TableData == null)
                 m_TableData = new XTableData();
@@ -675,9 +695,10 @@ namespace XericUI.XTable.Rendering.Component
         public bool IsMergeSource(int row, int col, out int rowSpan, out int colSpan)
             => TableData.IsMergeSource(row, col, out rowSpan, out colSpan);
 
-        /// <summary>在末尾追加一行，默认行高 40</summary>
-        public void AddRow(float height = 40f)
+        /// <summary>在末尾追加一行，默认行高来自 Config</summary>
+        public void AddRow(float height = -1f)
         {
+            if (height <= 0) height = Config.DefaultRowHeight;
 #if UNITY_EDITOR
             UnityEditor.Undo.RecordObject(this, "Add Table Row");
 #endif
@@ -692,9 +713,10 @@ namespace XericUI.XTable.Rendering.Component
 #endif
         }
 
-        /// <summary>在末尾追加一列，默认列宽 100</summary>
-        public void AddColumn(float width = 100f)
+        /// <summary>在末尾追加一列，默认列宽来自 Config</summary>
+        public void AddColumn(float width = -1f)
         {
+            if (width <= 0) width = Config.DefaultColumnWidth;
 #if UNITY_EDITOR
             UnityEditor.Undo.RecordObject(this, "Add Table Column");
 #endif
@@ -1243,8 +1265,8 @@ namespace XericUI.XTable.Rendering.Component
                 Color borderColor = GetCellBorderColor(ns);
                 float borderWidth = GetCellBorderWidth(ns);
 
-                Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * 0.4f);
-                Color focusColor = new Color(selectionColor.r + 0.04f, selectionColor.g + 0.13f, selectionColor.b + 0.13f, selectionColor.a * 1.4f);
+                Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * Config.MultiSelectAlphaFactor);
+                Color focusColor = new Color(selectionColor.r + Config.FocusRAdd, selectionColor.g + Config.FocusGAdd, selectionColor.b + Config.FocusBAdd, selectionColor.a * Config.FocusAlphaMul);
 
                 for (int r = sr; r < er && r < m_RowHeights.Length; r++)
                 {
@@ -1308,8 +1330,8 @@ namespace XericUI.XTable.Rendering.Component
                                 if (!string.IsNullOrEmpty(data.Text))
                                 {
                                     var txt = m_Assembler.GetText("cell_text", cellNS);
-                                    txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                    txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                    txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                     txt.Text.text = data.Text;
                                     txt.Text.color = GetCellFgColor(cellNS);
                                     txt.Text.fontSize = GetCellFontSize(cellNS);
@@ -1322,8 +1344,8 @@ namespace XericUI.XTable.Rendering.Component
                                 {
                                     Sprite sprite = GetOrCreateSprite(data.Image);
                                     var img = m_Assembler.GetImage("cell_image", cellNS);
-                                    img.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                    img.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                    img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                     img.Image.sprite = sprite;
                                 }
                                 break;
@@ -1346,9 +1368,9 @@ namespace XericUI.XTable.Rendering.Component
 #endif
 
             // 运行时模式
-            Color rtSelectionColor = RT_SELECTION_COLOR;
-            Color rtMultiSelectColor = RT_MULTI_SELECT_COLOR;
-            Color rtFocusColor = RT_FOCUS_COLOR;
+            Color rtSelectionColor = Config.RuntimeSelectionColor;
+            Color rtMultiSelectColor = Config.RuntimeMultiSelectColor;
+            Color rtFocusColor = Config.RuntimeFocusColor;
 
             for (int r = sr; r < er && r < m_RowHeights.Length; r++)
             {
@@ -1393,13 +1415,13 @@ namespace XericUI.XTable.Rendering.Component
 
                     var hLine = m_Assembler.GetImage("cell_hline");
                     hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
-                    hLine.Rect.sizeDelta = new Vector2(cellW, RT_BORDER_WIDTH);
-                    hLine.Image.color = RT_BORDER_COLOR;
+                    hLine.Rect.sizeDelta = new Vector2(cellW, Config.RuntimeBorderWidth);
+                    hLine.Image.color = Config.RuntimeBorderColor;
 
                     var vLine = m_Assembler.GetImage("cell_vline");
-                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - RT_BORDER_WIDTH, cellY);
-                    vLine.Rect.sizeDelta = new Vector2(RT_BORDER_WIDTH, cellH);
-                    vLine.Image.color = RT_BORDER_COLOR;
+                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - Config.RuntimeBorderWidth, cellY);
+                    vLine.Rect.sizeDelta = new Vector2(Config.RuntimeBorderWidth, cellH);
+                    vLine.Image.color = Config.RuntimeBorderColor;
 
                     if (data == null) continue;
 
@@ -1409,8 +1431,8 @@ namespace XericUI.XTable.Rendering.Component
                             if (!string.IsNullOrEmpty(data.Text))
                             {
                                 var txt = m_Assembler.GetText("cell_text", cellNS);
-                                txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                 txt.Text.text = data.Text;
                                 // 运行时样式由 StyleBoundElement 被动更新，此处仅设置文本内容
                             }
@@ -1420,8 +1442,8 @@ namespace XericUI.XTable.Rendering.Component
                             {
                                 Sprite sprite = GetOrCreateSprite(data.Image);
                                 var img = m_Assembler.GetImage("cell_image", cellNS);
-                                img.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                img.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
+                                img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
                                 img.Image.sprite = sprite;
                             }
                             break;
@@ -1676,7 +1698,7 @@ namespace XericUI.XTable.Rendering.Component
                 }
             }
 
-            m_Quadtree.Build(m_TotalWidth, m_TotalHeight, m_RowHeights, m_ColWidths, cells);
+            m_Quadtree.Build(m_TotalWidth, m_TotalHeight, m_RowHeights, m_ColWidths, cells, Config.QuadtreeMaxCellsPerNode);
         }
 
         #endregion
@@ -1756,12 +1778,12 @@ namespace XericUI.XTable.Rendering.Component
             }
             else
             {
-                borderColor = RT_BORDER_COLOR;
-                borderWidth = RT_BORDER_WIDTH;
+                borderColor = Config.RuntimeBorderColor;
+                borderWidth = Config.RuntimeBorderWidth;
             }
 #else
-            Color borderColor = RT_BORDER_COLOR;
-            float borderWidth = RT_BORDER_WIDTH;
+            Color borderColor = Config.RuntimeBorderColor;
+            float borderWidth = Config.RuntimeBorderWidth;
 #endif
 
             int rows = m_RowHeights.Length;
@@ -1850,6 +1872,8 @@ namespace XericUI.XTable.Rendering.Component
             // 共享预制体对象池
             m_ViewportRenderer.PrefabPool = m_PrefabPool;
             m_ViewportRenderer.ActivePrefabMap = m_ActivePrefabMap;
+            m_ViewportRenderer.CellPadding = Config.CellHorizontalPadding;
+            m_ViewportRenderer.Config = Config;
         }
 
         /// <summary>渲染 Viewport 层冻结单元格，随滚动偏移调整位置</summary>
