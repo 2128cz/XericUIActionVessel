@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -28,7 +28,7 @@ namespace XericUI.FlipPage
     /// | |-ItemComponentInfo 项目组件结构
     ///
     /// 组件层使用组件容器封装，预设的组件引用可以实现类似下面的样式
-    /// |＜  ＜ 2,3,4 ＞  ＞|
+    /// |&lt;  &lt; 2,3,4 &gt;  &gt;|
     /// 两侧是固定的按钮，中间是一个横向的排列容器，在指定了按钮对象池后，将会自动生成绑定好的按钮用于翻页。
     /// 页数按钮需要让button在预制体最外层，它的子集中需要包含一个TMP_Text。  
     /// </code>

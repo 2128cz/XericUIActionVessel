@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
@@ -22,11 +22,11 @@ namespace XericUI.Helper
         /// 
         /// [MenuItem("CONTEXT/XXX/ReplaceToXXX", true)]
         /// private static bool ValidateReplaceWithCustomScrollRect(MenuCommand command) 
-        ///     => command.context is ScrollRect;
+        ///     =&gt; command.context is ScrollRect;
         ///     
         /// [MenuItem("CONTEXT/XXX/ReplaceToXXX", false, 10)]
         /// private static void ReplaceWithCustomScrollRect(MenuCommand command) 
-        ///     => command.ReplaceCommandContext&lt;SourceXXX, TargetXXX&gt;();
+        ///     =&gt; command.ReplaceCommandContext&lt;SourceXXX, TargetXXX&gt;();
         ///
         /// 不过实测unity的json序列化也无法处理引用，还是需要手动将引用类型传过来
         /// </remarks>

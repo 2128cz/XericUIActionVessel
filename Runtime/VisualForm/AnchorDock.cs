@@ -82,7 +82,7 @@ namespace XericUI.VisualForm
         private readonly List<WorldAnchor> _pendingRemoves = new List<WorldAnchor>();
 
         /// <summary>
-        /// 活跃的窗口状态字典：锚点 -> 中间窗口状态类
+        /// 活跃的窗口状态字典：锚点 -&gt; 中间窗口状态类
         /// </summary>
         private readonly Dictionary<WorldAnchor, WindowState> _activeStates = new Dictionary<WorldAnchor, WindowState>();
 

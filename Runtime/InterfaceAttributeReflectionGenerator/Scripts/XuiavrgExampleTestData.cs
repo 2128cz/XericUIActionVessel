@@ -20,7 +20,7 @@ namespace XericUI.ReflectionUIGenerator
     /// 涵盖新版 Entry 体系的所有特性：编组、排序、预制体覆盖、多种字段类型
     /// 
     /// 使用方式：
-    /// 1. 在 Hierarchy 右键 -> Xeric UI -> Create Reflection UI Example 创建示例节点
+    /// 1. 在 Hierarchy 右键 -&gt; Xeric UI -&gt; Create Reflection UI Example 创建示例节点
     /// 2. 创建 XuiavrgPropertyGroupScriptableObject 并设置 groupName 和 supportedTags
     /// 3. 将编组对应的预制体拖入
     /// 4. 调用 manager.BuildEntries(new XuiavrgExampleTestData()) 构建 Entry

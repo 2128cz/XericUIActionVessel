@@ -426,7 +426,7 @@ namespace XericUI.XTable.Core
 
 		/// <summary>
 		/// 获取右侧边框样式命名空间。
-		/// col < 0 时退回到 OuterBorderNs。
+		/// col &lt; 0 时退回到 OuterBorderNs。
 		/// </summary>
 		public string GetBorderRightNs(int row, int col)
 		{
@@ -445,7 +445,7 @@ namespace XericUI.XTable.Core
 
 		/// <summary>
 		/// 设置右侧边框样式命名空间。
-		/// col < 0 时写入 OuterBorderNs。
+		/// col &lt; 0 时写入 OuterBorderNs。
 		/// </summary>
 		public void SetBorderRightNs(int row, int col, string ns)
 		{
@@ -470,7 +470,7 @@ namespace XericUI.XTable.Core
 
 		/// <summary>
 		/// 获取底部边框样式命名空间。
-		/// row < 0 时退回到 OuterBorderNs。
+		/// row &lt; 0 时退回到 OuterBorderNs。
 		/// </summary>
 		public string GetBorderBottomNs(int row, int col)
 		{
@@ -489,7 +489,7 @@ namespace XericUI.XTable.Core
 
 		/// <summary>
 		/// 设置底部边框样式命名空间。
-		/// row < 0 时写入 OuterBorderNs。
+		/// row &lt; 0 时写入 OuterBorderNs。
 		/// </summary>
 		public void SetBorderBottomNs(int row, int col, string ns)
 		{

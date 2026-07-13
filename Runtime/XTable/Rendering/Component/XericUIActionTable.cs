@@ -85,6 +85,9 @@ namespace XericUI.XTable.Rendering.Component
         private float m_TotalWidth;
         private float m_TotalHeight;
 
+        /// <summary>内容偏移量（边框半宽），避免 viewport 裁切边缘边框</summary>
+        private float m_ContentOffset;
+
         // ScrollRect 可见范围
         private Rect m_VisibleRect;
 
@@ -213,8 +216,8 @@ namespace XericUI.XTable.Rendering.Component
                             // 跳过被合并覆盖的单元格
                             if (TableData.IsCellMerged(row, col)) continue;
 
-                            float cellX = GetColLeftX(col);
-                            float cellY = -GetRowTopY(row);
+                            float cellX = GetColLeftX(col) + m_ContentOffset;
+                            float cellY = -GetRowTopY(row) - m_ContentOffset;
                             float cellW = m_ColWidths[col];
                             float cellH = m_RowHeights[row];
 
@@ -297,8 +300,8 @@ namespace XericUI.XTable.Rendering.Component
                         // 跳过被合并覆盖的单元格
                         if (TableData.IsCellMerged(row, col)) continue;
 
-                        float cellX = GetColLeftX(col);
-                        float cellY = -GetRowTopY(row);
+                        float cellX = GetColLeftX(col) + m_ContentOffset;
+                        float cellY = -GetRowTopY(row) - m_ContentOffset;
                         float cellW = m_ColWidths[col];
                         float cellH = m_RowHeights[row];
 
@@ -869,8 +872,9 @@ namespace XericUI.XTable.Rendering.Component
             // 更新背景尺寸
             if (m_BackgroundGo != null)
             {
+                float pad = m_ContentOffset * 2f;
                 var bgRt = m_BackgroundGo.GetComponent<RectTransform>();
-                bgRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+                bgRt.sizeDelta = new Vector2(m_TotalWidth + pad, m_TotalHeight + pad);
             }
 
             // 归还预制体前，触发所有活跃实例的释放回调
@@ -953,8 +957,9 @@ namespace XericUI.XTable.Rendering.Component
             bgRt.anchorMin = new Vector2(0, 1);
             bgRt.anchorMax = new Vector2(0, 1);
             bgRt.pivot = new Vector2(0, 1);
-            bgRt.anchoredPosition = Vector2.zero;
-            bgRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+            float pad = m_ContentOffset * 2f;
+            bgRt.anchoredPosition = new Vector2(m_ContentOffset, -m_ContentOffset);
+            bgRt.sizeDelta = new Vector2(m_TotalWidth + pad, m_TotalHeight + pad);
 
             var bgImg = m_BackgroundGo.GetComponent<Image>();
             bgImg.color = GetCellBgColor(m_DefaultStyleNamespace);
@@ -1176,8 +1181,8 @@ namespace XericUI.XTable.Rendering.Component
                         // 跳过被合并覆盖的单元格
                         if (TableData.IsCellMerged(r, c)) continue;
 
-                        float cellX = GetColLeftX(c);
-                        float cellY = -GetRowTopY(r);
+                        float cellX = GetColLeftX(c) + m_ContentOffset;
+                        float cellY = -GetRowTopY(r) - m_ContentOffset;
                         float cellW = m_ColWidths[c];
                         float cellH = m_RowHeights[r];
 
@@ -1265,8 +1270,8 @@ namespace XericUI.XTable.Rendering.Component
                     // 跳过被合并覆盖的单元格
                     if (TableData.IsCellMerged(r, c)) continue;
 
-                    float cellX = GetColLeftX(c);
-                    float cellY = -GetRowTopY(r);
+                    float cellX = GetColLeftX(c) + m_ContentOffset;
+                    float cellY = -GetRowTopY(r) - m_ContentOffset;
                     float cellW = m_ColWidths[c];
                     float cellH = m_RowHeights[r];
 
@@ -1366,8 +1371,12 @@ namespace XericUI.XTable.Rendering.Component
                 foreach (float h in m_RowHeights)
                     m_TotalHeight += h;
 
+            m_ContentOffset = GetCellBorderWidth(m_DefaultStyleNamespace) * 0.5f;
+            float pad = m_ContentOffset * 2f;
+
             if (m_ScrollRect != null && m_ScrollRect.content != null)
-                m_ScrollRect.content.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+                m_ScrollRect.content.sizeDelta = new Vector2(
+                    m_TotalWidth + pad, m_TotalHeight + pad);
         }
 
         private void UpdateVisibleRect()
@@ -1574,8 +1583,9 @@ namespace XericUI.XTable.Rendering.Component
             rt.anchorMin = new Vector2(0, 1);
             rt.anchorMax = new Vector2(0, 1);
             rt.pivot = new Vector2(0, 1);
-            rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+            float pad = m_ContentOffset * 2f;
+            rt.anchoredPosition = new Vector2(m_ContentOffset, -m_ContentOffset);
+            rt.sizeDelta = new Vector2(m_TotalWidth + pad, m_TotalHeight + pad);
 
             m_BorderRenderer = go.GetComponent<UILineRendererV2>();
             return m_BorderRenderer;
@@ -1829,8 +1839,8 @@ namespace XericUI.XTable.Rendering.Component
 
             float scrollY = m_ScrollRect != null ? Mathf.Max(0, m_ScrollRect.content.anchoredPosition.y) : 0;
             float scrollX = m_ScrollRect != null ? Mathf.Max(0, -m_ScrollRect.content.anchoredPosition.x) : 0;
-            tableX += scrollX;
-            tableY += scrollY;
+            tableX += scrollX - m_ContentOffset;
+            tableY += scrollY - m_ContentOffset;
 
             int col = -1;
             float ax = 0;

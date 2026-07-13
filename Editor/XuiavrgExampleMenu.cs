@@ -7,7 +7,7 @@ namespace XericUIEditor.ReflectionUIGenerator
 {
     /// <summary>
     /// 反射界面生成器的 Hierarchy 右键菜单示例
-    /// 在 Hierarchy 中右键 -> Xeric UI -> Create Reflection UI Example 即可快速创建示例场景
+    /// 在 Hierarchy 中右键 -&gt; Xeric UI -&gt; Create Reflection UI Example 即可快速创建示例场景
     /// 
     /// 创建后：
     /// 1. 将配置好的 XuiavrgPropertyGroupScriptableObject 通过代码传入 Manager
