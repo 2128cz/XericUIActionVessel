@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
+using XericLibrary.Runtime.SuperStyleSheet;
 using XericUI.XTable.Core;
 using XericUI.XTable.Rendering.Component;
 
@@ -177,9 +178,9 @@ namespace XericUIEditor.XTable
                 if (GUILayout.Button("手动刷新视图", GUILayout.Height(22)))
                     EditorApplication.delayCall += () => m_Table.RefreshView();
 
-                // ── 预制体配置 ──
+                // ── 单元格配置 ──
                 EditorGUILayout.Space(4);
-                EditorGUILayout.LabelField("单元格预制体配置", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField("单元格配置", EditorStyles.boldLabel);
                 int selRow = m_Table.SelectedRow;
                 int selCol = m_Table.SelectedCol;
                 if (selRow < 0 || selCol < 0)
@@ -189,30 +190,79 @@ namespace XericUIEditor.XTable
                 else
                 {
                     var data = m_Table.TableData?.GetCell(selRow, selCol);
-                    GameObject currentPrefab = data?.Prefab;
-                    EditorGUI.BeginDisabledGroup(true);
-                    EditorGUILayout.TextField("目标单元格", $"({selRow}, {selCol})");
-                    EditorGUI.EndDisabledGroup();
-
-                    GameObject newPrefab = (GameObject)EditorGUILayout.ObjectField(
-                        "预制体", currentPrefab, typeof(GameObject), false);
-
-                    EditorGUILayout.BeginHorizontal();
-                    if (GUILayout.Button("应用预制体", GUILayout.Height(22)))
+                    if (data == null)
                     {
-                        Undo.RecordObject(m_Table, "Set Cell Prefab");
-                        m_Table.SetCellPrefab(selRow, selCol, newPrefab);
-                        EditorUtility.SetDirty(m_Table);
-                        Repaint();
+                        EditorGUILayout.HelpBox("单元格数据为空", MessageType.Warning);
                     }
-                    if (GUILayout.Button("清除预制体", GUILayout.Height(22)))
+                    else
                     {
-                        Undo.RecordObject(m_Table, "Clear Cell Prefab");
-                        m_Table.ClearCellPrefab(selRow, selCol);
-                        EditorUtility.SetDirty(m_Table);
-                        Repaint();
+                        EditorGUI.BeginDisabledGroup(true);
+                        EditorGUILayout.TextField("目标单元格", $"({selRow}, {selCol})");
+                        EditorGUI.EndDisabledGroup();
+
+                        EditorGUI.BeginChangeCheck();
+
+                        // 内容类型
+                        CellContentType ct = (CellContentType)EditorGUILayout.EnumPopup("内容类型", data.ContentType);
+
+                        // 根据类型显示对应字段
+                        switch (ct)
+                        {
+                            case CellContentType.Text:
+                                EditorGUILayout.LabelField("文本内容", data.Text ?? "(空)");
+                                break;
+                            case CellContentType.Image:
+                                EditorGUILayout.ObjectField("图片纹理", data.Image, typeof(Texture2D), false);
+                                break;
+                            case CellContentType.Prefab:
+                                GameObject newPrefab = (GameObject)EditorGUILayout.ObjectField(
+                                    "预制体", data.Prefab, typeof(GameObject), false);
+                                if (EditorGUI.EndChangeCheck())
+                                {
+                                    Undo.RecordObject(m_Table, "Set Cell Prefab");
+                                    data.Prefab = newPrefab;
+                                    data.ContentType = ct;
+                                    m_Table.SetCellPrefab(selRow, selCol, newPrefab);
+                                    EditorUtility.SetDirty(m_Table);
+                                    Repaint();
+                                }
+                                goto skipEndChangeCheck;
+                        }
+                        // 默认 Text 类型
+                        string newText = EditorGUILayout.TextField("文本内容", data.Text ?? "");
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            Undo.RecordObject(m_Table, "Edit Cell");
+                            data.Text = newText;
+                            data.ContentType = ct;
+                            EditorUtility.SetDirty(m_Table);
+                            m_Table.MarkDirty(TableDirtyType.DataChanged);
+                            EditorUtility.SetDirty(m_Table);
+                            Repaint();
+                        }
+                    skipEndChangeCheck:
+                        ;
+
+                        // 样式
+                        EditorGUILayout.Space(2);
+                        EditorGUILayout.LabelField("单元格样式 (StyleMember)", EditorStyles.miniBoldLabel);
+                        EditorGUI.BeginChangeCheck();
+                        string ns = EditorGUILayout.TextField("命名空间",
+                            data.CellStyle?.CurrentNamespace ?? "");
+                        string path = EditorGUILayout.TextField("样式路径",
+                            data.CellStyle?.StylePath ?? "");
+                        if (EditorGUI.EndChangeCheck())
+                        {
+                            Undo.RecordObject(m_Table, "Edit Cell Style");
+                            if (data.CellStyle == null)
+                                data.CellStyle = new StyleMember();
+                            data.CellStyle.CurrentNamespace = ns;
+                            data.CellStyle.StylePath = path;
+                            EditorUtility.SetDirty(m_Table);
+                            m_Table.MarkDirty(TableDirtyType.DataChanged);
+                            Repaint();
+                        }
                     }
-                    EditorGUILayout.EndHorizontal();
                 }
 
                 EditorGUI.indentLevel--;

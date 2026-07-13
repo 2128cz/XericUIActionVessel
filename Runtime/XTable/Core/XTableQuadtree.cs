@@ -65,9 +65,14 @@ namespace XericUI.XTable.Core
 		private Node m_Root;
 		private float[] m_RowHeights;
 		private float[] m_ColWidths;
+		private int m_MaxCellsPerNode;
 
 		/// <summary>四叉树是否已构建完成</summary>
 		public bool IsBuilt { get; private set; }
+
+		#endregion
+
+		#region 常量
 
 		#endregion
 
@@ -83,7 +88,7 @@ namespace XericUI.XTable.Core
 		/// <param name="cells">所有有数据的单元格元数据列表</param>
 		public void Build(float totalWidth, float totalHeight,
 			float[] rowHeights, float[] colWidths,
-			List<XTableQuadtreeCell> cells)
+			List<XTableQuadtreeCell> cells, int maxCellsPerNode = 64)
 		{
 			if (rowHeights == null || colWidths == null || cells == null)
 			{
@@ -93,6 +98,7 @@ namespace XericUI.XTable.Core
 
 			m_RowHeights = rowHeights;
 			m_ColWidths = colWidths;
+			m_MaxCellsPerNode = maxCellsPerNode;
 			m_Root = new Node { Region = new Rect(0, 0, totalWidth, totalHeight) };
 
 			int maxRow = rowHeights.Length - 1;
@@ -109,10 +115,10 @@ namespace XericUI.XTable.Core
 		/// <summary>强制重建（外部入口，通常由表格组件在数据/布局变更后调用）</summary>
 		public void ForceRebuild(float totalWidth, float totalHeight,
 			float[] rowHeights, float[] colWidths,
-			List<XTableQuadtreeCell> cells)
+			List<XTableQuadtreeCell> cells, int maxCellsPerNode = 64)
 		{
 			Clear();
-			Build(totalWidth, totalHeight, rowHeights, colWidths, cells);
+			Build(totalWidth, totalHeight, rowHeights, colWidths, cells, maxCellsPerNode);
 		}
 
 		private void BuildNode(Node node, List<XTableQuadtreeCell> allCells,
@@ -149,11 +155,20 @@ namespace XericUI.XTable.Core
 
 			if (allSame)
 			{
-				node.UniformNamespace = firstNs;
-				node.Cells = new List<(int, int)>(cellsInRange.Count);
-				for (int i = 0; i < cellsInRange.Count; i++)
-					node.Cells.Add((cellsInRange[i].Row, cellsInRange[i].Col));
-				return;
+				// 命名空间统一，但若空间跨度过大则继续分裂以便按块跳过不可见区域
+				if (cellsInRange.Count > m_MaxCellsPerNode &&
+				    (minRow < maxRow || minCol < maxCol))
+				{
+					// 继续执行分裂逻辑（不要 return）
+				}
+				else
+				{
+					node.UniformNamespace = firstNs;
+					node.Cells = new List<(int, int)>(cellsInRange.Count);
+					for (int i = 0; i < cellsInRange.Count; i++)
+						node.Cells.Add((cellsInRange[i].Row, cellsInRange[i].Col));
+					return;
+				}
 			}
 
 			// 无法继续分裂（单行单列），强制标记为均匀

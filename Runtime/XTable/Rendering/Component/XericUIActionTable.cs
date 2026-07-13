@@ -10,7 +10,6 @@ using XericUI.XTable.Mapping;
 using XericUI.XTable.Rendering.Elements;
 using XericLibrary.Runtime.SuperStyleSheet;
 using XericLibrary.Runtime.UIGraph;
-using XericUI.XTable.Core;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -26,12 +25,6 @@ namespace XericUI.XTable.Rendering.Component
     [AddComponentMenu("Xeric UI Vessel/Table/Xeric UI Action Table", 60)]
     public partial class XericUIActionTable : XericUIBehaciour, IPointerClickHandler
     {
-        #region 常量
-
-        private const string DEFAULT_STYLE_NS = "xeric_table_default";
-
-        #endregion
-
         #region 序列化字段
 
         [SerializeField] private XTableData m_TableData;
@@ -40,7 +33,11 @@ namespace XericUI.XTable.Rendering.Component
 
         [SerializeField] private float[] m_ColWidths = new float[] { 100f, 80f, 120f };
 
-        [SerializeField] private string m_DefaultStyleNamespace = DEFAULT_STYLE_NS;
+        [SerializeField] private string m_DefaultStyleNamespace = "";
+
+        [SerializeField]
+        [Tooltip("表格全局配置资源")]
+        private XTableConfig m_Config;
 
         [SerializeField] private ScrollRect m_ScrollRect;
 
@@ -75,6 +72,9 @@ namespace XericUI.XTable.Rendering.Component
 
 		/// <summary>活跃预制体实例映射 (row, col) → instance，用于回调编排</summary>
 		[System.NonSerialized] private Dictionary<(int, int), GameObject> m_ActivePrefabMap;
+
+		/// <summary>Texture2D → Sprite 缓存，避免每帧 Sprite.Create 分配</summary>
+		[System.NonSerialized] private Dictionary<Texture2D, Sprite> m_SpriteCache;
 
         /// <summary>表格四叉树——按 StyleNamespace 分区，渲染阶段查询可见象限</summary>
         [System.NonSerialized] private XTableQuadtree m_Quadtree;
@@ -186,6 +186,23 @@ namespace XericUI.XTable.Rendering.Component
             }
         }
 
+        /// <summary>表格全局配置资源</summary>
+        public XTableConfig Config
+        {
+            get
+            {
+                if (m_Config == null)
+                    m_Config = XTableConfig.LoadOrDefault();
+                return m_Config;
+            }
+            set => m_Config = value;
+        }
+
+        /// <summary>单元格内容水平内边距（单侧）</summary>
+        private float CellPadding => Config.CellHorizontalPadding;
+        /// <summary>单元格内容宽度扣除量</summary>
+        private float CellPadding2 => Config.CellHorizontalPadding * 2f;
+
         /// <summary>
         /// 基于四叉树查询结果渲染可见象限内的单元格内容（文本/预制体/选择高亮）。
         /// 边框由 <see cref="RebuildBorders"/> 统一绘制。
@@ -198,8 +215,8 @@ namespace XericUI.XTable.Rendering.Component
             if (!Application.isPlaying)
             {
                 Color selectionColor = GetCellSelectionBgColor(ns);
-                Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * 0.4f);
-                Color focusColor = new Color(selectionColor.r + 0.04f, selectionColor.g + 0.13f, selectionColor.b + 0.13f, selectionColor.a * 1.4f);
+                Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * Config.MultiSelectAlphaFactor);
+                Color focusColor = new Color(selectionColor.r + Config.FocusRAdd, selectionColor.g + Config.FocusGAdd, selectionColor.b + Config.FocusBAdd, selectionColor.a * Config.FocusAlphaMul);
 
                 foreach (var q in quadrants)
                 {
@@ -215,6 +232,8 @@ namespace XericUI.XTable.Rendering.Component
                         {
                             // 跳过被合并覆盖的单元格
                             if (TableData.IsCellMerged(row, col)) continue;
+                            // 跳过不可见的单元格
+                            if (!IsCellVisible(row, col)) continue;
 
                             float cellX = GetColLeftX(col) + m_ContentOffset;
                             float cellY = -GetRowTopY(row) - m_ContentOffset;
@@ -253,26 +272,42 @@ namespace XericUI.XTable.Rendering.Component
 
                             if (data == null) continue;
 
-                            if (!string.IsNullOrEmpty(data.Text))
+                            switch (data.ContentType)
                             {
-                                var txt = m_Assembler.GetText("cell_text", cellNS);
-                                txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                                txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
-                                txt.Text.text = data.Text;
-                                txt.Text.color = GetCellFgColor(cellNS);
-                                txt.Text.fontSize = GetCellFontSize(cellNS);
-                                txt.Text.alignment = TextAlignmentOptions.Midline;
-                                txt.Text.font = GetCellFontAsset(cellNS) ?? txt.Text.font;
-                            }
-
-                            if (data.Prefab != null)
-                            {
-                                GameObject instance = m_PrefabPool.Acquire(data.Prefab, row, col);
-                                RectTransform prt = instance.GetComponent<RectTransform>();
-                                prt.anchoredPosition = new Vector2(cellX, cellY);
-                                prt.sizeDelta = new Vector2(cellW, cellH);
-                                m_ActivePrefabMap[(row, col)] = instance;
-                                data.OnPrefabAcquire?.Invoke(instance);
+                                case CellContentType.Text:
+                                    if (!string.IsNullOrEmpty(data.Text))
+                                    {
+                                        var txt = m_Assembler.GetText("cell_text", cellNS);
+                                        txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                        txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                        txt.Text.text = data.Text;
+                                        txt.Text.color = GetCellFgColor(cellNS);
+                                        txt.Text.fontSize = GetCellFontSize(cellNS);
+                                        txt.Text.alignment = TextAlignmentOptions.Midline;
+                                        txt.Text.font = GetCellFontAsset(cellNS) ?? txt.Text.font;
+                                    }
+                                    break;
+                                case CellContentType.Image:
+                                    if (data.Image != null)
+                                    {
+                                        Sprite sprite = GetOrCreateSprite(data.Image);
+                                        var img = m_Assembler.GetImage("cell_image", cellNS);
+                                        img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                        img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                        img.Image.sprite = sprite;
+                                    }
+                                    break;
+                                case CellContentType.Prefab:
+                                    if (data.Prefab != null)
+                                    {
+                                        GameObject instance = m_PrefabPool.Acquire(data.Prefab, row, col);
+                                        RectTransform prt = instance.GetComponent<RectTransform>();
+                                        prt.anchoredPosition = new Vector2(cellX, cellY);
+                                        prt.sizeDelta = new Vector2(cellW, cellH);
+                                        m_ActivePrefabMap[(row, col)] = instance;
+                                        data.OnPrefabAcquire?.Invoke(instance);
+                                    }
+                                    break;
                             }
                         }
                     }
@@ -282,9 +317,9 @@ namespace XericUI.XTable.Rendering.Component
 #endif
 
             // 运行时模式
-            Color rtSelectionColor = RT_SELECTION_COLOR;
-            Color rtMultiSelectColor = RT_MULTI_SELECT_COLOR;
-            Color rtFocusColor = RT_FOCUS_COLOR;
+            Color rtSelectionColor = Config.RuntimeSelectionColor;
+            Color rtMultiSelectColor = Config.RuntimeMultiSelectColor;
+            Color rtFocusColor = Config.RuntimeFocusColor;
 
             foreach (var q in quadrants)
             {
@@ -299,6 +334,8 @@ namespace XericUI.XTable.Rendering.Component
                     {
                         // 跳过被合并覆盖的单元格
                         if (TableData.IsCellMerged(row, col)) continue;
+                        // 跳过不可见的单元格
+                        if (!IsCellVisible(row, col)) continue;
 
                         float cellX = GetColLeftX(col) + m_ContentOffset;
                         float cellY = -GetRowTopY(row) - m_ContentOffset;
@@ -336,22 +373,38 @@ namespace XericUI.XTable.Rendering.Component
 
                         if (data == null) continue;
 
-                        if (!string.IsNullOrEmpty(data.Text))
+                        switch (data.ContentType)
                         {
-                            var txt = m_Assembler.GetText("cell_text", cellNS);
-                            txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                            txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
-                            txt.Text.text = data.Text;
-                        }
-
-                        if (data.Prefab != null)
-                        {
-                            GameObject instance = m_PrefabPool.Acquire(data.Prefab, row, col);
-                            RectTransform prt = instance.GetComponent<RectTransform>();
-                            prt.anchoredPosition = new Vector2(cellX, cellY);
-                            prt.sizeDelta = new Vector2(cellW, cellH);
-                            m_ActivePrefabMap[(row, col)] = instance;
-                            data.OnPrefabAcquire?.Invoke(instance);
+                            case CellContentType.Text:
+                                if (!string.IsNullOrEmpty(data.Text))
+                                {
+                                    var txt = m_Assembler.GetText("cell_text", cellNS);
+                                    txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                    txt.Text.text = data.Text;
+                                }
+                                break;
+                            case CellContentType.Image:
+                                if (data.Image != null)
+                                {
+                                    Sprite sprite = GetOrCreateSprite(data.Image);
+                                    var img = m_Assembler.GetImage("cell_image", cellNS);
+                                    img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                    img.Image.sprite = sprite;
+                                }
+                                break;
+                            case CellContentType.Prefab:
+                                if (data.Prefab != null)
+                                {
+                                    GameObject instance = m_PrefabPool.Acquire(data.Prefab, row, col);
+                                    RectTransform prt = instance.GetComponent<RectTransform>();
+                                    prt.anchoredPosition = new Vector2(cellX, cellY);
+                                    prt.sizeDelta = new Vector2(cellW, cellH);
+                                    m_ActivePrefabMap[(row, col)] = instance;
+                                    data.OnPrefabAcquire?.Invoke(instance);
+                                }
+                                break;
                         }
                     }
                 }
@@ -362,12 +415,40 @@ namespace XericUI.XTable.Rendering.Component
 
         #region 生命周期
 
+        private static bool s_StyleSheetsPreloaded;
+
+        /// <summary>
+        /// 预加载 Resources 目录下所有 XericStyleSheet 资产到 StyleManager。
+        /// 仅首次调用生效，后续调用直接跳过。
+        /// </summary>
+        private static void PreloadAllStyleSheets()
+        {
+            if (s_StyleSheetsPreloaded) return;
+            s_StyleSheetsPreloaded = true;
+
+            var sheets = Resources.LoadAll<XericStyleSheet>("");
+            foreach (var sheet in sheets)
+            {
+                if (sheet != null)
+                    StyleManager.LoadStyleSheet(sheet);
+            }
+        }
+
         protected override void Awake()
         {
             base.Awake();
 
+            // 预加载 Resources 中所有 .xsss 样式表到 StyleManager（仅首次）
+            PreloadAllStyleSheets();
+
             // 域重载后旧子对象可能残留在场景中（DontSave 不自动销毁），先清空再重建
             ClearAllChildren();
+
+            if (m_Config == null)
+                m_Config = XTableConfig.LoadOrDefault();
+
+            if (string.IsNullOrEmpty(m_DefaultStyleNamespace))
+                m_DefaultStyleNamespace = Config.DefaultStyleNamespace;
 
             if (m_TableData == null)
                 m_TableData = new XTableData();
@@ -520,38 +601,49 @@ namespace XericUI.XTable.Rendering.Component
             MarkDirty(TableDirtyType.DataChanged);
         }
 
+        /// <summary>设置文本内容（ContentType 自动设为 Text）</summary>
         public XTableCellData SetCellText(int row, int col, string text)
         {
             var data = TableData.GetOrCreateCell(row, col);
             data.Text = text;
+            data.ContentType = CellContentType.Text;
             MarkDirty(TableDirtyType.DataChanged);
             return data;
         }
 
-        public XTableCellData GetCellData(int row, int col)
-			=> TableData.GetOrCreateCell(row, col);
-
-		/// <summary>为指定单元格设置预制体</summary>
-		public XTableCellData SetCellPrefab(int row, int col, GameObject prefab)
-		{
-			var data = TableData.GetOrCreateCell(row, col);
-			data.Prefab = prefab;
-			MarkDirty(TableDirtyType.DataChanged);
+        /// <summary>设置图片纹理（ContentType 自动设为 Image）</summary>
+        public XTableCellData SetCellImage(int row, int col, Texture2D image)
+        {
+            var data = TableData.GetOrCreateCell(row, col);
+            data.Image = image;
+            data.ContentType = CellContentType.Image;
+            MarkDirty(TableDirtyType.DataChanged);
             return data;
-		}
+        }
 
-		/// <summary>清除指定单元格的预制体</summary>
-		public void ClearCellPrefab(int row, int col)
-		{
-			var data = TableData.GetCell(row, col);
-			if (data == null) return;
-			data.Prefab = null;
-			data.OnPrefabAcquire = null;
-			data.OnPrefabRelease = null;
-			MarkDirty(TableDirtyType.DataChanged);
-		}
+        /// <summary>设置预制体（ContentType 自动设为 Prefab）</summary>
+        public XTableCellData SetCellPrefab(int row, int col, GameObject prefab)
+        {
+            var data = TableData.GetOrCreateCell(row, col);
+            data.Prefab = prefab;
+            data.ContentType = CellContentType.Prefab;
+            MarkDirty(TableDirtyType.DataChanged);
+            return data;
+        }
 
         /// <summary>设置单元格的样式命名空间，同时写入边框缓存（谁最后设置归谁）</summary>
+        public XTableCellData SetCellStyle(int row, int col, string styleNamespace, string stylePath)
+        {
+            var data = TableData.GetOrCreateCell(row, col);
+            if (data.CellStyle == null)
+                data.CellStyle = new XericLibrary.Runtime.SuperStyleSheet.StyleMember();
+            data.CellStyle.CurrentNamespace = styleNamespace ?? "";
+            data.CellStyle.StylePath = stylePath ?? "";
+            MarkDirty(TableDirtyType.StyleChanged);
+            return data;
+        }
+
+        /// <summary>设置单元格的样式命名空间（兼容旧版，等同于 StyleNamespace 字段）</summary>
         public void SetCellStyleNamespace(int row, int col, string styleNamespace)
         {
             // 合并源：遍历所有被合并单元格，全部写入该样式
@@ -583,10 +675,54 @@ namespace XericUI.XTable.Rendering.Component
             TableData.SetBorderBottomNs(row, col, ns);
         }
 
-        /// <summary>获取单元格的样式命名空间</summary>
+        /// <summary>清除文本内容</summary>
+        public void ClearCellText(int row, int col)
+        {
+            var data = TableData.GetCell(row, col);
+            if (data == null) return;
+            data.Text = null;
+            if (data.ContentType == CellContentType.Text)
+                data.ContentType = CellContentType.Text; // 保持类型不变，仅清空内容
+            MarkDirty(TableDirtyType.DataChanged);
+        }
+
+        /// <summary>清除图片纹理</summary>
+        public void ClearCellImage(int row, int col)
+        {
+            var data = TableData.GetCell(row, col);
+            if (data == null) return;
+            data.Image = null;
+            MarkDirty(TableDirtyType.DataChanged);
+        }
+
+        /// <summary>清除预制体及委托</summary>
+        public void ClearCellPrefab(int row, int col)
+        {
+            var data = TableData.GetCell(row, col);
+            if (data == null) return;
+            data.Prefab = null;
+            data.OnPrefabAcquire = null;
+            data.OnPrefabRelease = null;
+            MarkDirty(TableDirtyType.DataChanged);
+        }
+
+        /// <summary>清除单元格样式覆盖</summary>
+        public void ClearCellStyle(int row, int col)
+        {
+            var data = TableData.GetCell(row, col);
+            if (data == null) return;
+            data.CellStyle = null;
+            MarkDirty(TableDirtyType.StyleChanged);
+        }
+
+        public XTableCellData GetCellData(int row, int col)
+            => TableData.GetOrCreateCell(row, col);
+
+        /// <summary>获取单元格的样式命名空间（含回退逻辑）</summary>
         public string GetCellStyleNamespace(int row, int col)
         {
-            return TableData.GetCell(row, col)?.StyleNamespace ?? m_DefaultStyleNamespace;
+            var data = TableData.GetCell(row, col);
+            return data != null ? data.GetEffectiveStyleNamespace(m_DefaultStyleNamespace) : m_DefaultStyleNamespace;
         }
 
         public void MergeCells(int startRow, int startCol, int rowSpan, int colSpan)
@@ -608,9 +744,10 @@ namespace XericUI.XTable.Rendering.Component
         public bool IsMergeSource(int row, int col, out int rowSpan, out int colSpan)
             => TableData.IsMergeSource(row, col, out rowSpan, out colSpan);
 
-        /// <summary>在末尾追加一行，默认行高 40</summary>
-        public void AddRow(float height = 40f)
+        /// <summary>在末尾追加一行，默认行高来自 Config</summary>
+        public void AddRow(float height = -1f)
         {
+            if (height <= 0) height = Config.DefaultRowHeight;
 #if UNITY_EDITOR
             UnityEditor.Undo.RecordObject(this, "Add Table Row");
 #endif
@@ -625,9 +762,10 @@ namespace XericUI.XTable.Rendering.Component
 #endif
         }
 
-        /// <summary>在末尾追加一列，默认列宽 100</summary>
-        public void AddColumn(float width = 100f)
+        /// <summary>在末尾追加一列，默认列宽来自 Config</summary>
+        public void AddColumn(float width = -1f)
         {
+            if (width <= 0) width = Config.DefaultColumnWidth;
 #if UNITY_EDITOR
             UnityEditor.Undo.RecordObject(this, "Add Table Column");
 #endif
@@ -869,6 +1007,11 @@ namespace XericUI.XTable.Rendering.Component
             RecalculateTotalSize();
             UpdateVisibleRect();
 
+            // 确保 ScrollRect Content 尺寸正确（否则滚动时可能裁剪掉全部内容）
+            RectTransform ctRt = ContentTransform as RectTransform;
+            if (ctRt != null)
+                ctRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+
             // 更新背景尺寸
             if (m_BackgroundGo != null)
             {
@@ -898,12 +1041,14 @@ namespace XericUI.XTable.Rendering.Component
             Transform poolRoot = m_Assembler.PoolRoot;
             Transform prefabPoolRoot = m_PrefabPool?.PoolRoot;
             Transform contentT = ContentTransform;
+            Transform borderT = contentT.Find("_TableBorders");
             for (int i = contentT.childCount - 1; i >= 0; i--)
             {
                 var child = contentT.GetChild(i);
                 if (poolRoot != null && child == poolRoot) continue;
                 if (prefabPoolRoot != null && child == prefabPoolRoot) continue;
                 if (m_BackgroundGo != null && child.gameObject == m_BackgroundGo) continue;
+                if (borderT != null && child == borderT) continue;
 
                 child.gameObject.hideFlags = HideFlags.None;
                 if (Application.isPlaying)
@@ -1171,8 +1316,8 @@ namespace XericUI.XTable.Rendering.Component
                 Color borderColor = GetCellBorderColor(ns);
                 float borderWidth = GetCellBorderWidth(ns);
 
-                Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * 0.4f);
-                Color focusColor = new Color(selectionColor.r + 0.04f, selectionColor.g + 0.13f, selectionColor.b + 0.13f, selectionColor.a * 1.4f);
+                Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * Config.MultiSelectAlphaFactor);
+                Color focusColor = new Color(selectionColor.r + Config.FocusRAdd, selectionColor.g + Config.FocusGAdd, selectionColor.b + Config.FocusBAdd, selectionColor.a * Config.FocusAlphaMul);
 
                 for (int r = sr; r < er && r < m_RowHeights.Length; r++)
                 {
@@ -1230,27 +1375,42 @@ namespace XericUI.XTable.Rendering.Component
 
                         if (data == null) continue;
 
-                        if (!string.IsNullOrEmpty(data.Text))
+                        switch (data.ContentType)
                         {
-                            var txt = m_Assembler.GetText("cell_text", cellNS);
-                            txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                            txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
-                            txt.Text.text = data.Text;
-                            txt.Text.color = GetCellFgColor(cellNS);
-                            txt.Text.fontSize = GetCellFontSize(cellNS);
-                            txt.Text.alignment = TextAlignmentOptions.Midline;
-                            txt.Text.font = GetCellFontAsset(cellNS) ?? txt.Text.font;
-                        }
-
-                        // 预制体渲染
-                        if (data.Prefab != null)
-                        {
-                            GameObject instance = m_PrefabPool.Acquire(data.Prefab, r, c);
-                            RectTransform prt = instance.GetComponent<RectTransform>();
-                            prt.anchoredPosition = new Vector2(cellX, cellY);
-                            prt.sizeDelta = new Vector2(cellW, cellH);
-                            m_ActivePrefabMap[(r, c)] = instance;
-                            data.OnPrefabAcquire?.Invoke(instance);
+                            case CellContentType.Text:
+                                if (!string.IsNullOrEmpty(data.Text))
+                                {
+                                    var txt = m_Assembler.GetText("cell_text", cellNS);
+                                    txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                    txt.Text.text = data.Text;
+                                    txt.Text.color = GetCellFgColor(cellNS);
+                                    txt.Text.fontSize = GetCellFontSize(cellNS);
+                                    txt.Text.alignment = TextAlignmentOptions.Midline;
+                                    txt.Text.font = GetCellFontAsset(cellNS) ?? txt.Text.font;
+                                }
+                                break;
+                            case CellContentType.Image:
+                                if (data.Image != null)
+                                {
+                                    Sprite sprite = GetOrCreateSprite(data.Image);
+                                    var img = m_Assembler.GetImage("cell_image", cellNS);
+                                    img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                    img.Image.sprite = sprite;
+                                }
+                                break;
+                            case CellContentType.Prefab:
+                                if (data.Prefab != null)
+                                {
+                                    GameObject instance = m_PrefabPool.Acquire(data.Prefab, r, c);
+                                    RectTransform prt = instance.GetComponent<RectTransform>();
+                                    prt.anchoredPosition = new Vector2(cellX, cellY);
+                                    prt.sizeDelta = new Vector2(cellW, cellH);
+                                    m_ActivePrefabMap[(r, c)] = instance;
+                                    data.OnPrefabAcquire?.Invoke(instance);
+                                }
+                                break;
                         }
                     }
                 }
@@ -1259,9 +1419,9 @@ namespace XericUI.XTable.Rendering.Component
 #endif
 
             // 运行时模式
-            Color rtSelectionColor = RT_SELECTION_COLOR;
-            Color rtMultiSelectColor = RT_MULTI_SELECT_COLOR;
-            Color rtFocusColor = RT_FOCUS_COLOR;
+            Color rtSelectionColor = Config.RuntimeSelectionColor;
+            Color rtMultiSelectColor = Config.RuntimeMultiSelectColor;
+            Color rtFocusColor = Config.RuntimeFocusColor;
 
             for (int r = sr; r < er && r < m_RowHeights.Length; r++)
             {
@@ -1306,34 +1466,49 @@ namespace XericUI.XTable.Rendering.Component
 
                     var hLine = m_Assembler.GetImage("cell_hline");
                     hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
-                    hLine.Rect.sizeDelta = new Vector2(cellW, RT_BORDER_WIDTH);
-                    hLine.Image.color = RT_BORDER_COLOR;
+                    hLine.Rect.sizeDelta = new Vector2(cellW, Config.RuntimeBorderWidth);
+                    hLine.Image.color = Config.RuntimeBorderColor;
 
                     var vLine = m_Assembler.GetImage("cell_vline");
-                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - RT_BORDER_WIDTH, cellY);
-                    vLine.Rect.sizeDelta = new Vector2(RT_BORDER_WIDTH, cellH);
-                    vLine.Image.color = RT_BORDER_COLOR;
+                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - Config.RuntimeBorderWidth, cellY);
+                    vLine.Rect.sizeDelta = new Vector2(Config.RuntimeBorderWidth, cellH);
+                    vLine.Image.color = Config.RuntimeBorderColor;
 
                     if (data == null) continue;
 
-                    if (!string.IsNullOrEmpty(data.Text))
+                    switch (data.ContentType)
                     {
-                        var txt = m_Assembler.GetText("cell_text", cellNS);
-                        txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                        txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
-                        txt.Text.text = data.Text;
-                        // 运行时样式由 StyleBoundElement 被动更新，此处仅设置文本内容
-                    }
-
-                    // 预制体渲染
-                    if (data.Prefab != null)
-                    {
-                        GameObject instance = m_PrefabPool.Acquire(data.Prefab, r, c);
-                        RectTransform prt = instance.GetComponent<RectTransform>();
-                        prt.anchoredPosition = new Vector2(cellX, cellY);
-                        prt.sizeDelta = new Vector2(cellW, cellH);
-                        m_ActivePrefabMap[(r, c)] = instance;
-                        data.OnPrefabAcquire?.Invoke(instance);
+                        case CellContentType.Text:
+                            if (!string.IsNullOrEmpty(data.Text))
+                            {
+                                var txt = m_Assembler.GetText("cell_text", cellNS);
+                                txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                txt.Text.text = data.Text;
+                                // 运行时样式由 StyleBoundElement 被动更新，此处仅设置文本内容
+                            }
+                            break;
+                        case CellContentType.Image:
+                            if (data.Image != null)
+                            {
+                                Sprite sprite = GetOrCreateSprite(data.Image);
+                                var img = m_Assembler.GetImage("cell_image", cellNS);
+                                img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                img.Image.sprite = sprite;
+                            }
+                            break;
+                        case CellContentType.Prefab:
+                            if (data.Prefab != null)
+                            {
+                                GameObject instance = m_PrefabPool.Acquire(data.Prefab, r, c);
+                                RectTransform prt = instance.GetComponent<RectTransform>();
+                                prt.anchoredPosition = new Vector2(cellX, cellY);
+                                prt.sizeDelta = new Vector2(cellW, cellH);
+                                m_ActivePrefabMap[(r, c)] = instance;
+                                data.OnPrefabAcquire?.Invoke(instance);
+                            }
+                            break;
                     }
                 }
             }
@@ -1342,6 +1517,18 @@ namespace XericUI.XTable.Rendering.Component
         #endregion
 
         #region 坐标计算
+
+        /// <summary>判断指定单元格是否与当前可见矩形有重叠（用于 RenderQuadrants 裁剪）</summary>
+        private bool IsCellVisible(int row, int col)
+        {
+            float cellTop = GetRowTopY(row);
+            float cellBottom = cellTop + m_RowHeights[row];
+            float cellLeft = GetColLeftX(col);
+            float cellRight = cellLeft + m_ColWidths[col];
+
+            return cellBottom > m_VisibleRect.y && cellTop < m_VisibleRect.yMax &&
+                   cellRight > m_VisibleRect.x && cellLeft < m_VisibleRect.xMax;
+        }
 
         private float GetRowTopY(int row)
         {
@@ -1357,6 +1544,22 @@ namespace XericUI.XTable.Rendering.Component
             for (int i = 0; i < col && i < m_ColWidths.Length; i++)
                 x += m_ColWidths[i];
             return x;
+        }
+
+        /// <summary>将 Texture2D 转为 Sprite（带缓存），用于 Image 类型单元格渲染</summary>
+        private Sprite GetOrCreateSprite(Texture2D texture)
+        {
+            if (texture == null) return null;
+
+            if (m_SpriteCache == null)
+                m_SpriteCache = new Dictionary<Texture2D, Sprite>();
+
+            if (!m_SpriteCache.TryGetValue(texture, out Sprite sprite))
+            {
+                sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                m_SpriteCache[texture] = sprite;
+            }
+            return sprite;
         }
 
         private void RecalculateTotalSize()
@@ -1499,7 +1702,7 @@ namespace XericUI.XTable.Rendering.Component
 
         #region 其他
 
-        private void MarkDirty(TableDirtyType type)
+        public void MarkDirty(TableDirtyType type)
         {
             m_DirtyFlag.Mark(type);
 
@@ -1550,7 +1753,7 @@ namespace XericUI.XTable.Rendering.Component
                 }
             }
 
-            m_Quadtree.Build(m_TotalWidth, m_TotalHeight, m_RowHeights, m_ColWidths, cells);
+            m_Quadtree.Build(m_TotalWidth, m_TotalHeight, m_RowHeights, m_ColWidths, cells, Config.QuadtreeMaxCellsPerNode);
         }
 
         #endregion
@@ -1620,6 +1823,24 @@ namespace XericUI.XTable.Rendering.Component
 
             var borderRt = renderer.GetComponent<RectTransform>();
             borderRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+
+#if UNITY_EDITOR
+            Color borderColor;
+            float borderWidth;
+            if (!Application.isPlaying)
+            {
+                borderColor = GetCellBorderColor(m_DefaultStyleNamespace);
+                borderWidth = GetCellBorderWidth(m_DefaultStyleNamespace);
+            }
+            else
+            {
+                borderColor = Config.RuntimeBorderColor;
+                borderWidth = Config.RuntimeBorderWidth;
+            }
+#else
+            Color borderColor = Config.RuntimeBorderColor;
+            float borderWidth = Config.RuntimeBorderWidth;
+#endif
 
             int rows = m_RowHeights.Length;
             int cols = m_ColWidths.Length;
@@ -1759,6 +1980,8 @@ namespace XericUI.XTable.Rendering.Component
             // 共享预制体对象池
             m_ViewportRenderer.PrefabPool = m_PrefabPool;
             m_ViewportRenderer.ActivePrefabMap = m_ActivePrefabMap;
+            m_ViewportRenderer.CellPadding = Config.CellHorizontalPadding;
+            m_ViewportRenderer.Config = Config;
         }
 
         /// <summary>渲染 Viewport 层冻结单元格，随滚动偏移调整位置</summary>

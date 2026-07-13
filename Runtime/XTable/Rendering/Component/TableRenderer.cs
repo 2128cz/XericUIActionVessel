@@ -26,6 +26,16 @@ namespace XericUI.XTable.Rendering.Component
 		/// <summary>共享活跃预制体映射表（由 XericUIActionTable 传入）</summary>
 		public Dictionary<(int, int), GameObject> ActivePrefabMap;
 
+		/// <summary>Texture2D → Sprite 缓存，避免每帧分配</summary>
+		private Dictionary<Texture2D, Sprite> m_SpriteCache;
+
+		/// <summary>单元格内容水平内边距（单侧），由 XericUIActionTable 设置</summary>
+		public float CellPadding;
+		private float CellPadding2 => CellPadding * 2f;
+
+		/// <summary>表格全局配置资源，由 XericUIActionTable 设置</summary>
+		public XTableConfig Config;
+
         #endregion
 
         #region 公开属性
@@ -191,8 +201,8 @@ namespace XericUI.XTable.Rendering.Component
             float borderWidth = GetStyleFloat(defaultNs, XericUIActionTable.STYLE_CELL_BORDER_BOTTOM_WIDTH,
                 XericUIActionTable.BORDER_WIDTH_FALLBACK);
 
-            Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * 0.4f);
-            Color focusColor = new Color(selectionColor.r + 0.04f, selectionColor.g + 0.13f, selectionColor.b + 0.13f, selectionColor.a * 1.4f);
+            Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * Config.MultiSelectAlphaFactor);
+            Color focusColor = new Color(selectionColor.r + Config.FocusRAdd, selectionColor.g + Config.FocusGAdd, selectionColor.b + Config.FocusBAdd, selectionColor.a * Config.FocusAlphaMul);
 
             int selRow = GetSelectedRow();
             int selCol = GetSelectedCol();
@@ -249,30 +259,46 @@ namespace XericUI.XTable.Rendering.Component
 
                     if (data == null) continue;
 
-                    if (!string.IsNullOrEmpty(data.Text))
+                    switch (data.ContentType)
                     {
-                        var txt = m_Assembler.GetText("cell_text", cellNS);
-                        txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                        txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
-                        txt.Text.text = data.Text;
-                        txt.Text.color = GetStyleColor(cellNS, XericUIActionTable.STYLE_CELL_FG_COLOR,
-                            XericUIActionTable.FG_COLOR_FALLBACK);
-                        txt.Text.fontSize = GetStyleInt(cellNS, XericUIActionTable.STYLE_CELL_FONT_SIZE,
-                            XericUIActionTable.FONT_SIZE_FALLBACK);
-                        txt.Text.alignment = TextAlignmentOptions.Midline;
-                        txt.Text.font = GetStyleFontAsset?.Invoke(cellNS,
-                            XericUIActionTable.STYLE_CELL_FONT_ASSET) ?? txt.Text.font;
-                    }
-
-                    if (data.Prefab != null && PrefabPool != null)
-                    {
-                        GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
-                        RectTransform prt = instance.GetComponent<RectTransform>();
-                        prt.anchoredPosition = new Vector2(cellX, cellY);
-                        prt.sizeDelta = new Vector2(cellW, cellH);
-                        if (ActivePrefabMap != null)
-                            ActivePrefabMap[(r, c)] = instance;
-                        data.OnPrefabAcquire?.Invoke(instance);
+                        case CellContentType.Text:
+                            if (!string.IsNullOrEmpty(data.Text))
+                            {
+                                var txt = m_Assembler.GetText("cell_text", cellNS);
+                                txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                txt.Text.text = data.Text;
+                                txt.Text.color = GetStyleColor(cellNS, XericUIActionTable.STYLE_CELL_FG_COLOR,
+                                    XericUIActionTable.FG_COLOR_FALLBACK);
+                                txt.Text.fontSize = GetStyleInt(cellNS, XericUIActionTable.STYLE_CELL_FONT_SIZE,
+                                    XericUIActionTable.FONT_SIZE_FALLBACK);
+                                txt.Text.alignment = TextAlignmentOptions.Midline;
+                                txt.Text.font = GetStyleFontAsset?.Invoke(cellNS,
+                                    XericUIActionTable.STYLE_CELL_FONT_ASSET) ?? txt.Text.font;
+                            }
+                            break;
+                        case CellContentType.Image:
+                            if (data.Image != null)
+                            {
+                                Sprite sprite = GetOrCreateSprite(data.Image);
+                                var img = m_Assembler.GetImage("cell_image", cellNS);
+                                img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                img.Image.sprite = sprite;
+                            }
+                            break;
+                        case CellContentType.Prefab:
+                            if (data.Prefab != null && PrefabPool != null)
+                            {
+                                GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
+                                RectTransform prt = instance.GetComponent<RectTransform>();
+                                prt.anchoredPosition = new Vector2(cellX, cellY);
+                                prt.sizeDelta = new Vector2(cellW, cellH);
+                                if (ActivePrefabMap != null)
+                                    ActivePrefabMap[(r, c)] = instance;
+                                data.OnPrefabAcquire?.Invoke(instance);
+                            }
+                            break;
                     }
                 }
             }
@@ -281,9 +307,9 @@ namespace XericUI.XTable.Rendering.Component
         private void RenderCellsRuntime(int sr, int er, int sc, int ec,
             float[] rowHeights, float[] colWidths, XTableData tableData, string defaultNs)
         {
-            Color rtSelectionColor = XericUIActionTable.RT_SELECTION_COLOR;
-            Color rtMultiSelectColor = XericUIActionTable.RT_MULTI_SELECT_COLOR;
-            Color rtFocusColor = XericUIActionTable.RT_FOCUS_COLOR;
+            Color rtSelectionColor = Config.RuntimeSelectionColor;
+            Color rtMultiSelectColor = Config.RuntimeMultiSelectColor;
+            Color rtFocusColor = Config.RuntimeFocusColor;
 
             int selRow = GetSelectedRow();
             int selCol = GetSelectedCol();
@@ -328,36 +354,72 @@ namespace XericUI.XTable.Rendering.Component
 
                     var hLine = m_Assembler.GetImage("cell_hline");
                     hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
-                    hLine.Rect.sizeDelta = new Vector2(cellW, XericUIActionTable.RT_BORDER_WIDTH);
-                    hLine.Image.color = XericUIActionTable.RT_BORDER_COLOR;
+                    hLine.Rect.sizeDelta = new Vector2(cellW, Config.RuntimeBorderWidth);
+                    hLine.Image.color = Config.RuntimeBorderColor;
 
                     var vLine = m_Assembler.GetImage("cell_vline");
-                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - XericUIActionTable.RT_BORDER_WIDTH, cellY);
-                    vLine.Rect.sizeDelta = new Vector2(XericUIActionTable.RT_BORDER_WIDTH, cellH);
-                    vLine.Image.color = XericUIActionTable.RT_BORDER_COLOR;
+                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - Config.RuntimeBorderWidth, cellY);
+                    vLine.Rect.sizeDelta = new Vector2(Config.RuntimeBorderWidth, cellH);
+                    vLine.Image.color = Config.RuntimeBorderColor;
 
                     if (data == null) continue;
 
-                    if (!string.IsNullOrEmpty(data.Text))
+                    switch (data.ContentType)
                     {
-                        var txt = m_Assembler.GetText("cell_text", cellNS);
-                        txt.Rect.anchoredPosition = new Vector2(cellX + 4, cellY);
-                        txt.Rect.sizeDelta = new Vector2(cellW - 8, cellH);
-                        txt.Text.text = data.Text;
-                    }
-
-                    if (data.Prefab != null && PrefabPool != null)
-                    {
-                        GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
-                        RectTransform prt = instance.GetComponent<RectTransform>();
-                        prt.anchoredPosition = new Vector2(cellX, cellY);
-                        prt.sizeDelta = new Vector2(cellW, cellH);
-                        if (ActivePrefabMap != null)
-                            ActivePrefabMap[(r, c)] = instance;
-                        data.OnPrefabAcquire?.Invoke(instance);
+                        case CellContentType.Text:
+                            if (!string.IsNullOrEmpty(data.Text))
+                            {
+                                var txt = m_Assembler.GetText("cell_text", cellNS);
+                                txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                txt.Text.text = data.Text;
+                            }
+                            break;
+                        case CellContentType.Image:
+                            if (data.Image != null)
+                            {
+                                Sprite sprite = GetOrCreateSprite(data.Image);
+                                var img = m_Assembler.GetImage("cell_image", cellNS);
+                                img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                img.Image.sprite = sprite;
+                            }
+                            break;
+                        case CellContentType.Prefab:
+                            if (data.Prefab != null && PrefabPool != null)
+                            {
+                                GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
+                                RectTransform prt = instance.GetComponent<RectTransform>();
+                                prt.anchoredPosition = new Vector2(cellX, cellY);
+                                prt.sizeDelta = new Vector2(cellW, cellH);
+                                if (ActivePrefabMap != null)
+                                    ActivePrefabMap[(r, c)] = instance;
+                                data.OnPrefabAcquire?.Invoke(instance);
+                            }
+                            break;
                     }
                 }
             }
+        }
+
+        #endregion
+
+        #region 辅助方法
+
+        /// <summary>将 Texture2D 转为 Sprite（带缓存），用于 Image 类型单元格渲染</summary>
+        private Sprite GetOrCreateSprite(Texture2D texture)
+        {
+            if (texture == null) return null;
+
+            if (m_SpriteCache == null)
+                m_SpriteCache = new Dictionary<Texture2D, Sprite>();
+
+            if (!m_SpriteCache.TryGetValue(texture, out Sprite sprite))
+            {
+                sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                m_SpriteCache[texture] = sprite;
+            }
+            return sprite;
         }
 
         #endregion
