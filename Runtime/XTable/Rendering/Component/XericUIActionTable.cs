@@ -1007,17 +1007,19 @@ namespace XericUI.XTable.Rendering.Component
             RecalculateTotalSize();
             UpdateVisibleRect();
 
-            // 确保 ScrollRect Content 尺寸正确（否则滚动时可能裁剪掉全部内容）
+            // 确保 ScrollRect Content 尺寸正确（含 padding 偏移量，防止 viewport 裁切边缘边框）
             RectTransform ctRt = ContentTransform as RectTransform;
             if (ctRt != null)
-                ctRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+            {
+                float pad2 = m_ContentOffset * 2f;
+                ctRt.sizeDelta = new Vector2(m_TotalWidth + pad2, m_TotalHeight + pad2);
+            }
 
-            // 更新背景尺寸
+            // 更新背景尺寸（仅覆盖网格区域，无需 padding）
             if (m_BackgroundGo != null)
             {
-                float pad = m_ContentOffset * 2f;
                 var bgRt = m_BackgroundGo.GetComponent<RectTransform>();
-                bgRt.sizeDelta = new Vector2(m_TotalWidth + pad, m_TotalHeight + pad);
+                bgRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
             }
 
             // 归还预制体前，触发所有活跃实例的释放回调
@@ -1102,9 +1104,8 @@ namespace XericUI.XTable.Rendering.Component
             bgRt.anchorMin = new Vector2(0, 1);
             bgRt.anchorMax = new Vector2(0, 1);
             bgRt.pivot = new Vector2(0, 1);
-            float pad = m_ContentOffset * 2f;
             bgRt.anchoredPosition = new Vector2(m_ContentOffset, -m_ContentOffset);
-            bgRt.sizeDelta = new Vector2(m_TotalWidth + pad, m_TotalHeight + pad);
+            bgRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
 
             var bgImg = m_BackgroundGo.GetComponent<Image>();
             bgImg.color = GetCellBgColor(m_DefaultStyleNamespace);
@@ -1916,7 +1917,7 @@ namespace XericUI.XTable.Rendering.Component
                     float rightWidth = GetCellBorderWidth(rightNs);
 
                     int rightCol = c + mergeCS;
-                    if (rightCol < cols)
+                    if (rightCol <= cols)
                     {
                         renderer.DrawLine(
                             new Vector2(rightX, cellY),
@@ -1931,7 +1932,7 @@ namespace XericUI.XTable.Rendering.Component
                     float bottomWidth = GetCellBorderWidth(bottomNs);
 
                     int bottomRow = r + mergeRS;
-                    if (bottomRow < rows)
+                    if (bottomRow <= rows)
                     {
                         renderer.DrawLine(
                             new Vector2(cellX, bottomY),
