@@ -134,6 +134,24 @@ namespace XericUI.XTable.Rendering.Component
                         }
                     }
 
+                    // 读取冻结窗格
+                    string freezePanes = ws.View.FreezePanes;
+                    if (!string.IsNullOrEmpty(freezePanes))
+                    {
+                        try
+                        {
+                            var addr = new ExcelAddressBase(freezePanes);
+                            int freezeRows = addr.Start.Row - 1;  // 1-based → 冻结行数
+                            int freezeCols = addr.Start.Column - 1; // 1-based → 冻结列数
+                            if (freezeRows > 0 || freezeCols > 0)
+                                SetFreezeCount(freezeRows, freezeCols);
+                        }
+                        catch
+                        {
+                            // 忽略解析失败的冻结地址
+                        }
+                    }
+
                     // 标记脏并刷新
                     MarkDirty(TableDirtyType.DataChanged | TableDirtyType.LayoutChanged);
                     RecalculateTotalSize();
@@ -197,6 +215,14 @@ namespace XericUI.XTable.Rendering.Component
                         float h = m_RowHeights[r];
                         if (h > 0)
                             ws.Row(r + 1).Height = h;
+                    }
+
+                    // 写入冻结窗格
+                    if (m_FreezeRowCount > 0 || m_FreezeColCount > 0)
+                    {
+                        int freezeRow = m_FreezeRowCount + 1; // 1-based: 冻结行数的下一行
+                        int freezeCol = m_FreezeColCount + 1; // 1-based: 冻结列数的下一列
+                        ws.View.FreezePanes = ExcelCellBase.GetAddress(freezeRow, freezeCol);
                     }
 
                     // 写入单元格数据和样式
