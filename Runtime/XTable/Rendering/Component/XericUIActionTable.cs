@@ -1594,7 +1594,7 @@ namespace XericUI.XTable.Rendering.Component
                 if (vt != null && ct != null)
                 {
                     float sx = Mathf.Max(0, -ct.anchoredPosition.x);
-                    float sy = Mathf.Max(0, ct.anchoredPosition.y);
+                    float sy = Mathf.Max(0, -ct.anchoredPosition.y);
                     m_VisibleRect = new Rect(sx, sy, vt.rect.width, vt.rect.height);
                 }
             }
@@ -2020,7 +2020,7 @@ namespace XericUI.XTable.Rendering.Component
             if (m_ScrollRect != null && m_ScrollRect.content != null)
             {
                 scrollOffset.x = Mathf.Max(0, -m_ScrollRect.content.anchoredPosition.x);
-                scrollOffset.y = Mathf.Max(0, m_ScrollRect.content.anchoredPosition.y);
+                scrollOffset.y = Mathf.Max(0, -m_ScrollRect.content.anchoredPosition.y);
             }
 
             // 调整背景位置（随滚动偏移移动，保持在视口可见范围内）
@@ -2061,7 +2061,7 @@ namespace XericUI.XTable.Rendering.Component
             float tableX = localPoint.x - rectTransform.rect.xMin;
             float tableY = rectTransform.rect.yMax - localPoint.y;
 
-            float scrollY = m_ScrollRect != null ? Mathf.Max(0, m_ScrollRect.content.anchoredPosition.y) : 0;
+            float scrollY = m_ScrollRect != null ? Mathf.Max(0, -m_ScrollRect.content.anchoredPosition.y) : 0;
             float scrollX = m_ScrollRect != null ? Mathf.Max(0, -m_ScrollRect.content.anchoredPosition.x) : 0;
             tableX += scrollX - m_ContentOffset;
             tableY += scrollY - m_ContentOffset;
