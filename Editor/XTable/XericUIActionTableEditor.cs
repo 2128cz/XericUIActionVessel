@@ -23,6 +23,8 @@ namespace XericUIEditor.XTable
         private SerializedProperty m_DefaultStyleNsProp;
         private SerializedProperty m_ScrollRectProp;
 
+        internal const string MENU_PATH = "GameObject/Xeric Library/Table/Xeric UI Action Table";
+
         // 折叠状态
         private static bool s_StyleFoldout = true;
         private static bool s_SizeFoldout = true;
@@ -273,7 +275,7 @@ namespace XericUIEditor.XTable
 
         #region Hierarchy 创建菜单
 
-        [MenuItem("GameObject/Xeric UI/Table/Xeric UI Action Table", false, 60)]
+        [MenuItem(MENU_PATH, false, 60)]
         private static void CreateTable(MenuCommand menuCommand)
         {
             // 1. 创建根节点：ScrollRect + Image + XericUIActionTable 共存于同一 GameObject

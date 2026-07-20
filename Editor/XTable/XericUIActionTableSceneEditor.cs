@@ -69,19 +69,19 @@ namespace XericUIEditor.XTable
 			SceneView.duringSceneGui += OnSceneGUI;
 		}
 
-		[MenuItem("XericLibrary/UI/Table/表格编辑器覆盖层", false, 200)]
+		[MenuItem(XTableEditorOverlay.MENU_PATH, false, 200)]
 		private static void ToggleEnabled()
 		{
 			s_Enabled = !s_Enabled;
 			EditorPrefs.SetBool(ENABLED_KEY, s_Enabled);
-			Menu.SetChecked("XericLibrary/UI/Table/表格编辑器覆盖层", s_Enabled);
+			Menu.SetChecked(XTableEditorOverlay.MENU_PATH, s_Enabled);
 			SceneView.RepaintAll();
 		}
 
-		[MenuItem("XericLibrary/UI/Table/表格编辑器覆盖层", true)]
+		[MenuItem(XTableEditorOverlay.MENU_PATH, true)]
 		private static bool ToggleEnabledValidate()
 		{
-			Menu.SetChecked("XericLibrary/UI/Table/表格编辑器覆盖层", s_Enabled);
+			Menu.SetChecked(XTableEditorOverlay.MENU_PATH, s_Enabled);
 			return true;
 		}
 
