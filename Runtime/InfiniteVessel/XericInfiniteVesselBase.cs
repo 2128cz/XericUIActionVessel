@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Pool;
+using XericLibrary.Runtime;
 using XericLibrary.Runtime.Type;
 
 namespace XericUI.InfiniteVessel

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
-using XericLibrary.Runtime.Type.SpatialAlgorithm;
+using XericLibrary.Runtime;
 
 namespace XericUI.BubbleLayout
 {

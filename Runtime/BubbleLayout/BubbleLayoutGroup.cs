@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.UI;
-using XericLibrary.Runtime.Type.SpatialAlgorithm;
-
+using XericLibrary.Runtime;
 #if UNITY_EDITOR
 using System.Diagnostics;
 #endif
