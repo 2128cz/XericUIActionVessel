@@ -36,7 +36,7 @@ namespace XericUI.FlipPage
     /// 在页面数据中pageNumber可以获取自己所在的页数，itemInfos获取页面中的所有数据项目。
     /// </code>
     [AddComponentMenu("Xeric UI Vessel/FlipPage/Basic FilpPage Database")]
-    public class XericFlipPageIndexVesselBase : XericUIBehaciour
+    public class XericFlipPageIndexVesselBase : XericUIBehaviour
     {
         #region 设定参数
 

@@ -23,7 +23,7 @@ namespace XericUI.XTable.Rendering.Component
     /// </summary>
     [ExecuteAlways]
     [AddComponentMenu("Xeric UI Vessel/Table/Xeric UI Action Table", 60)]
-    public partial class XericUIActionTable : XericUIBehaciour, IPointerClickHandler
+    public partial class XericUIActionTable : XericUIBehaviour, IPointerClickHandler
     {
         #region 序列化字段
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Deconstruction.Runtime;
 #if ODIN_INSPECTOR
 using Sirenix.OdinInspector;
@@ -9,7 +9,7 @@ using UnityEngine.UI;
 
 namespace XericUI.Core.Base
 {
-    public class XericUIBehaciour : UIBehaviour
+    public class XericUIBehaviour : UIBehaviour
     {
 #if ODIN_INSPECTOR
         [InfoBox("脚本必填属性存在空引用！请检查开放属性后再试", InfoMessageType.Error, VisibleIf = "PublicFieldNullReference")]
@@ -143,6 +143,93 @@ namespace XericUI.Core.Base
         {
             _hierarchyDirty = false;    
             rectTransform.SetLayoutDirty();
+        }
+
+        #endregion
+
+        #region 锚点设置
+
+        /// <summary>
+        /// 设置锚点并保持视觉位置和尺寸不变（补偿偏移量抵消锚点变化带来的位移）
+        /// </summary>
+        protected void SetAnchor(Vector2 anchorMin, Vector2 anchorMax)
+        {
+            var rt = rectTransform;
+            if (rt == null) return;
+
+            var parentRt = rt.parent != null ? rt.parent as RectTransform : null;
+            if (parentRt == null)
+            {
+                rt.anchorMin = anchorMin;
+                rt.anchorMax = anchorMax;
+                return;
+            }
+
+            Vector2 parentSize = parentRt.rect.size;
+
+            // 计算当前在父空间中的实际边界
+            float left = parentSize.x * rt.anchorMin.x + rt.offsetMin.x;
+            float right = parentSize.x * rt.anchorMax.x + rt.offsetMax.x;
+            float bottom = parentSize.y * rt.anchorMin.y + rt.offsetMin.y;
+            float top = parentSize.y * rt.anchorMax.y + rt.offsetMax.y;
+
+            // 设置新锚点
+            rt.anchorMin = anchorMin;
+            rt.anchorMax = anchorMax;
+
+            // 补偿偏移量以保持视觉位置和尺寸不变
+            rt.offsetMin = new Vector2(
+                left - parentSize.x * anchorMin.x,
+                bottom - parentSize.y * anchorMin.y
+            );
+            rt.offsetMax = new Vector2(
+                right - parentSize.x * anchorMax.x,
+                top - parentSize.y * anchorMax.y
+            );
+        }
+
+        /// <summary>
+        /// 设置锚点，通过参数控制是否保持位置
+        /// </summary>
+        /// <param name="preservePosition">true=保持位置和尺寸不变（同两参数版本）；false=位置被动改变，仅保持尺寸</param>
+        protected void SetAnchor(Vector2 anchorMin, Vector2 anchorMax, bool preservePosition)
+        {
+            if (preservePosition)
+            {
+                SetAnchor(anchorMin, anchorMax);
+            }
+            else
+            {
+                var rt = rectTransform;
+                if (rt == null) return;
+                rt.anchorMin = anchorMin;
+                rt.anchorMax = anchorMax;
+            }
+        }
+
+        /// <summary>
+        /// 设置锚点和anchoredPosition，保持尺寸不变
+        /// </summary>
+        protected void SetAnchor(Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition)
+        {
+            var rt = rectTransform;
+            if (rt == null) return;
+            rt.anchorMin = anchorMin;
+            rt.anchorMax = anchorMax;
+            rt.anchoredPosition = anchoredPosition;
+        }
+
+        /// <summary>
+        /// 设置锚点、anchoredPosition和sizeDelta
+        /// </summary>
+        protected void SetAnchor(Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 sizeDelta)
+        {
+            var rt = rectTransform;
+            if (rt == null) return;
+            rt.anchorMin = anchorMin;
+            rt.anchorMax = anchorMax;
+            rt.anchoredPosition = anchoredPosition;
+            rt.sizeDelta = sizeDelta;
         }
 
         #endregion
