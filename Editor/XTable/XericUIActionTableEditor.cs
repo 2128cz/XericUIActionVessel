@@ -115,22 +115,26 @@ namespace XericUIEditor.XTable
                     MacroFile.SetClipboardObject(data, MacroFile.JsonSerializerFormatter.formatterWithZip);
                     Debug.Log($"[XTable] 表格数据已导出到剪贴板 ({data.Cells?.Count ?? 0} 个单元格, {data.Merges?.Count ?? 0} 个合并)");
                 }
+
                 if (GUILayout.Button("从剪贴板导入", GUILayout.Height(26)))
                 {
-                    var data = MacroFile.GetClipboardObject<XTableClipboardData>(MacroFile.JsonSerializerFormatter.formatterWithZip);
+                    var data = MacroFile.GetClipboardObject<XTableClipboardData>(MacroFile.JsonSerializerFormatter
+                        .formatterWithZip);
                     if (data != null)
                     {
                         Undo.RecordObject(m_Table, "Import Table from Clipboard");
                         m_Table.ApplyClipboardData(data);
                         serializedObject.Update();
                         Repaint();
-                        Debug.Log($"[XTable] 已从剪贴板导入表格数据 ({data.Cells?.Count ?? 0} 个单元格, {data.Merges?.Count ?? 0} 个合并)");
+                        Debug.Log(
+                            $"[XTable] 已从剪贴板导入表格数据 ({data.Cells?.Count ?? 0} 个单元格, {data.Merges?.Count ?? 0} 个合并)");
                     }
                     else
                     {
                         Debug.LogWarning("[XTable] 剪贴板中没有有效的表格数据");
                     }
                 }
+
                 EditorGUILayout.EndHorizontal();
 
                 EditorGUILayout.Space(4);
@@ -228,8 +232,10 @@ namespace XericUIEditor.XTable
                                     EditorUtility.SetDirty(m_Table);
                                     Repaint();
                                 }
+
                                 goto skipEndChangeCheck;
                         }
+
                         // 默认 Text 类型
                         string newText = EditorGUILayout.TextField("文本内容", data.Text ?? "");
                         if (EditorGUI.EndChangeCheck())
@@ -242,8 +248,8 @@ namespace XericUIEditor.XTable
                             EditorUtility.SetDirty(m_Table);
                             Repaint();
                         }
-                    skipEndChangeCheck:
-                        ;
+
+                        skipEndChangeCheck: ;
 
                         // 样式
                         EditorGUILayout.Space(2);
@@ -396,12 +402,32 @@ namespace XericUIEditor.XTable
                 }
             }
 
-            // 挂载到 Canvas
-            GameObject parent = GetOrCreateCanvas();
+            // 确定父级：优先放在右键点击的对象下，其次放在其所在的 Canvas 下
+            GameObject parent = GetCreateParent(menuCommand);
             rootRt.SetParent(parent.transform, false);
 
             Undo.RegisterCreatedObjectUndo(rootGo, "Create Xeric UI Action Table");
             Selection.activeGameObject = rootGo;
+        }
+
+        /// <summary>
+        /// 确定创建表格时的父级对象。
+        /// 优先使用右键菜单点击的 GameObject（要求其处于 Canvas 层级下）；
+        /// 若没有任何 Canvas 则自动创建一个。
+        /// </summary>
+        private static GameObject GetCreateParent(MenuCommand menuCommand)
+        {
+            // 右键菜单点击的对象
+            GameObject clickedGo = menuCommand?.context as GameObject;
+            if (clickedGo == null && menuCommand?.context is Component comp)
+                clickedGo = comp.gameObject;
+
+            // 点击的对象在 Canvas 层级下 → 直接作为父级
+            if (clickedGo != null && clickedGo.GetComponentInParent<Canvas>() != null)
+                return clickedGo;
+
+            // 兜底：场景中的 Canvas 或自动创建
+            return GetOrCreateCanvas();
         }
 
         private static GameObject GetOrCreateCanvas()
