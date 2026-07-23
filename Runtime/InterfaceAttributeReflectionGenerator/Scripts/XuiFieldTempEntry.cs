@@ -1,21 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using UnityEngine;
 using UnityEngine.Pool;
 
 namespace XericUI.ReflectionUIGenerator
 {
-    /// <summary>
-    /// UI 字段标记提供者接口
-    /// 所有 Tag 增强的 UI 组件需实现此接口，便于 Entry 在绑定阶段自动匹配
-    /// </summary>
-    public interface IXuiavrgFieldTagProvider
-    {
-        XuiavrgFieldTag EntryTag { get; }
-        int TagIndex { get; }
-    }
-
     /// <summary>
     /// 字段 Entry 接口
     /// 数据对象字段与 UI 组件之间的中间缓存层
@@ -49,11 +38,14 @@ namespace XericUI.ReflectionUIGenerator
         /// <summary>生成的 UI 实例引用</summary>
         GameObject UIInstance { get; }
 
-        /// <summary>绑定的预制体组</summary>
-        XuiavrgPropertyGroupScriptableObject BoundPrefabGroup { get; set; }
+        /// <summary>绑定的预制体引用</summary>
+        GameObject BoundPrefab { get; set; }
 
         /// <summary>覆盖的预制体组名称</summary>
         string PrefabOverrideName { get; set; }
+
+        /// <summary>关联的 MVVM 绑定列表</summary>
+        IReadOnlyList<AvrgMvvmBinding> Bindings { get; }
 
         // === 生命周期 ===
 
@@ -69,39 +61,22 @@ namespace XericUI.ReflectionUIGenerator
         /// <summary>销毁时调用</summary>
         void OnEntryDestroy();
 
-        // === 数据访问 ===
+        // === 绑定管理 ===
 
-        /// <summary>获取指定成员的数据值</summary>
-        object GetDataValue(string memberName);
-
-        /// <summary>设置指定成员的数据值</summary>
-        void SetDataValue(string memberName, object value);
-
-        /// <summary>获取 Entry 下所有绑定成员的名称</summary>
-        IEnumerable<string> GetMemberNames();
+        /// <summary>添加 MVVM 绑定到此 Entry</summary>
+        void AddBinding(AvrgMvvmBinding binding, AvrgMvvmScheduler scheduler);
 
         // === UI 绑定 ===
 
         /// <summary>
         /// 绑定 UI 组件
         /// </summary>
-        /// <param name="uiInstance">UI 预制体实例</param>
-        /// <param name="componentCache">
-        /// 组件缓存列表。传入 null 时会自动收集 uiInstance 上所有 Component。
-        /// 父 Entry 可将已收集的缓存传递给子 Entry 以提升性能
-        /// </param>
         void BindUIComponent(GameObject uiInstance, List<Component> componentCache);
     }
 
     /// <summary>
     /// 字段临时 Entry 实现类
-    /// 作为数据对象字段和 UI 组件之间的中间缓存层
-    /// 
-    /// 支持：
-    /// - 多字段合并为一个 Entry（通过 XuiavrgFieldEntryGroupAttribute）
-    /// - 嵌套 Entry（父 Entry 包含子 Entry）
-    /// - 对象池复用（通过静态 ObjectPool）
-    /// - MVVM 双向绑定的生命周期
+    /// 作为数据对象和 UI 组件之间的中间缓存层
     /// </summary>
     public class XuiFieldTempEntry : IFieldEntry
     {
@@ -130,73 +105,19 @@ namespace XericUI.ReflectionUIGenerator
 
         #endregion
 
-        #region 内部绑定数据结构
-
-        /// <summary>
-        /// 成员反射绑定信息
-        /// </summary>
-        internal class MemberBinding
-        {
-            /// <summary>绑定的数据目标对象</summary>
-            public object valueTarget;
-
-            /// <summary>是否为属性（false 为字段）</summary>
-            public bool isProperty;
-
-            /// <summary>属性信息</summary>
-            public PropertyInfo propertyInfo;
-
-            /// <summary>字段信息</summary>
-            public FieldInfo fieldInfo;
-
-            /// <summary>功能标记</summary>
-            public XuiavrgFieldTag tag;
-
-            /// <summary>标记索引</summary>
-            public int tagIndex;
-
-            /// <summary>
-            /// 从绑定目标获取值
-            /// </summary>
-            public object GetValue()
-            {
-                if (valueTarget == null) return null;
-                return isProperty
-                    ? propertyInfo.GetValue(valueTarget)
-                    : fieldInfo.GetValue(valueTarget);
-            }
-
-            /// <summary>
-            /// 设置值到绑定目标
-            /// </summary>
-            public void SetValue(object value)
-            {
-                if (valueTarget == null) return;
-                if (isProperty)
-                {
-                    if (propertyInfo.CanWrite)
-                        propertyInfo.SetValue(valueTarget, value);
-                }
-                else
-                {
-                    fieldInfo.SetValue(valueTarget, value);
-                }
-            }
-        }
-
-        #endregion
-
         #region 字段
 
         private string _entryName;
         private string _entryPath;
         private IFieldEntry _parent;
         private List<XuiFieldTempEntry> _children = new List<XuiFieldTempEntry>();
-        private Dictionary<string, MemberBinding> _bindings = new Dictionary<string, MemberBinding>();
+        private List<AvrgMvvmBinding> _bindings = new List<AvrgMvvmBinding>();
+        private AvrgMvvmScheduler _scheduler;
         private GameObject _uiInstance;
-        private XuiavrgPropertyGroupScriptableObject _boundPrefabGroup;
+        private GameObject _boundPrefab;
         private string _prefabOverrideName;
         private int _fieldOrder;
+        private bool _uiBound; // 防止重复绑定
 
         #endregion
 
@@ -237,10 +158,10 @@ namespace XericUI.ReflectionUIGenerator
 
         public GameObject UIInstance => _uiInstance;
 
-        public XuiavrgPropertyGroupScriptableObject BoundPrefabGroup
+        public GameObject BoundPrefab
         {
-            get => _boundPrefabGroup;
-            set => _boundPrefabGroup = value;
+            get => _boundPrefab;
+            set => _boundPrefab = value;
         }
 
         public string PrefabOverrideName
@@ -248,6 +169,8 @@ namespace XericUI.ReflectionUIGenerator
             get => _prefabOverrideName;
             set => _prefabOverrideName = value;
         }
+
+        public IReadOnlyList<AvrgMvvmBinding> Bindings => _bindings;
 
         #endregion
 
@@ -263,6 +186,7 @@ namespace XericUI.ReflectionUIGenerator
             Tag = tag;
             TagIndex = tagIndex;
             _fieldOrder = 0;
+            _uiBound = false;
         }
 
         /// <summary>
@@ -271,7 +195,7 @@ namespace XericUI.ReflectionUIGenerator
         public void SetParent(IFieldEntry parent)
         {
             _parent = parent;
-            _entryPath = null; // 重置路径，下次访问重新计算
+            _entryPath = null;
         }
 
         /// <summary>
@@ -285,98 +209,19 @@ namespace XericUI.ReflectionUIGenerator
         }
 
         /// <summary>
-        /// 注册成员绑定
+        /// 添加 MVVM 绑定到此 Entry
         /// </summary>
-        /// <param name="memberName">成员名称</param>
-        /// <param name="memberInfo">反射信息</param>
-        /// <param name="target">数据目标对象</param>
-        /// <param name="tag">功能标记</param>
-        /// <param name="tagIndex">标记索引</param>
-        public void RegisterBinding(string memberName, MemberInfo memberInfo, object target,
-            XuiavrgFieldTag tag = XuiavrgFieldTag.None, int tagIndex = 0)
+        public void AddBinding(AvrgMvvmBinding binding, AvrgMvvmScheduler scheduler)
         {
-            MemberBinding binding = new MemberBinding
-            {
-                valueTarget = target,
-                tag = tag,
-                tagIndex = tagIndex
-            };
+            if (binding == null) return;
+            _bindings.Add(binding);
+            _scheduler = scheduler;
 
-            switch (memberInfo)
+            if (Tag == XuiavrgFieldTag.None && binding.MetaData?.Tag != XuiavrgFieldTag.None)
             {
-                case PropertyInfo propInfo:
-                    binding.isProperty = true;
-                    binding.propertyInfo = propInfo;
-                    break;
-                case FieldInfo fieldInfo:
-                    binding.isProperty = false;
-                    binding.fieldInfo = fieldInfo;
-                    break;
+                Tag = binding.MetaData.Tag;
+                TagIndex = binding.MetaData.TagIndex;
             }
-
-            _bindings[memberName] = binding;
-
-            // 如果是第一个注册的绑定，设置主 Tag
-            if (Tag == XuiavrgFieldTag.None && tag != XuiavrgFieldTag.None)
-            {
-                Tag = tag;
-                TagIndex = tagIndex;
-            }
-        }
-
-        #endregion
-
-        #region 数据访问
-
-        public object GetDataValue(string memberName)
-        {
-            if (_bindings.TryGetValue(memberName, out var binding))
-                return binding.GetValue();
-
-            // 查找子 Entry
-            foreach (var child in _children)
-            {
-                var value = child.GetDataValue(memberName);
-                if (value != null) return value;
-            }
-
-            return null;
-        }
-
-        public void SetDataValue(string memberName, object value)
-        {
-            if (_bindings.TryGetValue(memberName, out var binding))
-            {
-                binding.SetValue(value);
-                return;
-            }
-
-            // 查找子 Entry
-            foreach (var child in _children)
-            {
-                if (child.HasBinding(memberName))
-                {
-                    child.SetDataValue(memberName, value);
-                    return;
-                }
-            }
-        }
-
-        public IEnumerable<string> GetMemberNames() => _bindings.Keys;
-
-        /// <summary>
-        /// 检查是否包含指定成员绑定
-        /// </summary>
-        public bool HasBinding(string memberName) => _bindings.ContainsKey(memberName);
-
-        /// <summary>
-        /// 获取指定成员的标记
-        /// </summary>
-        public XuiavrgFieldTag GetMemberTag(string memberName)
-        {
-            if (_bindings.TryGetValue(memberName, out var binding))
-                return binding.tag;
-            return XuiavrgFieldTag.None;
         }
 
         #endregion
@@ -386,7 +231,7 @@ namespace XericUI.ReflectionUIGenerator
         public void BindUIComponent(GameObject uiInstance, List<Component> componentCache)
         {
             _uiInstance = uiInstance;
-            if (_uiInstance == null) return;
+            if (_uiInstance == null || _uiBound) return;
 
             if (componentCache == null)
             {
@@ -394,183 +239,131 @@ namespace XericUI.ReflectionUIGenerator
                 _uiInstance.GetComponentsInChildren(true, componentCache);
             }
 
-            BindUIComponentWithCache(_uiInstance, componentCache);
+            // 遍历组件缓存，寻找 XUIAvrgMDValue 按 Tag 匹配
+            foreach (var comp in componentCache)
+            {
+                if (comp is XUIAvrgMDValue mdValue)
+                {
+                    if (mdValue.EntryTag == this.Tag &&
+                        (this.TagIndex == 0 || mdValue.TagIndex == this.TagIndex))
+                    {
+                        BindComponentWithBinding(mdValue);
+                    }
+                }
+            }
 
             // 子 Entry 复用组件缓存
             foreach (var child in _children)
             {
                 child.BindUIComponent(_uiInstance, componentCache);
             }
-        }
 
-        private void BindUIComponentWithCache(GameObject uiInstance, List<Component> componentCache)
-        {
-            // 遍历组件缓存，匹配 tag
-            var locators = new List<XuiavrgLocator>();
-            foreach (var comp in componentCache)
-            {
-                if (comp is XuiavrgLocator locator)
-                {
-                    locators.Add(locator);
-                }
-
-                if (comp is IXuiavrgFieldTagProvider tagProvider)
-                {
-                    // 匹配 Tag 和 TagIndex
-                    if (tagProvider.EntryTag == this.Tag &&
-                        (this.TagIndex == 0 || tagProvider.TagIndex == this.TagIndex))
-                    {
-                        // 找到匹配的 UI 组件，建立绑定
-                        BuildComponentBinding(comp);
-                    }
-                }
-            }
-
-            // 如果没有 IXuiavrgFieldTagProvider，尝试通过 Locator 匹配
-            if (locators.Count > 0)
-            {
-                BuildLocatorBindings(locators);
-            }
+            _uiBound = true;
         }
 
         /// <summary>
-        /// 通过标签提供者建立组件绑定
+        /// 将 XUIAvrgMDValue 与 MVVM 绑定连接
         /// </summary>
-        private void BuildComponentBinding(Component comp)
+        private void BindComponentWithBinding(XUIAvrgMDValue mdValue)
         {
-            // 根据组件类型和标记类型进行数据同步
-            switch (comp)
-            {
-                case UnityEngine.UI.Text uiText when Tag == XuiavrgFieldTag.Label || Tag == XuiavrgFieldTag.Output:
-                    uiText.text = GetFirstBindingValue()?.ToString() ?? "";
-                    break;
-                case UnityEngine.UI.Button _ when Tag == XuiavrgFieldTag.Button:
-                    // 按钮绑定在 BindUIEvents 中处理
-                    break;
-                case UnityEngine.UI.Toggle uiToggle when Tag == XuiavrgFieldTag.Toggle:
-                    if (GetFirstBindingValue() is bool boolVal)
-                        uiToggle.isOn = boolVal;
-                    break;
-                case UnityEngine.UI.Slider uiSlider when Tag == XuiavrgFieldTag.Slider:
-                    if (GetFirstBindingValue() is float floatVal)
-                        uiSlider.value = floatVal;
-                    break;
-                case UnityEngine.UI.InputField uiInput when Tag == XuiavrgFieldTag.Input:
-                    uiInput.text = GetFirstBindingValue()?.ToString() ?? "";
-                    break;
-                case UnityEngine.UI.Dropdown uiDropdown when Tag == XuiavrgFieldTag.Dropdown:
-                    if (GetFirstBindingValue() is int intVal)
-                        uiDropdown.value = intVal;
-                    break;
-            }
-        }
+            if (_bindings.Count == 0) return;
 
-        /// <summary>
-        /// 通过 Locator 建立绑定
-        /// </summary>
-        private void BuildLocatorBindings(List<XuiavrgLocator> locators)
-        {
-            foreach (var locator in locators)
+            var primaryBinding = _bindings[0];
+
+            // 数据 → UI：订阅数据变更
+            primaryBinding.OnUIDataChanged += value => UpdateUIComponent(mdValue, value);
+
+            // UI → 数据：订阅 UI 交互事件
+            // 根据组件类型决定 UI 事件
+            if (mdValue.TryGetComponent(out UnityEngine.UI.Button uiButton))
             {
-                foreach (var locProp in locator.Properties)
+                uiButton.onClick.AddListener(() =>
                 {
-                    // 按 propertyName 匹配成员名
-                    if (_bindings.TryGetValue(locProp.propertyName, out var binding))
-                    {
-                        // 从数据端同步到 UI
-                        var dataValue = binding.GetValue();
-                        locProp.SetValue(dataValue);
-                    }
-                }
+                    primaryBinding.WriteFromUI(true);
+                    _scheduler?.MarkUIDirty(primaryBinding);
+                });
             }
-        }
 
-        /// <summary>
-        /// 获取第一个绑定的值
-        /// </summary>
-        private object GetFirstBindingValue()
-        {
-            foreach (var kvp in _bindings)
+            if (mdValue.TryGetComponent(out UnityEngine.UI.Toggle uiToggle))
             {
-                var val = kvp.Value.GetValue();
-                if (val != null) return val;
-            }
-            return null;
-        }
-
-        #endregion
-
-        #region 事件绑定
-
-        /// <summary>
-        /// 绑定 UI 交互事件（双向绑定）
-        /// </summary>
-        public void BindUIEvents()
-        {
-            if (_uiInstance == null) return;
-
-            var allComponents = new List<Component>();
-            _uiInstance.GetComponentsInChildren(true, allComponents);
-
-            foreach (var comp in allComponents)
-            {
-                if (comp is IXuiavrgFieldTagProvider tagProvider)
+                uiToggle.onValueChanged.AddListener(val =>
                 {
-                    if (tagProvider.EntryTag != this.Tag) continue;
-                    BindComponentEvents(comp);
-                }
+                    primaryBinding.WriteFromUI(val);
+                    _scheduler?.MarkUIDirty(primaryBinding);
+                });
             }
 
-            // 子 Entry 事件绑定
-            foreach (var child in _children)
+            if (mdValue.TryGetComponent(out UnityEngine.UI.Slider uiSlider))
             {
-                child.BindUIEvents();
+                uiSlider.onValueChanged.AddListener(val =>
+                {
+                    primaryBinding.WriteFromUI(val);
+                    _scheduler?.MarkUIDirty(primaryBinding);
+                });
             }
+
+            if (mdValue.TryGetComponent(out UnityEngine.UI.InputField uiInput))
+            {
+                uiInput.onEndEdit.AddListener(val =>
+                {
+                    primaryBinding.WriteFromUI(val);
+                    _scheduler?.MarkUIDirty(primaryBinding);
+                });
+            }
+
+            if (mdValue.TryGetComponent(out UnityEngine.UI.Dropdown uiDropdown))
+            {
+                uiDropdown.onValueChanged.AddListener(val =>
+                {
+                    primaryBinding.WriteFromUI(val);
+                    _scheduler?.MarkUIDirty(primaryBinding);
+                });
+            }
+
+            // 广播元数据到 XUIAvrgMDValue（触发 IXUIAvrgMDValueStyle 子组件）
+            mdValue.InitializeWithMetaData(primaryBinding.MetaData);
         }
 
-        private void BindComponentEvents(Component comp)
+        /// <summary>
+        /// 更新 UI 组件的显示值（通过 XUIAvrgMDValue 所在 GameObject 上的具体组件）
+        /// </summary>
+        private static void UpdateUIComponent(XUIAvrgMDValue mdValue, object value)
         {
-            switch (comp)
-            {
-                case UnityEngine.UI.Button uiButton:
-                    uiButton.onClick.AddListener(() =>
-                    {
-                        SetFirstBindingValue(true);
-                    });
-                    break;
-                case UnityEngine.UI.Toggle uiToggle:
-                    uiToggle.onValueChanged.AddListener(val =>
-                    {
-                        SetFirstBindingValue(val);
-                    });
-                    break;
-                case UnityEngine.UI.Slider uiSlider:
-                    uiSlider.onValueChanged.AddListener(val =>
-                    {
-                        SetFirstBindingValue(val);
-                    });
-                    break;
-                case UnityEngine.UI.InputField uiInput:
-                    uiInput.onEndEdit.AddListener(val =>
-                    {
-                        SetFirstBindingValue(val);
-                    });
-                    break;
-                case UnityEngine.UI.Dropdown uiDropdown:
-                    uiDropdown.onValueChanged.AddListener(val =>
-                    {
-                        SetFirstBindingValue(val);
-                    });
-                    break;
-            }
-        }
+            if (mdValue == null || value == null) return;
 
-        private void SetFirstBindingValue(object value)
-        {
-            foreach (var kvp in _bindings)
+            // Text
+            if (mdValue.TryGetComponent(out UnityEngine.UI.Text uiText))
             {
-                kvp.Value.SetValue(value);
-                break;
+                uiText.text = value.ToString();
+                return;
+            }
+
+            // Toggle
+            if (value is bool boolVal && mdValue.TryGetComponent(out UnityEngine.UI.Toggle uiToggle))
+            {
+                uiToggle.isOn = boolVal;
+                return;
+            }
+
+            // Slider
+            if (value is float floatVal && mdValue.TryGetComponent(out UnityEngine.UI.Slider uiSlider))
+            {
+                uiSlider.value = floatVal;
+                return;
+            }
+
+            // InputField
+            if (mdValue.TryGetComponent(out UnityEngine.UI.InputField uiInput))
+            {
+                uiInput.text = value.ToString();
+                return;
+            }
+
+            // Dropdown
+            if (value is int intVal && mdValue.TryGetComponent(out UnityEngine.UI.Dropdown uiDropdown))
+            {
+                uiDropdown.value = intVal;
+                return;
             }
         }
 
@@ -585,11 +378,16 @@ namespace XericUI.ReflectionUIGenerator
             _parent = null;
             _fieldOrder = 0;
             _prefabOverrideName = null;
+            _uiBound = false;
         }
 
         public void OnEntryBind()
         {
-            BindUIEvents();
+            foreach (var binding in _bindings)
+            {
+                var value = binding.ReadFromDataSource();
+                binding.NotifyUIUpdate(value);
+            }
         }
 
         public void OnEntryRelease()
@@ -598,16 +396,20 @@ namespace XericUI.ReflectionUIGenerator
             _entryPath = null;
             _parent = null;
             _uiInstance = null;
-            _boundPrefabGroup = null;
+            _boundPrefab = null;
             _prefabOverrideName = null;
             Tag = XuiavrgFieldTag.None;
             TagIndex = 0;
             _fieldOrder = 0;
+            _uiBound = false;
 
-            // 清理绑定引用
+            foreach (var binding in _bindings)
+            {
+                binding.ClearUIEvent();
+            }
             _bindings.Clear();
+            _scheduler = null;
 
-            // 递归释放子 Entry
             foreach (var child in _children)
             {
                 Release(child);
@@ -617,9 +419,14 @@ namespace XericUI.ReflectionUIGenerator
 
         public void OnEntryDestroy()
         {
+            foreach (var binding in _bindings)
+            {
+                binding.ClearUIEvent();
+            }
             _bindings.Clear();
             _children.Clear();
             _uiInstance = null;
+            _scheduler = null;
         }
 
         #endregion

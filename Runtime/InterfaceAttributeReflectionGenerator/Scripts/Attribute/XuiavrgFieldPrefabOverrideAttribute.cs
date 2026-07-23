@@ -21,16 +21,16 @@ namespace XericUI.ReflectionUIGenerator
         /// 创建预制体覆盖标记
         /// </summary>
         /// <param name="prefabGroupName">
-        /// 目标预制体组名称，与 XuiavrgPropertyGroupScriptableObject.groupName 匹配
+        /// 目标预制体名称，在 AvrgTypePrefabMappingConfig 中查找匹配
         /// </param>
         public XuiavrgFieldPrefabOverrideAttribute(string prefabGroupName)
         {
             PrefabGroupName = prefabGroupName;
         }
 
-        public void BindProperty(XuiavrgInspectorProperty property)
+        public void BindMetaData(AvrgMemberMetaData metaData)
         {
-            // 新的 Entry 体系通过 Manager 直接处理此 Attribute
+            metaData.PrefabOverrideName = PrefabGroupName;
         }
     }
 }

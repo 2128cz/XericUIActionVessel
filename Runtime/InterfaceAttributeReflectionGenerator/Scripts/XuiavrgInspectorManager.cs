@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
 using UnityEngine;
 using UnityEngine.Pool;
 using Object = UnityEngine.Object;
@@ -9,41 +7,22 @@ using Object = UnityEngine.Object;
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
-    /// 节点下生成反射属性管理器
+    /// 节点下生成反射属性管理器 — Metadata-Driven View Model (MDVM 元数据驱动的视图数据模型)
+    /// 负责：构建 Entry → 创建组容器 → 生成 UI → 绑定数据
     /// </summary>
-    /// <remarks>
-    /// 管理器需要挂载在 Unity 节点中，管理器中指定的属性承载节点将用于生成属性内容。
-    ///
-    /// 新的生命周期流程：
-    /// 1. BuildEntries(object payload) — 传入数据对象，构建 Entry 列表
-    /// 2. OnPostBuildEntries(entries) — 虚方法，可重写添加额外 Entry
-    /// 3. 自动按 FieldOrder 排序
-    /// 4. GenerateUI() — 根据 Entry 列表生成 UI 实例并绑定
-    ///
-    /// 对象池说明：
-    /// - Entry 通过 XuiFieldTempEntry.Pool 静态池管理
-    /// - UI 预制体通过内部 PropertyGroupPools 字典管理，以 PropertyGroupScriptableObject 为键
-    /// </remarks>
     public class XuiavrgInspectorManager : MonoBehaviour
     {
         #region 对象池
 
-        /// <summary>
-        /// UI 预制体对象池，以 PropertyGroupScriptableObject 为键
-        /// </summary>
-        private Dictionary<XuiavrgPropertyGroupScriptableObject, ObjectPool<GameObject>> _propertyGroupPools
-            = new Dictionary<XuiavrgPropertyGroupScriptableObject, ObjectPool<GameObject>>();
+        private Dictionary<GameObject, ObjectPool<GameObject>> _prefabPools
+            = new Dictionary<GameObject, ObjectPool<GameObject>>();
 
-        /// <summary>
-        /// 从指定 PropertyGroup 的预制体池获取 UI 实例
-        /// </summary>
-        public GameObject PropertyGroupPoolGet(XuiavrgPropertyGroupScriptableObject group)
+        public GameObject PrefabPoolGet(GameObject prefab)
         {
-            if (group == null) return null;
+            if (prefab == null) return null;
 
-            if (!_propertyGroupPools.TryGetValue(group, out var pool))
+            if (!_prefabPools.TryGetValue(prefab, out var pool))
             {
-                var prefab = group.prefab;
                 pool = new ObjectPool<GameObject>(
                     createFunc: () =>
                         prefab != null
@@ -59,19 +38,16 @@ namespace XericUI.ReflectionUIGenerator
                     defaultCapacity: 4,
                     maxSize: 64
                 );
-                _propertyGroupPools[group] = pool;
+                _prefabPools[prefab] = pool;
             }
 
             return pool.Get();
         }
 
-        /// <summary>
-        /// 将 UI 实例归还到指定 PropertyGroup 的预制体池
-        /// </summary>
-        public void PropertyGroupPoolRelease(XuiavrgPropertyGroupScriptableObject group, GameObject instance)
+        public void PrefabPoolRelease(GameObject prefab, GameObject instance)
         {
-            if (group == null || instance == null) return;
-            if (_propertyGroupPools.TryGetValue(group, out var pool))
+            if (prefab == null || instance == null) return;
+            if (_prefabPools.TryGetValue(prefab, out var pool))
             {
                 pool.Release(instance);
             }
@@ -81,219 +57,109 @@ namespace XericUI.ReflectionUIGenerator
             }
         }
 
-        /// <summary>
-        /// 清空所有预制体对象池
-        /// </summary>
-        public void ClearAllPropertyGroupPools()
+        public void ClearAllPrefabPools()
         {
-            foreach (var pool in _propertyGroupPools.Values)
+            foreach (var pool in _prefabPools.Values)
             {
                 pool.Clear();
             }
-            _propertyGroupPools.Clear();
+            _prefabPools.Clear();
         }
 
         #endregion
 
         #region 字段
 
-        [SerializeField]
-        [Tooltip("当前使用的 UI 主题名称。切换主题会立即销毁所有已生成 UI 和对象池，需重新 BuildEntries + GenerateUI")]
-        private string _currentTheme = XuiavrgPropertyGroupScriptableObject.DefaultThemeName;
-
-        /// <summary>
-        /// 当前 UI 主题名称
-        /// </summary>
-        public string CurrentTheme => _currentTheme;
-
-        /// <summary>
-        /// 当前活跃的 Entry 列表
-        /// </summary>
         public List<IFieldEntry> CurrentEntries { get; private set; } = new List<IFieldEntry>();
+        public AvrgMvvmBindingCollection CurrentBindingCollection { get; private set; }
+        public AvrgMemberMetaDataSet CurrentMetaDataSet { get; private set; }
 
         /// <summary>
-        /// 当前传入的数据负载
+        /// 当前活跃的组容器字典
         /// </summary>
-        public object CurrentPayload { get; private set; }
+        private Dictionary<string, XuiAvrgMDGroup> _activeGroups = new Dictionary<string, XuiAvrgMDGroup>();
 
-        /// <summary>
-        /// 切换 UI 主题。会立即销毁所有已生成 UI 和对象池。
-        /// 调用后需重新 BuildEntries + GenerateUI。
-        /// </summary>
-        /// <param name="themeName">新的主题名称</param>
-        public void SetTheme(string themeName)
-        {
-            if (_currentTheme == themeName) return;
-
-            _currentTheme = string.IsNullOrEmpty(themeName)
-                ? XuiavrgPropertyGroupScriptableObject.DefaultThemeName
-                : themeName;
-
-            // 销毁所有已生成 UI 和对象池
-            ClearAll();
-        }
+        [Tooltip("类型-预制体映射配置 ScriptableObject")]
+        public AvrgTypePrefabMappingConfig typePrefabMappingConfig;
 
         #endregion
 
         #region 核心生命周期
 
-        /// <summary>
-        /// 传入对象实例，构建 Entry 列表
-        /// </summary>
-        /// <param name="payload">数据端对象</param>
-        public void BuildEntries(object payload)
+        public void BuildFromMetaDataSet(AvrgMemberMetaDataSet metaDataSet,
+            AvrgMvvmBindingCollection bindingCollection = null)
         {
-            // 清空之前的 Entry
             ClearCurrentEntries();
-            CurrentPayload = payload;
+            CurrentMetaDataSet = metaDataSet;
+            CurrentBindingCollection = bindingCollection;
 
-            if (payload == null)
+            if (metaDataSet == null)
             {
-                Debug.LogError("[Xuiavrg] 未指定有效负载，无法构建 Entry");
+                Debug.LogError("[Xuiavrg] 未指定元数据集，无法构建 Entry");
                 return;
             }
 
-            var type = payload.GetType();
-            var memberInfos = type.GetRuntimeMemberInfo().ToList();
-
-            // 用于合并编组 Entry 的临时字典
-            var groupEntries = new Dictionary<string, XuiFieldTempEntry>();
-
-            foreach (var memberInfo in memberInfos)
+            foreach (var metaData in metaDataSet.MetaDataList)
             {
-                // 检查隐藏标记
-                var hideAttr = memberInfo.GetCustomAttribute<XuiavrgHideAttribute>();
-                if (hideAttr != null && hideAttr.Hide)
+                if (metaData.Hide)
                     continue;
 
-                // 检查编组标记
-                var groupAttr = memberInfo.GetCustomAttribute<XuiavrgFieldEntryGroupAttribute>();
+                var entry = XuiFieldTempEntry.Get();
+                entry.Initialize(
+                    string.IsNullOrEmpty(metaData.GroupPath) ? metaData.MemberName : metaData.GroupPath,
+                    metaData.Tag,
+                    metaData.TagIndex);
 
-                if (groupAttr != null)
+                if (!string.IsNullOrEmpty(metaData.PrefabOverrideName))
+                    entry.PrefabOverrideName = metaData.PrefabOverrideName;
+
+                if (bindingCollection != null)
                 {
-                    // 编组字段：合并到同名 Entry
-                    if (!groupEntries.TryGetValue(groupAttr.GroupPath, out var groupEntry))
+                    var matchedBindings = bindingCollection.FindByMemberName(metaData.MemberName);
+                    if (matchedBindings != null)
                     {
-                        groupEntry = XuiFieldTempEntry.Get();
-                        groupEntry.Initialize(groupAttr.GroupPath);
-                        groupEntries[groupAttr.GroupPath] = groupEntry;
-                        CurrentEntries.Add(groupEntry);
-                    }
-
-                    groupEntry.RegisterBinding(
-                        memberInfo.Name, memberInfo, payload,
-                        groupAttr.Tag, groupAttr.TagIndex);
-                }
-                else
-                {
-                    // 普通字段：创建独立 Entry
-                    var entry = XuiFieldTempEntry.Get();
-                    entry.Initialize(memberInfo.Name);
-                    entry.RegisterBinding(memberInfo.Name, memberInfo, payload);
-
-                    // 检查预制体覆盖
-                    var overrideAttr = memberInfo.GetCustomAttribute<XuiavrgFieldPrefabOverrideAttribute>();
-                    if (overrideAttr != null)
-                    {
-                        entry.PrefabOverrideName = overrideAttr.PrefabGroupName;
-                    }
-
-                    CurrentEntries.Add(entry);
-                }
-
-                // 应用排序标记
-                var orderAttr = memberInfo.GetCustomAttribute<XuiavrgFieldOrderAttribute>();
-                if (orderAttr != null)
-                {
-                    // 找到该成员对应的 Entry（可能是编组 Entry）
-                    if (groupAttr != null && groupEntries.TryGetValue(groupAttr.GroupPath, out var gEntry))
-                    {
-                        if (gEntry.FieldOrder == 0 || orderAttr.Order < gEntry.FieldOrder)
-                            gEntry.FieldOrder = orderAttr.Order;
+                        entry.AddBinding(matchedBindings, null);
                     }
                     else
                     {
-                        // 普通字段的排序应用到其 Entry
-                        var normalEntry = CurrentEntries.LastOrDefault();
-                        if (normalEntry != null)
-                            normalEntry.FieldOrder = orderAttr.Order;
+                        foreach (var binding in bindingCollection)
+                        {
+                            entry.AddBinding(binding, null);
+                            break;
+                        }
                     }
                 }
 
-                // 应用旧的 IXuiavrgAttribute（兼容）
-                ApplyLegacyAttributes(memberInfo, payload, groupAttr, groupEntries);
+                entry.FieldOrder = metaData.FieldOrder;
+                CurrentEntries.Add(entry);
             }
 
-            // 调用后期回调
             OnPostBuildEntries(CurrentEntries);
-
-            // 排序
             SortEntries();
         }
 
-        /// <summary>
-        /// 应用旧的 IXuiavrgAttribute 体系中的属性（兼容保留）
-        /// </summary>
-        private void ApplyLegacyAttributes(
-            MemberInfo memberInfo, object payload,
-            XuiavrgFieldEntryGroupAttribute groupAttr,
-            Dictionary<string, XuiFieldTempEntry> groupEntries)
+        public void SetBindingCollection(AvrgMvvmBindingCollection bindingCollection)
         {
-            // 处理旧的 XuiavrgAttribute（设置 labelName, inspectorOrder 等）
-            var oldAttr = memberInfo.GetCustomAttribute<XuiavrgAttribute>();
-            if (oldAttr != null)
+            CurrentBindingCollection = bindingCollection;
+
+            if (CurrentEntries != null && bindingCollection != null)
             {
-                // 创建临时的 InspectorProperty 来接收绑定
-                var tempProp = new XuiavrgInspectorProperty();
-                tempProp.RegsiterDataValue(memberInfo, payload);
-                oldAttr.BindProperty(tempProp);
-
-                // 将相关属性同步到 Entry
-                IFieldEntry targetEntry;
-                if (groupAttr != null && groupEntries.TryGetValue(groupAttr.GroupPath, out var gEntry))
-                    targetEntry = gEntry;
-                else
-                    targetEntry = CurrentEntries.LastOrDefault(e => !e.IsGroupEntry || e == null) ?? CurrentEntries.LastOrDefault();
-
-                if (targetEntry != null)
+                foreach (var entry in CurrentEntries)
                 {
-                    if (tempProp.inspectorOrder != 0 && targetEntry.FieldOrder == 0)
-                        targetEntry.FieldOrder = tempProp.inspectorOrder;
-
-                    targetEntry.PrefabOverrideName ??= tempProp.uiPropertyName;
+                    if (entry is XuiFieldTempEntry tempEntry)
+                    {
+                        var matched = bindingCollection.FindByMemberName(entry.EntryName);
+                        if (matched != null)
+                            tempEntry.AddBinding(matched, null);
+                    }
                 }
             }
-
-            // 处理其他旧的验证 Attribute
-            foreach (var attr in memberInfo.GetCustomAttributes().OfType<IXuiavrgAttribute>())
-            {
-                if (attr is XuiavrgAttribute) continue; // 已处理
-                if (attr is XuiavrgHideAttribute) continue; // 已处理
-                if (attr is XuiavrgFieldEntryGroupAttribute) continue; // 已处理
-                if (attr is XuiavrgFieldOrderAttribute) continue; // 已处理
-                if (attr is XuiavrgFieldPrefabOverrideAttribute) continue; // 已处理
-
-                // 其他旧 Attribute（Required, StringCheck, NumberCheck 等）
-                var tempProp = new XuiavrgInspectorProperty();
-                tempProp.RegsiterDataValue(memberInfo, payload);
-                attr.BindProperty(tempProp);
-                // 这些验证信息目前由 InspectorProperty 保留，后续可迁移到 Entry
-            }
         }
 
-        /// <summary>
-        /// 生成后期回调（可重写）
-        /// 在此方法中可以手动添加额外的 Entry（如 Preview 结构、不在数据对象中的内容）
-        /// </summary>
-        /// <param name="entries">当前 Entry 列表</param>
         protected virtual void OnPostBuildEntries(List<IFieldEntry> entries)
         {
-            // 默认无操作，子类可重写
         }
 
-        /// <summary>
-        /// 对 Entry 列表按 FieldOrder 排序
-        /// </summary>
         private void SortEntries()
         {
             CurrentEntries.Sort((a, b) =>
@@ -304,106 +170,181 @@ namespace XericUI.ReflectionUIGenerator
             });
         }
 
+        // ============ 三阶段 GenerateUI ============
+
         /// <summary>
-        /// 根据 Entry 列表生成 UI
+        /// 生成 UI — 三阶段流程
+        /// Phase A: 按 GroupPath 分组
+        /// Phase B: 创建 XuiAvrgMDGroup 组容器
+        /// Phase C: 在组容器内生成 UI 组件并绑定
         /// </summary>
         public void GenerateUI()
         {
             if (CurrentEntries == null || CurrentEntries.Count == 0)
             {
-                Debug.LogWarning("[Xuiavrg] 没有可生成的 Entry，请先调用 BuildEntries");
+                Debug.LogWarning("[Xuiavrg] 没有可生成的 Entry，请先调用 BuildFromMetaDataSet");
                 return;
             }
 
+            // Phase A: 收集并分组
+            var groupedEntries = new Dictionary<string, List<IFieldEntry>>();
+            var ungroupedEntries = new List<IFieldEntry>();
+
             foreach (var entry in CurrentEntries)
             {
-                if (entry is not XuiFieldTempEntry tempEntry) continue;
+                string groupKey = !string.IsNullOrEmpty(entry.EntryName)
+                    ? GetGroupPathFromEntry(entry)
+                    : null;
 
-                // 查找匹配的 PropertyGroup
-                var group = ResolvePropertyGroup(entry);
-                if (group == null)
+                if (!string.IsNullOrEmpty(groupKey))
                 {
-                    Debug.LogWarning($"[Xuiavrg] 未找到 Entry '{entry.EntryName}' 的匹配预制体组，跳过");
-                    continue;
+                    if (!groupedEntries.ContainsKey(groupKey))
+                        groupedEntries[groupKey] = new List<IFieldEntry>();
+                    groupedEntries[groupKey].Add(entry);
                 }
+                else
+                {
+                    ungroupedEntries.Add(entry);
+                }
+            }
 
-                entry.BoundPrefabGroup = group;
+            // Phase B: 创建组容器
+            _activeGroups.Clear();
+            foreach (var kvp in groupedEntries)
+            {
+                string groupPath = kvp.Key;
+                var entries = kvp.Value;
 
-                // 从对象池获取 UI 实例
-                var uiInstance = PropertyGroupPoolGet(group);
-                if (uiInstance == null) continue;
+                // 检查是否已创建（相同 GroupPath 只创建一个容器）
+                if (_activeGroups.ContainsKey(groupPath)) continue;
 
-                // 设置父节点和命名
-                uiInstance.name = entry.EntryName;
-                uiInstance.transform.SetParent(transform, false);
+                var groupGo = new GameObject($"Group [{groupPath}]", typeof(RectTransform));
+                groupGo.transform.SetParent(transform, false);
 
-                // 绑定 UI 组件（首次绑定不传缓存，由 Entry 内部收集）
-                entry.BindUIComponent(uiInstance, null);
+                var rect = groupGo.GetComponent<RectTransform>();
+                rect.anchorMin = new Vector2(0, 1);
+                rect.anchorMax = new Vector2(1, 1);
+                rect.pivot = new Vector2(0.5f, 1);
+                rect.sizeDelta = new Vector2(0, 0);
 
-                // 绑定事件
-                entry.OnEntryBind();
+                var group = groupGo.AddComponent<XuiAvrgMDGroup>();
+                int firstOrder = entries.Count > 0 ? entries[0].FieldOrder : 0;
+                group.Initialize(groupPath, firstOrder);
+
+                _activeGroups[groupPath] = group;
+            }
+
+            // Phase C: 生成 UI 组件
+            foreach (var kvp in groupedEntries)
+            {
+                string groupPath = kvp.Key;
+                var entries = kvp.Value;
+
+                if (!_activeGroups.TryGetValue(groupPath, out var group)) continue;
+
+                foreach (var entry in entries)
+                {
+                    GenerateSingleUI(entry, group.contentRoot);
+                }
+            }
+
+            foreach (var entry in ungroupedEntries)
+            {
+                GenerateSingleUI(entry, transform);
             }
         }
 
         /// <summary>
-        /// 解析 Entry 对应的 PropertyGroup
-        /// 优先使用 PrefabOverrideName，否则按 Tag 匹配，所有查找在 currentTheme 下进行
+        /// 生成单个 Entry 的 UI
         /// </summary>
-        private XuiavrgPropertyGroupScriptableObject ResolvePropertyGroup(IFieldEntry entry)
+        private void GenerateSingleUI(IFieldEntry entry, Transform parent)
         {
-            // 1. 优先检查 PrefabOverrideName（按主题 + UI 名称查找）
+            if (entry is not XuiFieldTempEntry tempEntry) return;
+
+            var prefab = ResolvePrefab(entry);
+            if (prefab == null)
+            {
+                Debug.LogWarning($"[Xuiavrg] 未找到 Entry '{entry.EntryName}' 的匹配预制体，跳过");
+                return;
+            }
+
+            entry.BoundPrefab = prefab;
+            var uiInstance = PrefabPoolGet(prefab);
+
+            if (uiInstance == null) return;
+
+            uiInstance.name = entry.EntryName;
+            uiInstance.transform.SetParent(parent, false);
+
+            // 检查 XUIAvrgMDValue 是否存在
+            if (uiInstance.GetComponentInChildren<XUIAvrgMDValue>(true) == null)
+            {
+                Debug.LogError($"[Xuiavrg] 预制体 '{prefab.name}' 不符合生成要求：缺少 XUIAvrgMDValue 组件。请确保预制体根节点或其子节点包含 XUIAvrgMDValue 脚本。");
+                PrefabPoolRelease(prefab, uiInstance);
+                return;
+            }
+
+            entry.BindUIComponent(uiInstance, null);
+            entry.OnEntryBind();
+        }
+
+        /// <summary>
+        /// 从 Entry 提取 GroupPath（通过 EntryName 判断）
+        /// </summary>
+        private string GetGroupPathFromEntry(IFieldEntry entry)
+        {
+            // 通过 Bindings 中的元数据找到 GroupPath
+            if (entry.Bindings != null && entry.Bindings.Count > 0)
+            {
+                var metaData = entry.Bindings[0].MetaData;
+                if (metaData != null && !string.IsNullOrEmpty(metaData.GroupPath))
+                    return metaData.GroupPath;
+            }
+            return null;
+        }
+
+        // ============ 预制体解析 ============
+
+        private GameObject ResolvePrefab(IFieldEntry entry)
+        {
             if (!string.IsNullOrEmpty(entry.PrefabOverrideName))
             {
-                var overrideGroup = XuiavrgPropertyGroupScriptableObject.FindGroupByUiName(_currentTheme, entry.PrefabOverrideName);
-                if (overrideGroup != null) return overrideGroup;
-            }
-
-            // 2. 按 Tag 查找匹配的组（在当前主题下）
-            if (entry.Tag != XuiavrgFieldTag.None)
-            {
-                var tags = new List<XuiavrgFieldTag> { entry.Tag };
-                // 收集子 Entry 的 Tag（如果是编组 Entry）
-                if (entry.IsGroupEntry)
+                if (typePrefabMappingConfig != null)
                 {
-                    foreach (var child in entry.Children)
-                    {
-                        if (child.Tag != XuiavrgFieldTag.None && !tags.Contains(child.Tag))
-                            tags.Add(child.Tag);
-                    }
+                    var namedPrefab = typePrefabMappingConfig.FindPrefabByName(entry.PrefabOverrideName);
+                    if (namedPrefab != null) return namedPrefab;
                 }
-
-                var matchedGroup = XuiavrgPropertyGroupScriptableObject.FindGroup(_currentTheme, tags.ToArray());
-                if (matchedGroup != null) return matchedGroup;
             }
 
-            // 3. 回退到当前主题下的 "Default" UI 名称
-            return XuiavrgPropertyGroupScriptableObject.FindGroupByUiName(_currentTheme, "Default");
+            if (typePrefabMappingConfig != null)
+            {
+                var typeMatch = typePrefabMappingConfig.FindPrefabByBindings(entry.Bindings);
+                if (typeMatch != null) return typeMatch;
+            }
+
+            return typePrefabMappingConfig != null ? typePrefabMappingConfig.defaultPrefab : null;
         }
 
-        /// <summary>
-        /// 清空当前界面和 Entry 列表
-        /// </summary>
+        // ============ 清理 ============
+
         public void ClearAll()
         {
             ClearCurrentEntries();
-            ClearAllPropertyGroupPools();
-            CurrentPayload = null;
+            ClearAllPrefabPools();
+            ClearGroups();
+            CurrentMetaDataSet = null;
+            CurrentBindingCollection = null;
         }
 
-        /// <summary>
-        /// 清空当前 Entry 列表（归还到池中）
-        /// </summary>
         private void ClearCurrentEntries()
         {
             foreach (var entry in CurrentEntries)
             {
-                // 释放 UI 实例
-                if (entry.UIInstance != null && entry.BoundPrefabGroup != null)
+                if (entry.UIInstance != null && entry.BoundPrefab != null)
                 {
-                    PropertyGroupPoolRelease(entry.BoundPrefabGroup, entry.UIInstance);
+                    PrefabPoolRelease(entry.BoundPrefab, entry.UIInstance);
                 }
 
-                // 归还 Entry 到池
                 if (entry is XuiFieldTempEntry tempEntry)
                 {
                     XuiFieldTempEntry.Release(tempEntry);
@@ -412,29 +353,35 @@ namespace XericUI.ReflectionUIGenerator
             CurrentEntries.Clear();
         }
 
-        #endregion
-
-        #region 生命周期
+        private void ClearGroups()
+        {
+            foreach (var kvp in _activeGroups)
+            {
+                if (kvp.Value != null && kvp.Value.gameObject != null)
+                {
+                    Destroy(kvp.Value.gameObject);
+                }
+            }
+            _activeGroups.Clear();
+        }
 
         private void OnDestroy()
         {
             ClearAll();
         }
 
-        #endregion
+        // ============ 兼容旧 API ============
 
-        #region 兼容旧 API
-
-        /// <summary>
-        /// [已弃用] 请使用 BuildEntries + GenerateUI 替代
-        /// </summary>
-        [Obsolete("Use BuildEntries + GenerateUI instead", false)]
+        [Obsolete("Use BuildFromMetaDataSet + GenerateUI instead", false)]
         public void SchemaHydration(object payload)
         {
-            BuildEntries(payload);
+            var metaDataSet = XuiavrgUtilities.ExtractAvrgMemberMetaData(payload);
+            var bindingCollection = metaDataSet.BuildMDVM(payload);
+            BuildFromMetaDataSet(metaDataSet, bindingCollection);
             GenerateUI();
         }
-
+        
         #endregion
+
     }
 }

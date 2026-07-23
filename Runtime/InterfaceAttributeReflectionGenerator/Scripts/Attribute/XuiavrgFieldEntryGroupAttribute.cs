@@ -38,10 +38,11 @@ namespace XericUI.ReflectionUIGenerator
             TagIndex = tagIndex;
         }
 
-        public void BindProperty(XuiavrgInspectorProperty property)
+        public void BindMetaData(AvrgMemberMetaData metaData)
         {
-            // 新的 Entry 体系通过 Manager.BuildEntries 直接处理此 Attribute
-            // 保留 IXuiavrgAttribute 兼容旧的 SchemaHydration 流程
+            metaData.GroupPath = GroupPath;
+            metaData.Tag = Tag;
+            metaData.TagIndex = TagIndex;
         }
     }
 }

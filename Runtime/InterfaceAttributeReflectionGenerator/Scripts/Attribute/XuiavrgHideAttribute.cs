@@ -1,5 +1,4 @@
-﻿using System;
-using UnityEngine.Serialization;
+using System;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -20,9 +19,9 @@ namespace XericUI.ReflectionUIGenerator
             Hide = hideInInspector;
         }
 
-        public void BindProperty(XuiavrgInspectorProperty property)
+        public void BindMetaData(AvrgMemberMetaData metaData)
         {
-            property.hideInInspector = Hide;
+            metaData.Hide = Hide;
         }
     }
 }

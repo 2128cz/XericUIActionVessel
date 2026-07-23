@@ -232,6 +232,33 @@ namespace XericUI.Core.Base
             rt.sizeDelta = sizeDelta;
         }
 
+        /// <summary>
+        /// 将窗口定位到目标 RectTransform 的指定锚点位置
+        /// </summary>
+        /// <param name="target">目标 RectTransform</param>
+        /// <param name="anchor">锚点偏移，(0,0)=左下, (1,1)=右上</param>
+        public void SetAnchorPosition(RectTransform target, Vector2 anchor)
+        {
+            var rt = rectTransform;
+            if (rt == null || target == null) return;
+            var parentRT = rt.parent as RectTransform;
+            if (parentRT == null) return;
+
+            Vector3[] corners = new Vector3[4];
+            target.GetWorldCorners(corners);
+            // corners[0]=左下, corners[1]=左上, corners[2]=右上, corners[3]=右下
+            Vector3 worldPos = Vector3.Lerp(
+                Vector3.Lerp(corners[0], corners[1], anchor.y),
+                Vector3.Lerp(corners[3], corners[2], anchor.y),
+                anchor.x);
+
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    parentRT, worldPos, null, out Vector2 localPoint))
+            {
+                rt.anchoredPosition = localPoint;
+            }
+        }
+
         #endregion
 
         #region 显影

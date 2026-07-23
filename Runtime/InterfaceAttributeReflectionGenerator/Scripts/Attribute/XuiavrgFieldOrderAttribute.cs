@@ -24,9 +24,9 @@ namespace XericUI.ReflectionUIGenerator
             Order = order;
         }
 
-        public void BindProperty(XuiavrgInspectorProperty property)
+        public void BindMetaData(AvrgMemberMetaData metaData)
         {
-            property.inspectorOrder = Order;
+            metaData.FieldOrder = Order;
         }
     }
 }
