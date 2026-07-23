@@ -1715,7 +1715,27 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>运行时样式变更回调：标记脏数据，下一帧重绘</summary>
         private void OnPoolStyleChanged() => MarkDirty(TableDirtyType.StyleChanged);
 
-        private void OnScrollValueChanged(Vector2 _) => MarkDirty(TableDirtyType.ViewChanged);
+        [System.NonSerialized] private bool m_IsRefreshingFromScroll;
+
+        private void OnScrollValueChanged(Vector2 _)
+        {
+            // 防重入：RefreshView 中修改 content.sizeDelta 可能触发 ScrollRect 再次回调
+            if (m_IsRefreshingFromScroll) return;
+            m_IsRefreshingFromScroll = true;
+
+            try
+            {
+                // 滚动时立即更新可见矩形并刷新视图，不依赖脏标记延迟机制。
+                // 表格本身没有移动能力，完全依赖 ScrollRect 的 content 偏移和 Mask 裁剪，
+                // 因此必须在 ScrollRect 值变化时立即重算可见范围。
+                UpdateVisibleRect();
+                RefreshView();
+            }
+            finally
+            {
+                m_IsRefreshingFromScroll = false;
+            }
+        }
 
         #endregion
 
@@ -2054,17 +2074,18 @@ namespace XericUI.XTable.Rendering.Component
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                rectTransform, eventData.position, eventData.pressEventCamera, out Vector2 localPoint);
+            // 直接用 ContentTransform 做坐标转换：单元格是 Content 的子对象，
+            // 其 anchoredPosition 就在 Content 局部空间中，无需手工换算 scroll 偏移。
+            RectTransform contentRt = ContentTransform as RectTransform;
+            if (contentRt == null) return;
 
-            // rectTransform 锚点在左上角，localPoint 以中心为原点
-            float tableX = localPoint.x - rectTransform.rect.xMin;
-            float tableY = rectTransform.rect.yMax - localPoint.y;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                contentRt, eventData.position, eventData.pressEventCamera, out Vector2 localPoint))
+                return;
 
-            float scrollY = m_ScrollRect != null ? Mathf.Max(0, -m_ScrollRect.content.anchoredPosition.y) : 0;
-            float scrollX = m_ScrollRect != null ? Mathf.Max(0, -m_ScrollRect.content.anchoredPosition.x) : 0;
-            tableX += scrollX - m_ContentOffset;
-            tableY += scrollY - m_ContentOffset;
+            // 转换为左上角坐标系（Content 的 anchor/pivot 都是 (0,1)）
+            float tableX = localPoint.x - contentRt.rect.xMin - m_ContentOffset;
+            float tableY = contentRt.rect.yMax - localPoint.y - m_ContentOffset;
 
             int col = -1;
             float ax = 0;
@@ -2075,7 +2096,6 @@ namespace XericUI.XTable.Rendering.Component
                     col = c;
                     break;
                 }
-
                 ax += m_ColWidths[c];
             }
 
@@ -2088,7 +2108,6 @@ namespace XericUI.XTable.Rendering.Component
                     row = r;
                     break;
                 }
-
                 ay += m_RowHeights[r];
             }
 
