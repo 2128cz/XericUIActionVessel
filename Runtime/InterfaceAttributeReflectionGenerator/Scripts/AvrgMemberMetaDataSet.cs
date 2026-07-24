@@ -49,15 +49,18 @@ namespace XericUI.ReflectionUIGenerator
             {
                 // 编组内第一个成员作为主元数据
                 var first = gEntry.First();
-                // 收集组内所有成员的 SubMetaDataList（合并拆分属性）
+                first.SubMetaDataList ??= new List<AvrgMemberMetaData>();
+
                 foreach (var member in gEntry)
                 {
+                    if (member == first) continue;
+
+                    // 成员自身的 Split 子属性合并到父级
                     if (member.SubMetaDataList?.Count > 0)
-                    {
-                        if (first.SubMetaDataList == null)
-                            first.SubMetaDataList = new List<AvrgMemberMetaData>();
                         first.SubMetaDataList.AddRange(member.SubMetaDataList);
-                    }
+
+                    // Merge: 成员自身作为子属性加入，保留独立 MemberInfo/TargetInstance
+                    first.SubMetaDataList.Add(member);
                 }
                 merged.Add(first);
             }
@@ -122,23 +125,39 @@ namespace XericUI.ReflectionUIGenerator
 
                     foreach (var subMetaData in metaData.SubMetaDataList)
                     {
-                        string subPath = subMetaData.PropertyPath;
-                        if (string.IsNullOrEmpty(subPath)) continue;
-
                         var subBinding = new AvrgMvvmBinding
                         {
                             MetaData = subMetaData,
-                            // 从父值中读取子属性
-                            ReadFunc = () => ReadSubProperty(metaData.GetValue(), subPath),
-                            // 修改子属性并写回父值
-                            WriteAction = (val) =>
+                        };
+
+                        // Merge 路径：子字段有自己的 MemberInfo/TargetInstance（来自编组成员）
+                        if (subMetaData.MemberInfo != null && subMetaData.TargetInstance != null)
+                        {
+                            var capturedSub = subMetaData;
+                            subBinding.ReadFunc = () => capturedSub.GetValue();
+                            subBinding.WriteAction = (val) =>
+                            {
+                                capturedSub.SetValue(val);
+                                scheduler.MarkDataDirty(capturedBinding);
+                            };
+                        }
+                        // Split 路径：通过 PropertyPath 从父值访问（来自 XuiavrgSplit）
+                        else if (!string.IsNullOrEmpty(subMetaData.PropertyPath))
+                        {
+                            string subPath = subMetaData.PropertyPath;
+                            subBinding.ReadFunc = () => ReadSubProperty(metaData.GetValue(), subPath);
+                            subBinding.WriteAction = (val) =>
                             {
                                 var parentVal = metaData.GetValue();
                                 var modifiedParent = WriteSubProperty(parentVal, subPath, val);
                                 metaData.SetValue(modifiedParent);
                                 scheduler.MarkDataDirty(capturedBinding);
-                            },
-                        };
+                            };
+                        }
+                        else
+                        {
+                            continue; // 无法创建绑定，跳过
+                        }
 
                         binding.SubBindings.Add(subBinding);
                     }
