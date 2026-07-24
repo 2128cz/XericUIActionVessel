@@ -63,6 +63,7 @@ namespace XericUI.ReflectionUIGenerator
             {
                 pool.Clear();
             }
+
             _prefabPools.Clear();
         }
 
@@ -109,9 +110,6 @@ namespace XericUI.ReflectionUIGenerator
                     string.IsNullOrEmpty(metaData.GroupPath) ? metaData.MemberName : metaData.GroupPath,
                     metaData.Tag,
                     metaData.TagIndex);
-
-                if (!string.IsNullOrEmpty(metaData.PrefabOverrideName))
-                    entry.PrefabOverrideName = metaData.PrefabOverrideName;
 
                 if (bindingCollection != null)
                 {
@@ -238,7 +236,6 @@ namespace XericUI.ReflectionUIGenerator
         {
             var rootNode = new GroupTreeNode(null);
 
-            // Step 1: 将每个完整路径分裂后插入树
             foreach (var fullPath in allGroupPaths)
             {
                 if (string.IsNullOrEmpty(fullPath)) continue;
@@ -255,7 +252,6 @@ namespace XericUI.ReflectionUIGenerator
                 }
             }
 
-            // Step 2: 深度优先遍历，创建层级 GameObject
             CreateGroupGameObjects(rootNode, null, transform, "");
         }
 
@@ -286,7 +282,6 @@ namespace XericUI.ReflectionUIGenerator
                 var group = groupGo.AddComponent<XuiAvrgMDGroup>();
                 group.Initialize(childFullPath, 0, parentGroup);
 
-                // 叶节点映射到完整路径
                 if (childNode.Children.Count == 0)
                 {
                     _leafGroupMap[childFullPath] = group;
@@ -331,7 +326,8 @@ namespace XericUI.ReflectionUIGenerator
 
             if (uiInstance.GetComponentInChildren<XUIAvrgMDValue>(true) == null)
             {
-                Debug.LogError($"[Xuiavrg] 预制体 '{prefab.name}' 不符合生成要求：缺少 XUIAvrgMDValue 组件。请确保预制体根节点或其子节点包含 XUIAvrgMDValue 脚本。");
+                Debug.LogError(
+                    $"[Xuiavrg] 预制体 '{prefab.name}' 不符合生成要求：缺少 XUIAvrgMDValue 组件。请确保预制体根节点或其子节点包含 XUIAvrgMDValue 脚本。");
                 PrefabPoolRelease(prefab, uiInstance);
                 return;
             }
@@ -348,29 +344,62 @@ namespace XericUI.ReflectionUIGenerator
                 if (metaData != null && !string.IsNullOrEmpty(metaData.GroupPath))
                     return metaData.GroupPath;
             }
+
             return null;
         }
 
-        // ============ 预制体解析 ============
+        // ============ 预制体解析 (Tag + 类型匹配) ============
 
+        /// <summary>
+        /// 预制体解析优先级：
+        /// 1. Tag != None → 按 Tag + 类型匹配（无匹配时报错）
+        /// 2. Tag == None → 按类型匹配
+        /// 3. defaultPrefab 回退
+        /// PrefabOverrideName 已移除，由 Tag + 类型匹配替代
+        /// </summary>
         private GameObject ResolvePrefab(IFieldEntry entry)
         {
-            if (!string.IsNullOrEmpty(entry.PrefabOverrideName))
+            if (typePrefabMappingConfig == null)
             {
-                if (typePrefabMappingConfig != null)
-                {
-                    var namedPrefab = typePrefabMappingConfig.FindPrefabByName(entry.PrefabOverrideName);
-                    if (namedPrefab != null) return namedPrefab;
-                }
+                Debug.LogError("[Xuiavrg] 未配置 typePrefabMappingConfig");
+                return null;
             }
 
-            if (typePrefabMappingConfig != null)
+            var bindings = entry.Bindings;
+            var valueType = bindings?.Count > 0 ? bindings[0].MetaData?.ValueType : null;
+
+            // 优先级 1: Tag != None → Tag + 类型匹配
+            if (entry.Tag != XuiavrgFieldTag.None && valueType != null)
             {
-                var typeMatch = typePrefabMappingConfig.FindPrefabByBindings(entry.Bindings);
-                if (typeMatch != null) return typeMatch;
+                var taggedPrefab = typePrefabMappingConfig.FindPrefabByTypeAndTag(valueType, entry.Tag);
+                if (taggedPrefab != null)
+                    return taggedPrefab;
+
+                Debug.LogError(
+                    $"[Xuiavrg] 指定 Tag '{entry.Tag}' 的预制体不存在 " +
+                    $"(Entry: '{entry.EntryName}', 类型: {valueType.Name})，跳过 UI 生成");
+                return null;
             }
 
-            return typePrefabMappingConfig != null ? typePrefabMappingConfig.defaultPrefab : null;
+            // 优先级 2: Tag == None → 按类型匹配
+            if (valueType != null)
+            {
+                var typeMatch = typePrefabMappingConfig.FindPrefabByType(valueType);
+                if (typeMatch != null)
+                    return typeMatch;
+            }
+
+            // 优先级 3: defaultPrefab 回退
+            if (typePrefabMappingConfig.defaultPrefab != null)
+            {
+                Debug.LogWarning(
+                    $"[Xuiavrg] 类型 '{valueType?.Name ?? "未知"}' 无精确匹配，使用默认预制体 '{typePrefabMappingConfig.defaultPrefab.name}'");
+                return typePrefabMappingConfig.defaultPrefab;
+            }
+
+            Debug.LogError(
+                $"[Xuiavrg] 类型 '{valueType?.Name ?? "未知"}' 无匹配预制体，且未配置 defaultPrefab");
+            return null;
         }
 
         // ============ 清理 ============
@@ -398,6 +427,7 @@ namespace XericUI.ReflectionUIGenerator
                     XuiFieldTempEntry.Release(tempEntry);
                 }
             }
+
             CurrentEntries.Clear();
         }
 
@@ -410,6 +440,7 @@ namespace XericUI.ReflectionUIGenerator
                     Destroy(kvp.Value.gameObject);
                 }
             }
+
             _leafGroupMap.Clear();
         }
 
@@ -417,6 +448,7 @@ namespace XericUI.ReflectionUIGenerator
         {
             ClearAll();
         }
-
     }
+
+    #endregion
 }

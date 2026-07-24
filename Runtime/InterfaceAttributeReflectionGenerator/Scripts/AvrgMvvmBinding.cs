@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
     /// 值绑定模板
     /// 为单个元数据成员创建的 MVVM 双向绑定，包含读/写委托和脏标记
+    /// 支持通过 SubBindings 实现拆分属性的子绑定
     /// </summary>
     public class AvrgMvvmBinding
     {
@@ -16,6 +19,12 @@ namespace XericUI.ReflectionUIGenerator
 
         /// <summary>写入值到数据源的委托</summary>
         public Action<object> WriteAction { get; set; }
+
+        /// <summary>
+        /// 拆分属性子绑定列表
+        /// 由 [XuiavrgSplit] 特性展开生成，每个子绑定对应一个拆分后的子属性
+        /// </summary>
+        public List<AvrgMvvmBinding> SubBindings { get; set; }
 
         // ============ 脏标记 ============
 

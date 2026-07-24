@@ -41,9 +41,6 @@ namespace XericUI.ReflectionUIGenerator
         /// <summary>绑定的预制体引用</summary>
         GameObject BoundPrefab { get; set; }
 
-        /// <summary>覆盖的预制体组名称</summary>
-        string PrefabOverrideName { get; set; }
-
         /// <summary>关联的 MVVM 绑定列表</summary>
         IReadOnlyList<AvrgMvvmBinding> Bindings { get; }
 
@@ -115,7 +112,6 @@ namespace XericUI.ReflectionUIGenerator
         private AvrgMvvmScheduler _scheduler;
         private GameObject _uiInstance;
         private GameObject _boundPrefab;
-        private string _prefabOverrideName;
         private int _fieldOrder;
         private bool _uiBound; // 防止重复绑定
 
@@ -162,12 +158,6 @@ namespace XericUI.ReflectionUIGenerator
         {
             get => _boundPrefab;
             set => _boundPrefab = value;
-        }
-
-        public string PrefabOverrideName
-        {
-            get => _prefabOverrideName;
-            set => _prefabOverrideName = value;
         }
 
         public IReadOnlyList<AvrgMvvmBinding> Bindings => _bindings;
@@ -263,6 +253,7 @@ namespace XericUI.ReflectionUIGenerator
 
         /// <summary>
         /// 将 XUIAvrgMDValue 与 MVVM 绑定连接
+        /// 支持主绑定 + 拆分属性子绑定（通过 BindingSlots）
         /// </summary>
         private void BindComponentWithBinding(XUIAvrgMDValue mdValue)
         {
@@ -270,17 +261,61 @@ namespace XericUI.ReflectionUIGenerator
 
             var primaryBinding = _bindings[0];
 
-            // 数据 → UI：订阅数据变更
+            // ——— 1. 主绑定：数据 → UI ———
             primaryBinding.OnUIDataChanged += value => UpdateUIComponent(mdValue, value);
 
-            // UI → 数据：订阅 UI 交互事件
-            // 根据组件类型决定 UI 事件
+            // ——— 主绑定：UI → 数据 ———
+            WireUpUIEvents(mdValue, primaryBinding);
+
+            // ——— 2. 拆分属性子绑定匹配 ———
+            if (primaryBinding.SubBindings?.Count > 0 && mdValue.AvailableBindingSlots?.Count > 0)
+            {
+                // 收集所有子节点上的 XUIAvrgMDValue
+                var childMDValues = new List<XUIAvrgMDValue>();
+                mdValue.GetComponentsInChildren(true, childMDValues);
+
+                foreach (var slot in mdValue.AvailableBindingSlots)
+                {
+                    // 按 propertyName 匹配子绑定
+                    var subBinding = primaryBinding.SubBindings.Find(
+                        sb => sb.MetaData?.PropertyPath == slot.propertyName);
+                    if (subBinding == null) continue;
+
+                    // 在子节点中查找匹配 Tag 的 XUIAvrgMDValue
+                    foreach (var childMD in childMDValues)
+                    {
+                        if (childMD == mdValue) continue; // 跳过自身
+                        if (childMD.EntryTag == slot.tag || slot.tag == XuiavrgFieldTag.None)
+                        {
+                            // 子绑定：数据 → UI
+                            subBinding.OnUIDataChanged += value => UpdateUIComponent(childMD, value);
+
+                            // 子绑定：UI → 数据（订阅子节点的交互事件）
+                            WireUpUIEvents(childMD, subBinding);
+
+                            // 广播子元数据到子节点样式组件
+                            childMD.InitializeWithMetaData(subBinding.MetaData);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 广播主元数据到 XUIAvrgMDValue（触发 IXUIAvrgMDValueStyle 子组件）
+            mdValue.InitializeWithMetaData(primaryBinding.MetaData);
+        }
+
+        /// <summary>
+        /// 订阅 UI 组件的交互事件 → 写入绑定
+        /// </summary>
+        private void WireUpUIEvents(XUIAvrgMDValue mdValue, AvrgMvvmBinding binding)
+        {
             if (mdValue.TryGetComponent(out UnityEngine.UI.Button uiButton))
             {
                 uiButton.onClick.AddListener(() =>
                 {
-                    primaryBinding.WriteFromUI(true);
-                    _scheduler?.MarkUIDirty(primaryBinding);
+                    binding.WriteFromUI(true);
+                    _scheduler?.MarkUIDirty(binding);
                 });
             }
 
@@ -288,8 +323,8 @@ namespace XericUI.ReflectionUIGenerator
             {
                 uiToggle.onValueChanged.AddListener(val =>
                 {
-                    primaryBinding.WriteFromUI(val);
-                    _scheduler?.MarkUIDirty(primaryBinding);
+                    binding.WriteFromUI(val);
+                    _scheduler?.MarkUIDirty(binding);
                 });
             }
 
@@ -297,8 +332,8 @@ namespace XericUI.ReflectionUIGenerator
             {
                 uiSlider.onValueChanged.AddListener(val =>
                 {
-                    primaryBinding.WriteFromUI(val);
-                    _scheduler?.MarkUIDirty(primaryBinding);
+                    binding.WriteFromUI(val);
+                    _scheduler?.MarkUIDirty(binding);
                 });
             }
 
@@ -306,8 +341,8 @@ namespace XericUI.ReflectionUIGenerator
             {
                 uiInput.onEndEdit.AddListener(val =>
                 {
-                    primaryBinding.WriteFromUI(val);
-                    _scheduler?.MarkUIDirty(primaryBinding);
+                    binding.WriteFromUI(val);
+                    _scheduler?.MarkUIDirty(binding);
                 });
             }
 
@@ -315,13 +350,10 @@ namespace XericUI.ReflectionUIGenerator
             {
                 uiDropdown.onValueChanged.AddListener(val =>
                 {
-                    primaryBinding.WriteFromUI(val);
-                    _scheduler?.MarkUIDirty(primaryBinding);
+                    binding.WriteFromUI(val);
+                    _scheduler?.MarkUIDirty(binding);
                 });
             }
-
-            // 广播元数据到 XUIAvrgMDValue（触发 IXUIAvrgMDValueStyle 子组件）
-            mdValue.InitializeWithMetaData(primaryBinding.MetaData);
         }
 
         /// <summary>
@@ -377,7 +409,6 @@ namespace XericUI.ReflectionUIGenerator
             _entryPath = null;
             _parent = null;
             _fieldOrder = 0;
-            _prefabOverrideName = null;
             _uiBound = false;
         }
 
@@ -387,6 +418,16 @@ namespace XericUI.ReflectionUIGenerator
             {
                 var value = binding.ReadFromDataSource();
                 binding.NotifyUIUpdate(value);
+
+                // 子绑定也做初始值推送
+                if (binding.SubBindings?.Count > 0)
+                {
+                    foreach (var subBinding in binding.SubBindings)
+                    {
+                        var subValue = subBinding.ReadFromDataSource();
+                        subBinding.NotifyUIUpdate(subValue);
+                    }
+                }
             }
         }
 
@@ -397,7 +438,6 @@ namespace XericUI.ReflectionUIGenerator
             _parent = null;
             _uiInstance = null;
             _boundPrefab = null;
-            _prefabOverrideName = null;
             Tag = XuiavrgFieldTag.None;
             TagIndex = 0;
             _fieldOrder = 0;
@@ -406,6 +446,12 @@ namespace XericUI.ReflectionUIGenerator
             foreach (var binding in _bindings)
             {
                 binding.ClearUIEvent();
+                // 子绑定也清理
+                if (binding.SubBindings?.Count > 0)
+                {
+                    foreach (var sub in binding.SubBindings)
+                        sub.ClearUIEvent();
+                }
             }
             _bindings.Clear();
             _scheduler = null;
@@ -422,6 +468,11 @@ namespace XericUI.ReflectionUIGenerator
             foreach (var binding in _bindings)
             {
                 binding.ClearUIEvent();
+                if (binding.SubBindings?.Count > 0)
+                {
+                    foreach (var sub in binding.SubBindings)
+                        sub.ClearUIEvent();
+                }
             }
             _bindings.Clear();
             _children.Clear();

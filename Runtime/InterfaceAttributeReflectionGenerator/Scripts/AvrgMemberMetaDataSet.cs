@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnityEngine;
 
 namespace XericUI.ReflectionUIGenerator
@@ -48,7 +49,16 @@ namespace XericUI.ReflectionUIGenerator
             {
                 // 编组内第一个成员作为主元数据
                 var first = gEntry.First();
-                // 合成的 metaData 保持 GroupPath 和主 Tag
+                // 收集组内所有成员的 SubMetaDataList（合并拆分属性）
+                foreach (var member in gEntry)
+                {
+                    if (member.SubMetaDataList?.Count > 0)
+                    {
+                        if (first.SubMetaDataList == null)
+                            first.SubMetaDataList = new List<AvrgMemberMetaData>();
+                        first.SubMetaDataList.AddRange(member.SubMetaDataList);
+                    }
+                }
                 merged.Add(first);
             }
 
@@ -91,7 +101,7 @@ namespace XericUI.ReflectionUIGenerator
                 if (target == null)
                     continue;
 
-                // 创建绑定
+                // 创建主绑定
                 var binding = new AvrgMvvmBinding
                 {
                     MetaData = metaData,
@@ -105,6 +115,35 @@ namespace XericUI.ReflectionUIGenerator
                     scheduler.MarkDataDirty(capturedBinding);
                 };
 
+                // 如果元数据有拆分子属性，创建子绑定
+                if (metaData.SubMetaDataList?.Count > 0)
+                {
+                    binding.SubBindings = new List<AvrgMvvmBinding>();
+
+                    foreach (var subMetaData in metaData.SubMetaDataList)
+                    {
+                        string subPath = subMetaData.PropertyPath;
+                        if (string.IsNullOrEmpty(subPath)) continue;
+
+                        var subBinding = new AvrgMvvmBinding
+                        {
+                            MetaData = subMetaData,
+                            // 从父值中读取子属性
+                            ReadFunc = () => ReadSubProperty(metaData.GetValue(), subPath),
+                            // 修改子属性并写回父值
+                            WriteAction = (val) =>
+                            {
+                                var parentVal = metaData.GetValue();
+                                var modifiedParent = WriteSubProperty(parentVal, subPath, val);
+                                metaData.SetValue(modifiedParent);
+                                scheduler.MarkDataDirty(capturedBinding);
+                            },
+                        };
+
+                        binding.SubBindings.Add(subBinding);
+                    }
+                }
+
                 // 注册到调度器
                 scheduler.Register(binding);
                 bindingCollection.Add(binding);
@@ -112,6 +151,69 @@ namespace XericUI.ReflectionUIGenerator
 
             bindingCollection.AttachScheduler(scheduler);
             return bindingCollection;
+        }
+
+        // ============ 子属性访问辅助方法 ============
+
+        /// <summary>
+        /// 从父值中读取子属性（支持单层路径如 "x"、"y"）
+        /// 例如：ReadSubProperty(Vector2(1,2), "x") → 1f
+        /// </summary>
+        private static object ReadSubProperty(object parentValue, string propertyPath)
+        {
+            if (parentValue == null || string.IsNullOrEmpty(propertyPath))
+                return null;
+
+            // 仅支持单层路径
+            if (propertyPath.Contains('/'))
+            {
+                Debug.LogWarning($"[Xuiavrg] 暂不支持多层嵌套路径 '{propertyPath}'");
+                return null;
+            }
+
+            var type = parentValue.GetType();
+            var field = type.GetRuntimeField(propertyPath);
+            if (field != null) return field.GetValue(parentValue);
+
+            var prop = type.GetRuntimeProperty(propertyPath);
+            if (prop != null) return prop.GetValue(parentValue);
+
+            Debug.LogWarning($"[Xuiavrg] 在类型 '{type.Name}' 上找不到子属性 '{propertyPath}'");
+            return null;
+        }
+
+        /// <summary>
+        /// 修改父值中的子属性并返回修改后的父值
+        /// 适用于值类型（struct）和引用类型
+        /// </summary>
+        private static object WriteSubProperty(object parentValue, string propertyPath, object value)
+        {
+            if (parentValue == null || string.IsNullOrEmpty(propertyPath))
+                return parentValue;
+
+            if (propertyPath.Contains('/'))
+            {
+                Debug.LogWarning($"[Xuiavrg] 暂不支持多层嵌套路径 '{propertyPath}'");
+                return parentValue;
+            }
+
+            var type = parentValue.GetType();
+            var field = type.GetRuntimeField(propertyPath);
+            if (field != null)
+            {
+                field.SetValue(parentValue, value);
+                return parentValue;
+            }
+
+            var prop = type.GetRuntimeProperty(propertyPath);
+            if (prop != null && prop.CanWrite)
+            {
+                prop.SetValue(parentValue, value);
+                return parentValue;
+            }
+
+            Debug.LogWarning($"[Xuiavrg] 在类型 '{type.Name}' 上找不到可写的子属性 '{propertyPath}'");
+            return parentValue;
         }
 
         // ============ 验证方法 ============

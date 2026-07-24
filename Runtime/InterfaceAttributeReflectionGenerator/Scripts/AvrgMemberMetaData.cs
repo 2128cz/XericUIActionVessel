@@ -27,6 +27,20 @@ namespace XericUI.ReflectionUIGenerator
         /// <summary>绑定的目标实例 (可选，Step1 时可空)</summary>
         public object TargetInstance { get; set; }
 
+        // ============ 拆分属性支持 ============
+
+        /// <summary>
+        /// 子属性路径（仅拆分属性有效）
+        /// 用于从父值中访问子字段/属性，如 "x"、"y"、"width"
+        /// </summary>
+        public string PropertyPath { get; set; }
+
+        /// <summary>
+        /// 拆分子元数据列表
+        /// 由 [XuiavrgSplit] 特性填充，每个子元数据对应一个拆分属性
+        /// </summary>
+        public List<AvrgMemberMetaData> SubMetaDataList { get; set; }
+
         // ============ 从 IXuiavrgAttribute 融合的元数据 ============
 
         /// <summary>显示标签</summary>
@@ -34,6 +48,9 @@ namespace XericUI.ReflectionUIGenerator
 
         /// <summary>单位文本</summary>
         public string UnitLabelName { get; set; }
+
+        /// <summary>格式化字符串（如 "{0:F2}"）</summary>
+        public string FormatText { get; set; }
 
         /// <summary>功能标记</summary>
         public XuiavrgFieldTag Tag { get; set; } = XuiavrgFieldTag.None;
@@ -46,9 +63,6 @@ namespace XericUI.ReflectionUIGenerator
 
         /// <summary>编组路径 (以 "/" 分割层级)</summary>
         public string GroupPath { get; set; }
-
-        /// <summary>预制体覆盖名称</summary>
-        public string PrefabOverrideName { get; set; }
 
         /// <summary>是否在 UI 中隐藏</summary>
         public bool Hide { get; set; }

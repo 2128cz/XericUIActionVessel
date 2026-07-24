@@ -33,16 +33,19 @@ namespace XericUI.ReflectionUIGenerator
         /// <summary>是否启用无效值状态检查</summary>
         public bool ValidateInvalid { get; set; }
 
-        public XuiavrgPropertyCheckAttribute()
-        {
-        }
-
         /// <summary>
         /// 创建必填检查标记
         /// </summary>
-        public XuiavrgPropertyCheckAttribute(bool required)
+        /// <param name="required">是否必填</param>
+        /// <param name="validateReasonable">是否启用合理值范围检查</param>
+        /// <param name="validateWarning">是否启用警告状态检查</param>
+        /// <param name="validateInvalid">是否启用无效值状态检查</param>
+        public XuiavrgPropertyCheckAttribute(bool required = true, bool validateReasonable = false, bool validateWarning = false, bool validateInvalid = false)
         {
             Required = required;
+            ValidateReasonable = validateReasonable;
+            ValidateWarning = validateWarning;
+            ValidateInvalid = validateInvalid;
         }
 
         public void BindMetaData(AvrgMemberMetaData metaData)

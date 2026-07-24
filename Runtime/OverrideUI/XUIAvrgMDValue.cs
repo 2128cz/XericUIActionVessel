@@ -11,10 +11,26 @@ namespace XericUI.ReflectionUIGenerator
     /// 1. 提供 EntryTag/TagIndex 供 XuiFieldTempEntry 匹配
     /// 2. 持有绑定的 AvrgMemberMetaData 引用
     /// 3. 初始化时广播元数据到所有子节点上的 IXUIAvrgMDValueStyle
+    /// 4. 定义绑定槽（BindingSlots），供拆分属性子绑定匹配
     /// </summary>
     [AddComponentMenu("Xeric Library/UI Action Vessel/XUIAvrgMDValue")]
     public class XUIAvrgMDValue : MonoBehaviour
     {
+        /// <summary>
+        /// 绑定槽定义 — 用于拆分属性（Split）的子绑定匹配
+        /// propertyName 匹配 XuiavrgSplit 的 PropertyPath
+        /// tag 在预制体内查找对应子节点的 XUIAvrgMDValue
+        /// </summary>
+        [System.Serializable]
+        public class AvrgBindingSlot
+        {
+            [Tooltip("绑定的子属性名（匹配 XuiavrgSplit 的 PropertyPath，如 \"x\"、\"y\"）")]
+            public string propertyName;
+
+            [Tooltip("子属性在预制体上的 Tag 标记，用于查找子节点 XUIAvrgMDValue")]
+            public XuiavrgFieldTag tag = XuiavrgFieldTag.Context;
+        }
+
         [SerializeField]
         [Tooltip("功能标记，用于与 Entry 的 Tag 匹配")]
         private XuiavrgFieldTag _entryTag = XuiavrgFieldTag.None;
@@ -23,11 +39,18 @@ namespace XericUI.ReflectionUIGenerator
         [Tooltip("同 Tag 多实例时区分（0 表示不限制）")]
         private int _tagIndex;
 
+        [SerializeField]
+        [Tooltip("拆分属性子绑定槽列表 — 用于 XuiavrgSplit 的子属性匹配")]
+        private List<AvrgBindingSlot> _bindingSlots = new List<AvrgBindingSlot>();
+
         /// <summary>绑定的元数据引用</summary>
         public AvrgMemberMetaData BoundMetaData { get; private set; }
 
         public XuiavrgFieldTag EntryTag => _entryTag;
         public int TagIndex => _tagIndex;
+
+        /// <summary>只读访问绑定槽列表</summary>
+        public IReadOnlyList<AvrgBindingSlot> AvailableBindingSlots => _bindingSlots;
 
         /// <summary>
         /// 由绑定系统调用，传递元数据并广播到 IXUIAvrgMDValueStyle 子组件

@@ -3,34 +3,52 @@ using System;
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
-    /// 预制体覆盖特性
-    /// 覆盖对应 Entry 或普通字段生成 UI 时使用的预制体名称
+    /// 字段显示名称特性
+    /// 设置字段在 UI 上的显示标签、单位文本和格式化字符串
     /// 
     /// 使用示例：
-    /// [XuiavrgFieldPrefabOverride("CustomSpeedPrefab")] public float speed;
+    /// [XuiavrgFieldName("角色名称")]
+    /// public string playerName = "勇者";
     /// 
-    /// Manager 在 GenerateUI 阶段会优先使用此名称查找 PropertyGroup
+    /// [XuiavrgFieldName("速度", "m/s", "{0:F1}")]
+    /// public float speed = 5f;
+    /// 
+    /// 字段定义：
+    /// - labelName: UI 上的显示标签（必填）
+    /// - unitLabelName: 单位文本（可选），如 "m/s"、"%"、"px"
+    /// - formatText: 格式化字符串（可选），如 "{0:F2}"，控制值在 UI 上的显示格式
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false)]
     public class XuiavrgFieldNameAttribute : Attribute, IXuiavrgAttribute
     {
-        /// <summary>覆盖的预制体组名称</summary>
-        public readonly string PrefabGroupName;
+        /// <summary>字段的显示标签</summary>
+        public readonly string LabelName;
+
+        /// <summary>单位文本（可选）</summary>
+        public readonly string UnitLabelName;
+
+        /// <summary>格式化字符串（可选），如 "{0:F2}"</summary>
+        public readonly string FormatText;
 
         /// <summary>
-        /// 创建预制体覆盖标记
+        /// 创建字段显示名称标记
         /// </summary>
-        /// <param name="prefabGroupName">
-        /// 目标预制体名称，在 AvrgTypePrefabMappingConfig 中查找匹配
-        /// </param>
-        public XuiavrgFieldNameAttribute(string prefabGroupName)
+        /// <param name="labelName">UI 上的显示标签</param>
+        /// <param name="unitLabelName">可选的单位文本，如 "m/s"</param>
+        /// <param name="formatText">可选的格式化字符串，如 "{0:F2}"</param>
+        public XuiavrgFieldNameAttribute(string labelName, string unitLabelName = null, string formatText = null)
         {
-            PrefabGroupName = prefabGroupName;
+            LabelName = labelName;
+            UnitLabelName = unitLabelName;
+            FormatText = formatText;
         }
 
         public void BindMetaData(AvrgMemberMetaData metaData)
         {
-            metaData.PrefabOverrideName = PrefabGroupName;
+            metaData.LabelName = LabelName;
+            metaData.UnitLabelName = UnitLabelName;
+            metaData.FormatText = FormatText;
+            // PrefabOverrideName 已移除 — 由类型+Tag 匹配替代
         }
     }
 }
