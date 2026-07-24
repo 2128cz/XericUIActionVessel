@@ -7,8 +7,8 @@ using Object = UnityEngine.Object;
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
-    /// 节点下生成反射属性管理器 — Metadata-Driven View Model (MDVM 元数据驱动的视图数据模型)
-    /// 负责：构建 Entry → 创建组容器 → 生成 UI → 绑定数据
+    /// 节点下生成反射属性管理器 — MVM (Metadata-Driven View Model)
+    /// 负责：构建 Entry → 创建组容器（树状嵌套）→ 生成 UI → 绑定数据
     /// </summary>
     public class XuiavrgInspectorManager : MonoBehaviour
     {
@@ -75,9 +75,9 @@ namespace XericUI.ReflectionUIGenerator
         public AvrgMemberMetaDataSet CurrentMetaDataSet { get; private set; }
 
         /// <summary>
-        /// 当前活跃的组容器字典
+        /// 编组叶节点字典 — 完整 GroupPath → 对应层级的 XuiAvrgMDGroup
         /// </summary>
-        private Dictionary<string, XuiAvrgMDGroup> _activeGroups = new Dictionary<string, XuiAvrgMDGroup>();
+        private Dictionary<string, XuiAvrgMDGroup> _leafGroupMap = new Dictionary<string, XuiAvrgMDGroup>();
 
         [Tooltip("类型-预制体映射配置 ScriptableObject")]
         public AvrgTypePrefabMappingConfig typePrefabMappingConfig;
@@ -170,13 +170,14 @@ namespace XericUI.ReflectionUIGenerator
             });
         }
 
-        // ============ 三阶段 GenerateUI ============
+        // ============ 四阶段 GenerateUI ============
 
         /// <summary>
-        /// 生成 UI — 三阶段流程
+        /// 生成 UI — 四阶段流程
         /// Phase A: 按 GroupPath 分组
-        /// Phase B: 创建 XuiAvrgMDGroup 组容器
-        /// Phase C: 在组容器内生成 UI 组件并绑定
+        /// Phase B: 构建路径树，创建嵌套的 XuiAvrgMDGroup 容器
+        /// Phase C: 在叶节点容器内生成 UI 组件并绑定
+        /// Phase D: 处理非编组 Entry 直接放进根目录
         /// </summary>
         public void GenerateUI()
         {
@@ -186,21 +187,19 @@ namespace XericUI.ReflectionUIGenerator
                 return;
             }
 
-            // Phase A: 收集并分组
+            // Phase A: 按完整 GroupPath 分组
             var groupedEntries = new Dictionary<string, List<IFieldEntry>>();
             var ungroupedEntries = new List<IFieldEntry>();
 
             foreach (var entry in CurrentEntries)
             {
-                string groupKey = !string.IsNullOrEmpty(entry.EntryName)
-                    ? GetGroupPathFromEntry(entry)
-                    : null;
+                string groupPath = GetGroupPathFromEntry(entry);
 
-                if (!string.IsNullOrEmpty(groupKey))
+                if (!string.IsNullOrEmpty(groupPath))
                 {
-                    if (!groupedEntries.ContainsKey(groupKey))
-                        groupedEntries[groupKey] = new List<IFieldEntry>();
-                    groupedEntries[groupKey].Add(entry);
+                    if (!groupedEntries.ContainsKey(groupPath))
+                        groupedEntries[groupPath] = new List<IFieldEntry>();
+                    groupedEntries[groupPath].Add(entry);
                 }
                 else
                 {
@@ -208,18 +207,75 @@ namespace XericUI.ReflectionUIGenerator
                 }
             }
 
-            // Phase B: 创建组容器
-            _activeGroups.Clear();
+            // Phase B: 构建树状嵌套组容器
+            _leafGroupMap.Clear();
+            BuildGroupTree(groupedEntries.Keys);
+
+            // Phase C: 在叶节点容器内生成 UI
             foreach (var kvp in groupedEntries)
             {
                 string groupPath = kvp.Key;
                 var entries = kvp.Value;
 
-                // 检查是否已创建（相同 GroupPath 只创建一个容器）
-                if (_activeGroups.ContainsKey(groupPath)) continue;
+                if (!_leafGroupMap.TryGetValue(groupPath, out var leafGroup)) continue;
 
-                var groupGo = new GameObject($"Group [{groupPath}]", typeof(RectTransform));
-                groupGo.transform.SetParent(transform, false);
+                foreach (var entry in entries)
+                {
+                    GenerateSingleUI(entry, leafGroup.contentRoot);
+                }
+            }
+
+            // Phase D: 非编组 Entry 直接放进根
+            foreach (var entry in ungroupedEntries)
+            {
+                GenerateSingleUI(entry, transform);
+            }
+        }
+
+        // ============ 树状编组容器构建 ============
+
+        private void BuildGroupTree(IEnumerable<string> allGroupPaths)
+        {
+            var rootNode = new GroupTreeNode(null);
+
+            // Step 1: 将每个完整路径分裂后插入树
+            foreach (var fullPath in allGroupPaths)
+            {
+                if (string.IsNullOrEmpty(fullPath)) continue;
+
+                var segments = fullPath.Split('/');
+                var current = rootNode;
+
+                for (int i = 0; i < segments.Length; i++)
+                {
+                    string seg = segments[i];
+                    if (!current.Children.ContainsKey(seg))
+                        current.Children[seg] = new GroupTreeNode(seg);
+                    current = current.Children[seg];
+                }
+            }
+
+            // Step 2: 深度优先遍历，创建层级 GameObject
+            CreateGroupGameObjects(rootNode, null, transform, "");
+        }
+
+        private void CreateGroupGameObjects(
+            GroupTreeNode node,
+            XuiAvrgMDGroup parentGroup,
+            Transform parentTransform,
+            string accumulatedPath)
+        {
+            foreach (var kvp in node.Children)
+            {
+                string segName = kvp.Key;
+                var childNode = kvp.Value;
+
+                string childFullPath = string.IsNullOrEmpty(accumulatedPath)
+                    ? segName
+                    : accumulatedPath + "/" + segName;
+
+                var groupGo = new GameObject($"Group [{childFullPath}]", typeof(RectTransform));
+                groupGo.transform.SetParent(parentTransform, false);
 
                 var rect = groupGo.GetComponent<RectTransform>();
                 rect.anchorMin = new Vector2(0, 1);
@@ -228,35 +284,32 @@ namespace XericUI.ReflectionUIGenerator
                 rect.sizeDelta = new Vector2(0, 0);
 
                 var group = groupGo.AddComponent<XuiAvrgMDGroup>();
-                int firstOrder = entries.Count > 0 ? entries[0].FieldOrder : 0;
-                group.Initialize(groupPath, firstOrder);
+                group.Initialize(childFullPath, 0, parentGroup);
 
-                _activeGroups[groupPath] = group;
-            }
-
-            // Phase C: 生成 UI 组件
-            foreach (var kvp in groupedEntries)
-            {
-                string groupPath = kvp.Key;
-                var entries = kvp.Value;
-
-                if (!_activeGroups.TryGetValue(groupPath, out var group)) continue;
-
-                foreach (var entry in entries)
+                // 叶节点映射到完整路径
+                if (childNode.Children.Count == 0)
                 {
-                    GenerateSingleUI(entry, group.contentRoot);
+                    _leafGroupMap[childFullPath] = group;
                 }
-            }
 
-            foreach (var entry in ungroupedEntries)
-            {
-                GenerateSingleUI(entry, transform);
+                CreateGroupGameObjects(childNode, group, group.contentRoot, childFullPath);
             }
         }
 
-        /// <summary>
-        /// 生成单个 Entry 的 UI
-        /// </summary>
+        private class GroupTreeNode
+        {
+            public string SegmentName { get; }
+            public Dictionary<string, GroupTreeNode> Children { get; }
+
+            public GroupTreeNode(string name)
+            {
+                SegmentName = name;
+                Children = new Dictionary<string, GroupTreeNode>();
+            }
+        }
+
+        // ============ 生成单个 UI ============
+
         private void GenerateSingleUI(IFieldEntry entry, Transform parent)
         {
             if (entry is not XuiFieldTempEntry tempEntry) return;
@@ -276,7 +329,6 @@ namespace XericUI.ReflectionUIGenerator
             uiInstance.name = entry.EntryName;
             uiInstance.transform.SetParent(parent, false);
 
-            // 检查 XUIAvrgMDValue 是否存在
             if (uiInstance.GetComponentInChildren<XUIAvrgMDValue>(true) == null)
             {
                 Debug.LogError($"[Xuiavrg] 预制体 '{prefab.name}' 不符合生成要求：缺少 XUIAvrgMDValue 组件。请确保预制体根节点或其子节点包含 XUIAvrgMDValue 脚本。");
@@ -288,12 +340,8 @@ namespace XericUI.ReflectionUIGenerator
             entry.OnEntryBind();
         }
 
-        /// <summary>
-        /// 从 Entry 提取 GroupPath（通过 EntryName 判断）
-        /// </summary>
         private string GetGroupPathFromEntry(IFieldEntry entry)
         {
-            // 通过 Bindings 中的元数据找到 GroupPath
             if (entry.Bindings != null && entry.Bindings.Count > 0)
             {
                 var metaData = entry.Bindings[0].MetaData;
@@ -355,33 +403,20 @@ namespace XericUI.ReflectionUIGenerator
 
         private void ClearGroups()
         {
-            foreach (var kvp in _activeGroups)
+            foreach (var kvp in _leafGroupMap)
             {
                 if (kvp.Value != null && kvp.Value.gameObject != null)
                 {
                     Destroy(kvp.Value.gameObject);
                 }
             }
-            _activeGroups.Clear();
+            _leafGroupMap.Clear();
         }
 
         private void OnDestroy()
         {
             ClearAll();
         }
-
-        // ============ 兼容旧 API ============
-
-        [Obsolete("Use BuildFromMetaDataSet + GenerateUI instead", false)]
-        public void SchemaHydration(object payload)
-        {
-            var metaDataSet = XuiavrgUtilities.ExtractAvrgMemberMetaData(payload);
-            var bindingCollection = metaDataSet.BuildMDVM(payload);
-            BuildFromMetaDataSet(metaDataSet, bindingCollection);
-            GenerateUI();
-        }
-        
-        #endregion
 
     }
 }

@@ -135,13 +135,13 @@ namespace XericUI.Core.Base
             _graphicRaycaster = null;
             _hierarchyDirty = true;
         }
-        
+
         /// <summary>
         /// 复位层级脏
         /// </summary>
         public void ResetHierarchyDirty()
         {
-            _hierarchyDirty = false;    
+            _hierarchyDirty = false;
             rectTransform.SetLayoutDirty();
         }
 
@@ -241,21 +241,30 @@ namespace XericUI.Core.Base
         {
             var rt = rectTransform;
             if (rt == null || target == null) return;
-            var parentRT = rt.parent as RectTransform;
-            if (parentRT == null) return;
 
-            Vector3[] corners = new Vector3[4];
-            target.GetWorldCorners(corners);
-            // corners[0]=左下, corners[1]=左上, corners[2]=右上, corners[3]=右下
-            Vector3 worldPos = Vector3.Lerp(
-                Vector3.Lerp(corners[0], corners[1], anchor.y),
-                Vector3.Lerp(corners[3], corners[2], anchor.y),
-                anchor.x);
-
-            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    parentRT, worldPos, null, out Vector2 localPoint))
+            if (rt.parent == target.parent)
             {
-                rt.anchoredPosition = localPoint;
+                rt.anchorMin = anchor;
+                rt.anchorMax = anchor;
+                rt.pivot = anchor;
+                rt.anchoredPosition = Vector2.zero;
+                return;
+            }
+
+            var targetWorldPos = target.TransformPoint(new Vector3(anchor.x, anchor.y, 0));
+
+            // RectTransformUtility 会自动处理父级不一致的情况
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    rt.parent as RectTransform,
+                    targetWorldPos,
+                    null,
+                    out Vector2 anchorLocalPos))
+            {
+                Vector2 pivotOffset = new Vector2(
+                    (rt.pivot.x - 0.5f) * rt.rect.width,
+                    (rt.pivot.y - 0.5f) * rt.rect.height
+                );
+                rt.anchoredPosition = anchorLocalPos + pivotOffset;
             }
         }
 
@@ -265,9 +274,9 @@ namespace XericUI.Core.Base
 
         public virtual void Show()
         {
-            gameObject.SetActive(true);            
+            gameObject.SetActive(true);
         }
-        
+
         public void Show(bool isShow)
         {
             if (isShow)

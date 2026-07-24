@@ -622,6 +622,7 @@ namespace XericUI.XTable.Rendering.Component
         }
 
         /// <summary>设置预制体（ContentType 自动设为 Prefab）</summary>
+        /// <remarks>注意是设置预制体而不是实例，设置后订阅单元格预制体生成事件 OnPrefabAcquire 处理获取事件</remarks>
         public XTableCellData SetCellPrefab(int row, int col, GameObject prefab)
         {
             var data = TableData.GetOrCreateCell(row, col);

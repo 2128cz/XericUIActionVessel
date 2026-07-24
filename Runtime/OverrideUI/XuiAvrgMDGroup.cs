@@ -21,8 +21,11 @@ namespace XericUI.ReflectionUIGenerator
         [Tooltip("编组排序值，越小越靠前")]
         private int _groupOrder;
 
-        /// <summary>内容挂载点 — 子 UI 组件应放入此 Transform</summary>
+        /// <summary>内容挂载点 — 子 UI 组件或子组应放入此 Transform</summary>
         public Transform contentRoot;
+
+        /// <summary>父编组（为 null 表示根组，直接挂在 Manager 下）</summary>
+        public XuiAvrgMDGroup ParentGroup { get; private set; }
 
         /// <summary>编组路径对应的组名</summary>
         public string GroupName => _groupName;
@@ -30,21 +33,21 @@ namespace XericUI.ReflectionUIGenerator
         /// <summary>编组排序值</summary>
         public int GroupOrder => _groupOrder;
 
-        /// <summary>上下文层级深度（如 "group1/subgroup" → depth=2）</summary>
+        /// <summary>上下文层级深度（如 "Stats/Speed" → depth=2）</summary>
         public int ContextDepth { get; private set; }
 
         /// <summary>
         /// 初始化编组容器
         /// </summary>
-        public void Initialize(string groupPath, int order)
+        public void Initialize(string groupPath, int order, XuiAvrgMDGroup parent = null)
         {
             _groupName = groupPath;
             _groupOrder = order;
+            ParentGroup = parent;
             ContextDepth = string.IsNullOrEmpty(groupPath) ? 0 : groupPath.Split('/').Length;
 
             gameObject.name = $"Group [{groupPath}]";
 
-            // 如果没有指定 contentRoot，自动使用自身作为挂载点
             if (contentRoot == null)
                 contentRoot = transform;
         }

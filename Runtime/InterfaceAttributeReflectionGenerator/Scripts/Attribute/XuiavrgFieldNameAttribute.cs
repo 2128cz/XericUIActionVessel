@@ -12,7 +12,7 @@ namespace XericUI.ReflectionUIGenerator
     /// Manager 在 GenerateUI 阶段会优先使用此名称查找 PropertyGroup
     /// </summary>
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false)]
-    public class XuiavrgFieldPrefabOverrideAttribute : Attribute, IXuiavrgAttribute
+    public class XuiavrgFieldNameAttribute : Attribute, IXuiavrgAttribute
     {
         /// <summary>覆盖的预制体组名称</summary>
         public readonly string PrefabGroupName;
@@ -23,7 +23,7 @@ namespace XericUI.ReflectionUIGenerator
         /// <param name="prefabGroupName">
         /// 目标预制体名称，在 AvrgTypePrefabMappingConfig 中查找匹配
         /// </param>
-        public XuiavrgFieldPrefabOverrideAttribute(string prefabGroupName)
+        public XuiavrgFieldNameAttribute(string prefabGroupName)
         {
             PrefabGroupName = prefabGroupName;
         }

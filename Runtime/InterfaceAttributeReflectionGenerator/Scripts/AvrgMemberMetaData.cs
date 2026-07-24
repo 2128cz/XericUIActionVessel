@@ -85,23 +85,6 @@ namespace XericUI.ReflectionUIGenerator
         /// <summary>是否启用无效值状态检查</summary>
         public bool ValidateInvalid { get; set; }
 
-        // ============ (已弃用字段保留) 旧的验证约束 ============
-
-        /// <summary>字符串最小长度</summary>
-        [Obsolete("将移至 ValueRangeConfig 管理")]
-        public int StringMinLength { get; set; }
-
-        /// <summary>字符串最大长度</summary>
-        public int StringMaxLength { get; set; } = int.MaxValue;
-
-        /// <summary>数值最小值</summary>
-        [Obsolete("将移至 ValueRangeConfig 管理")]
-        public float NumberMinValue { get; set; }
-
-        /// <summary>数值最大值</summary>
-        [Obsolete("将移至 ValueRangeConfig 管理")]
-        public float NumberMaxValue { get; set; }
-
         // ============ 原始 Attribute 引用 ============
 
         /// <summary>
