@@ -1,6 +1,6 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
-using XericLibrary.Runtime.SuperStyleSheet;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -9,11 +9,11 @@ namespace XericUI.ReflectionUIGenerator
     /// 
     /// 职责：
     /// 1. 提供 EntryTag/TagIndex 供 XuiFieldTempEntry 匹配
-    /// 2. 持有绑定的元数据引用
-    /// 3. 通过 virtual BindToAccessor() 让子类自行管理 UI 交互事件和显示更新
-    /// 4. 初始化时广播元数据到所有子节点上的 IXUIAvrgMDValueStyle
+    /// 2. 持有绑定的元数据引用，管理验证状态
+    /// 3. 通过 virtual BindToAccessor() 让子类自行管理 UI 交互事件
+    /// 4. 对象池生命周期：OnPoolGet(meta) 初始化、OnPoolRelease() 重置
     /// 5. 定义绑定槽（BindingSlots），供拆分属性子绑定匹配
-    /// 6. 管理通用 UI 插槽（标签、警告、只读、单位、值显示）+ SuperStyleSheet 样式读取
+    /// 6. 通过 UpdateValueDisplay() 合成标签文本（名称 + 只读 + 警告标记）
     /// </summary>
     [AddComponentMenu("Xeric Library/UI Action Vessel/XUIAvrgMDValue")]
     public class XUIAvrgMDValue : MonoBehaviour
@@ -47,29 +47,29 @@ namespace XericUI.ReflectionUIGenerator
         [Tooltip("拆分属性子绑定槽列表 — 用于 XuiavrgSplit 的子属性匹配")]
         private List<AvrgBindingSlot> _bindingSlots = new List<AvrgBindingSlot>();
 
-        // ============ 通用 UI 插槽 ============
+        // ============ UI 文本插槽 ============
 
-        [Header("通用 UI 插槽")]
-        [SerializeField, Tooltip("字段标签节点 — 显示字段名称 + 只读前缀。为 null 则不显示标签行")]
-        protected GameObject fieldLabelNode;
+        [Header("UI 文本插槽")]
+        [SerializeField, Tooltip("字段标签文本 — 显示 \"名称 (只读) ⚠警告\"，为 null 则不显示标签")]
+#if dUI_TextMeshPro
+        protected TMPro.TMP_Text _fieldLabelText;
+#else
+        protected UnityEngine.UI.Text _fieldLabelText;
+#endif
 
-        [SerializeField, Tooltip("警告样式节点 — 验证失败时 SetActive(true)，颜色由样式表控制")]
-        protected GameObject warningNode;
+        [SerializeField, Tooltip("值显示文本 — 可为 null（Slider/Color/Texture 子类不依赖文本）")]
+#if dUI_TextMeshPro
+        protected TMPro.TMP_Text _valueDisplayText;
+#else
+        protected UnityEngine.UI.Text _valueDisplayText;
+#endif
 
-        [SerializeField, Tooltip("只读标记节点 — IsReadOnly 时 SetActive(true)")]
-        protected GameObject readOnlyNode;
-
-        [SerializeField, Tooltip("单位文本节点 — 显示元数据的 UnitLabelName")]
-        protected GameObject unitTextNode;
-
-        [SerializeField, Tooltip("值显示文本节点 — 可为 null（子类如 Slider/Color 不依赖文本）")]
-        protected GameObject valueTextNode;
-
-        // ============ 样式表参数（路径硬编码，命名空间从 BoundMetaData.StyleNamespace 获取）============
-
-        private readonly StyleMember _styleStepValue      = new() { StylePath = "xuiavrg/base/stepValue" };
-        private readonly StyleMember _styleReadOnlyPrefix = new() { StylePath = "xuiavrg/base/readOnlyPrefix" };
-        private readonly StyleMember _styleWarningColor   = new() { StylePath = "xuiavrg/base/warningColor" };
+        [SerializeField, Tooltip("单位文本 — 可为 null")]
+#if dUI_TextMeshPro
+        protected TMPro.TMP_Text _unitText;
+#else
+        protected UnityEngine.UI.Text _unitText;
+#endif
 
         // ============ 公共属性 ============
 
@@ -82,26 +82,44 @@ namespace XericUI.ReflectionUIGenerator
         /// <summary>当前关联的 MVVM 绑定</summary>
         public AvrgMvvmBinding CurrentBinding { get; protected set; }
 
+        /// <summary>当前验证状态</summary>
+        public ValidationState CurrentValidationState { get; protected set; } = ValidationState.Normal;
+
         public XuiavrgFieldTag EntryTag => _entryTag;
         public int TagIndex => _tagIndex;
 
         /// <summary>只读访问绑定槽列表</summary>
         public IReadOnlyList<AvrgBindingSlot> AvailableBindingSlots => _bindingSlots;
 
-        // ============ 生命周期 ============
+        // ============ 对象池生命周期 ============
 
-        protected virtual void OnEnable()
+        /// <summary>
+        /// 从对象池取出时调用 — 注入元数据并初始化子属性
+        /// 子类可覆写以初始化专属组件参数（Slider.minValue/maxValue 等）
+        /// </summary>
+        public virtual void OnPoolGet(AvrgMemberMetaData metaData)
         {
-            _styleStepValue.Register();
-            _styleReadOnlyPrefix.Register();
-            _styleWarningColor.Register();
+            BoundMetaData = metaData;
+            CurrentValidationState = ValidationState.Normal;
+
+            // 子类覆写点
         }
 
-        protected virtual void OnDisable()
+        /// <summary>
+        /// 回收到对象池时调用 — 重置所有状态到初始值
+        /// 子类可覆写以清理专属组件事件
+        /// </summary>
+        public virtual void OnPoolRelease()
         {
-            _styleStepValue.Unregister();
-            _styleReadOnlyPrefix.Unregister();
-            _styleWarningColor.Unregister();
+            CurrentAccessor = null;
+            CurrentBinding = null;
+            BoundMetaData = null;
+            CurrentValidationState = ValidationState.Normal;
+
+            // 重置 UI 文本
+            if (_fieldLabelText != null) _fieldLabelText.text = "";
+            if (_valueDisplayText != null) _valueDisplayText.text = "";
+            if (_unitText != null) _unitText.text = "";
         }
 
         // ============ 核心绑定接口 ============
@@ -119,43 +137,106 @@ namespace XericUI.ReflectionUIGenerator
 
             if (binding == null || accessor == null) return;
 
-            // 默认：数据 → UI 单向同步
-            binding.OnUIDataChanged += value =>
+            // 数据 → UI（带验证状态）
+            binding.OnUIDataChanged += (value, state) =>
             {
-                UpdateDisplayValue(value);
+                UpdateValueDisplay(value, state);
             };
+
+            // 验证状态变更
+            binding.OnValidationStateChanged += OnValidationStateChanged;
 
             // 首次同步
             var initialValue = accessor.GetValue();
-            UpdateDisplayValue(initialValue);
+            UpdateValueDisplay(initialValue, ValidationState.Normal);
+        }
 
-            // 刷新通用插槽
-            RefreshCommonNodes();
+        // ============ UI 更新 ============
+
+        /// <summary>
+        /// 根据值和验证状态更新 UI 显示
+        /// 子类可覆写以处理专属组件更新（Slider.value, Image.color 等）
+        /// 基类负责合成标签文本、值文本颜色、单位文本
+        /// </summary>
+        protected virtual void UpdateValueDisplay(object value, ValidationState state)
+        {
+            // 1. 字段标签合成
+            if (_fieldLabelText != null)
+            {
+                string label = BuildLabel(state);
+                _fieldLabelText.text = label;
+            }
+
+            // 2. 值显示
+            if (_valueDisplayText != null)
+            {
+                string display = CurrentAccessor?.FormatDisplay(value) ?? value?.ToString() ?? "";
+                _valueDisplayText.text = display;
+
+                _valueDisplayText.color = state == ValidationState.Invalid
+                    ? Color.red
+                    : state == ValidationState.Warning
+                        ? new Color(1f, 0.92f, 0.016f) // yellow
+                        : Color.white;
+            }
+
+            // 3. 单位文本
+            if (_unitText != null)
+                _unitText.text = BoundMetaData?.UnitLabelName ?? "";
         }
 
         /// <summary>
-        /// 更新 UI 显示值（基类默认仅查找 Text/TMP_Text 设置文本）
-        /// 子类可覆写以实现专属更新逻辑（如 Slider.value, Image.color 等）
+        /// 合成标签文本：名称 + (只读) + 警告标记
         /// </summary>
-        protected virtual void UpdateDisplayValue(object value)
+        protected string BuildLabel(ValidationState state)
         {
-            if (value == null) return;
+            var meta = BoundMetaData;
+            var sb = new StringBuilder();
+            sb.Append(meta?.LabelName ?? meta?.MemberName ?? "");
 
-#if dUI_TextMeshPro
-            var tmpText = GetComponent<TMPro.TMP_Text>();
-            if (tmpText != null)
-            {
-                tmpText.text = CurrentAccessor?.FormatDisplay(value) ?? value.ToString();
-                return;
-            }
-#endif
+            // 必填标记
+            if (meta != null && meta.Required)
+                sb.Append(" *");
 
-            var uiText = GetComponent<UnityEngine.UI.Text>();
-            if (uiText != null)
+            // 只读标记
+            if (CurrentAccessor?.IsReadOnly == true)
+                sb.Append(" (只读)");
+
+            // 警告/无效标记（用富文本颜色）
+            if (state == ValidationState.Warning)
+                sb.Append(" <color=yellow>⚠警告</color>");
+            else if (state == ValidationState.Invalid)
+                sb.Append(" <color=red>⚠无效值</color>");
+
+            return sb.ToString();
+        }
+
+        // ============ 验证状态回调 ============
+
+        /// <summary>
+        /// 验证状态变更回调 — 子类可覆写以实现专属样式切换
+        /// 如 Slider 填充色变黄/红、InputField 文字变色等
+        /// </summary>
+        protected virtual void OnValidationStateChanged(ValidationState state)
+        {
+            CurrentValidationState = state;
+
+            // 刷新标签文本（警告/无效标记在标签上）
+            if (_fieldLabelText != null)
+                _fieldLabelText.text = BuildLabel(state);
+
+            // 值文本颜色
+            if (_valueDisplayText != null)
             {
-                uiText.text = CurrentAccessor?.FormatDisplay(value) ?? value.ToString();
+                _valueDisplayText.color = state == ValidationState.Invalid
+                    ? Color.red
+                    : state == ValidationState.Warning
+                        ? new Color(1f, 0.92f, 0.016f)
+                        : Color.white;
             }
         }
+
+        // ============ 元数据广播 ============
 
         /// <summary>
         /// 由绑定系统调用，传递元数据并广播到 IXUIAvrgMDValueStyle 子组件
@@ -166,7 +247,6 @@ namespace XericUI.ReflectionUIGenerator
 
             if (metaData == null) return;
 
-            // 广播元数据到子节点样式组件
             var styles = GetComponentsInChildren<IXUIAvrgMDValueStyle>(true);
             foreach (var style in styles)
             {
@@ -175,61 +255,6 @@ namespace XericUI.ReflectionUIGenerator
 
                 style.ApplyMetaData(metaData);
             }
-        }
-
-        // ============ 样式读取 ============
-
-        /// <summary>
-        /// 从样式表获取值（自动使用 BoundMetaData.StyleNamespace）
-        /// </summary>
-        protected StyleValue GetStyleValue(StyleMember member)
-        {
-            if (member == null) return null;
-            string ns = BoundMetaData?.StyleNamespace ?? "default";
-            return StyleManager.GetValue(ns, member.StylePath);
-        }
-
-        // ============ 通用 UI 插槽刷新 ============
-
-        /// <summary>刷新所有通用 UI 插槽（标签、单位、只读、警告标记）</summary>
-        protected void RefreshCommonNodes()
-        {
-            var meta = BoundMetaData;
-            if (meta == null) return;
-
-            // 1. 字段标签节点
-            if (fieldLabelNode != null)
-            {
-                string prefix = "";
-                if (CurrentAccessor?.IsReadOnly == true)
-                {
-                    var pv = GetStyleValue(_styleReadOnlyPrefix);
-                    prefix = pv?.GetValueAsString() ?? "[只读] ";
-                }
-                SetNodeText(fieldLabelNode, prefix + (meta.LabelName ?? meta.MemberName));
-            }
-
-            // 2. 单位文本节点
-            if (unitTextNode != null)
-                SetNodeText(unitTextNode, meta.UnitLabelName ?? "");
-
-            // 3. 只读标记节点
-            if (readOnlyNode != null)
-                readOnlyNode.SetActive(CurrentAccessor?.IsReadOnly == true);
-
-            // 4. warningNode 由外部验证系统触发，此方法不直接控制
-        }
-
-        /// <summary>在节点及其子节点上查找 Text / TMP_Text 并设置文本</summary>
-        protected static void SetNodeText(GameObject node, string text)
-        {
-            if (node == null) return;
-#if dUI_TextMeshPro
-            var t = node.GetComponentInChildren<TMPro.TMP_Text>(true);
-            if (t != null) { t.text = text; return; }
-#endif
-            var ut = node.GetComponentInChildren<UnityEngine.UI.Text>(true);
-            if (ut != null) ut.text = text;
         }
     }
 }

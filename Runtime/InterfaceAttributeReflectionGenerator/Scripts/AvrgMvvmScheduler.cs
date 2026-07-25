@@ -9,8 +9,11 @@ namespace XericUI.ReflectionUIGenerator
     /// 
     /// 冲突解决策略：
     /// - 仅数据脏 → 通知 UI 更新
-    /// - 仅 UI 脏   → 写入数据源
+    /// - 仅 UI 脏   → 写入数据源（写入前校验，Invalid 驳回）
     /// - 双方都脏 → 走配置的冲突解决策略
+    /// 
+    /// 验证拦截：在 CommitToDataSource 前通过 Binding.ValidateValue() 校验。
+    /// Invalid 值被驳回不写入，仅通知 UI 进入无效状态。
     /// </summary>
     public class AvrgMvvmScheduler
     {
@@ -79,20 +82,36 @@ namespace XericUI.ReflectionUIGenerator
 
             if (uiDirty && dataDirty)
             {
-                // 双方都脏 — 走冲突解决
+                // 双方都脏 — 走冲突解决（内部含验证）
                 ResolveConflict(binding);
             }
             else if (dataDirty)
             {
-                // 仅数据侧更新 → 通知 UI
+                // 仅数据侧更新 → 验证后通知 UI
                 var value = binding.DataCachedValue ?? binding.ReadFromDataSource();
+                var state = binding.ValidateValue(value);
+                binding.SetValidationState(state);
+
                 binding.CommitToDataSource(value);
-                binding.NotifyUIUpdate(value);
+                binding.NotifyUIUpdate(value, state);
             }
             else if (uiDirty)
             {
-                // 仅 UI 侧更新 → 写入数据源
-                binding.CommitToDataSource(binding.UICachedValue);
+                // 仅 UI 侧更新 → 验证后写入数据源
+                var value = binding.UICachedValue;
+                var state = binding.ValidateValue(value);
+
+                if (state == ValidationState.Invalid)
+                {
+                    // ★ 无效值：驳回不写入，仅通知 UI 进入无效态
+                    binding.SetValidationState(state);
+                    binding.NotifyUIUpdate(value, state);
+                    return;
+                }
+
+                binding.SetValidationState(state);
+                binding.CommitToDataSource(value);
+                // UI 是发起方，不再通知自身（但验证状态变更需通知）
             }
         }
 
@@ -106,8 +125,10 @@ namespace XericUI.ReflectionUIGenerator
                     var resolvedValue = OnConflictDetected.Invoke(binding, DefaultStrategy);
                     if (resolvedValue != null)
                     {
+                        var state = binding.ValidateValue(resolvedValue);
+                        binding.SetValidationState(state);
                         binding.CommitToDataSource(resolvedValue);
-                        binding.NotifyUIUpdate(resolvedValue);
+                        binding.NotifyUIUpdate(resolvedValue, state);
                         return;
                     }
                 }
@@ -120,8 +141,10 @@ namespace XericUI.ReflectionUIGenerator
             // 2. 检查 ResolverConfig 中的自定义策略
             if (_resolverConfig != null && _resolverConfig.TryResolve(binding, out object configResolvedValue))
             {
+                var state = binding.ValidateValue(configResolvedValue);
+                binding.SetValidationState(state);
                 binding.CommitToDataSource(configResolvedValue);
-                binding.NotifyUIUpdate(configResolvedValue);
+                binding.NotifyUIUpdate(configResolvedValue, state);
                 return;
             }
 
@@ -129,38 +152,70 @@ namespace XericUI.ReflectionUIGenerator
             switch (DefaultStrategy)
             {
                 case ConflictResolutionStrategy.PreferUI:
-                    binding.CommitToDataSource(binding.UICachedValue);
-                    binding.NotifyUIUpdate(binding.UICachedValue);
-                    break;
-
-                case ConflictResolutionStrategy.PreferData:
-                    var dataValue = binding.DataCachedValue ?? binding.ReadFromDataSource();
-                    binding.CommitToDataSource(dataValue);
-                    binding.NotifyUIUpdate(dataValue);
-                    break;
-
-                case ConflictResolutionStrategy.CompareValues:
-                    // 比较UI值和数据值
-                    object uiVal = binding.UICachedValue;
-                    object dataVal = binding.DataCachedValue ?? binding.ReadFromDataSource();
-
-                    if (Equals(uiVal, dataVal))
                     {
-                        // 值相同，忽略冲突
-                        binding.NotifyUIUpdate(dataVal);
+                        var val = binding.UICachedValue;
+                        var state = binding.ValidateValue(val);
+                        if (state == ValidationState.Invalid)
+                        {
+                            binding.SetValidationState(state);
+                            binding.NotifyUIUpdate(val, state);
+                            return;
+                        }
+                        binding.SetValidationState(state);
+                        binding.CommitToDataSource(val);
+                        binding.NotifyUIUpdate(val, state);
                         break;
                     }
 
-                    // 值不同，回退到 PreferUI
-                    binding.CommitToDataSource(binding.UICachedValue);
-                    binding.NotifyUIUpdate(binding.UICachedValue);
-                    Debug.LogWarning($"[AvrgMvvmScheduler] 值冲突(CompareValues回退PreferUI): {binding.MetaData?.MemberName}");
-                    break;
+                case ConflictResolutionStrategy.PreferData:
+                    {
+                        var dataValue = binding.DataCachedValue ?? binding.ReadFromDataSource();
+                        var state = binding.ValidateValue(dataValue);
+                        binding.SetValidationState(state);
+                        binding.CommitToDataSource(dataValue);
+                        binding.NotifyUIUpdate(dataValue, state);
+                        break;
+                    }
+
+                case ConflictResolutionStrategy.CompareValues:
+                    {
+                        object uiVal = binding.UICachedValue;
+                        object dataVal = binding.DataCachedValue ?? binding.ReadFromDataSource();
+
+                        if (Equals(uiVal, dataVal))
+                        {
+                            // 值相同，忽略冲突
+                            var state2 = binding.ValidateValue(dataVal);
+                            binding.SetValidationState(state2);
+                            binding.NotifyUIUpdate(dataVal, state2);
+                            break;
+                        }
+
+                        // 值不同，回退到 PreferUI
+                        var val = binding.UICachedValue;
+                        var state = binding.ValidateValue(val);
+                        if (state == ValidationState.Invalid)
+                        {
+                            binding.SetValidationState(state);
+                            binding.NotifyUIUpdate(val, state);
+                            return;
+                        }
+                        binding.SetValidationState(state);
+                        binding.CommitToDataSource(val);
+                        binding.NotifyUIUpdate(val, state);
+                        Debug.LogWarning($"[AvrgMvvmScheduler] 值冲突(CompareValues回退PreferUI): {binding.MetaData?.MemberName}");
+                        break;
+                    }
 
                 default:
-                    binding.CommitToDataSource(binding.UICachedValue);
-                    binding.NotifyUIUpdate(binding.UICachedValue);
-                    break;
+                    {
+                        var val = binding.UICachedValue;
+                        var state = binding.ValidateValue(val);
+                        binding.SetValidationState(state);
+                        binding.CommitToDataSource(val);
+                        binding.NotifyUIUpdate(val, state);
+                        break;
+                    }
             }
         }
 

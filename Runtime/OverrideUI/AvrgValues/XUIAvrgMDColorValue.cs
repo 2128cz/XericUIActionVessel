@@ -4,20 +4,17 @@ using UnityEngine.UI;
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
-    /// 颜色值组件 — 处理 Color 类型的显示
-    /// 通过 Image.color 展示当前颜色值
-    /// 颜色修改可通过 RGB 子节点 InputField 或额外的颜色选择逻辑完成
+    /// Color 值组件 — 通过 Image 显示颜色，可选点击弹出颜色选择器
     /// </summary>
     [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDColorValue")]
     public class XUIAvrgMDColorValue : XUIAvrgMDValue
     {
-        [SerializeField]
-        [Tooltip("用于展示颜色的 Image 组件（未设置则自动查找）")]
-        private Image _colorDisplay;
+        [SerializeField, Tooltip("关联的 Image 组件（未设置则自动查找）")]
+        private Image _colorImage;
 
         private void Awake()
         {
-            if (_colorDisplay == null) _colorDisplay = GetComponent<Image>();
+            if (_colorImage == null) _colorImage = GetComponent<Image>();
         }
 
         public override void BindToAccessor(
@@ -30,29 +27,23 @@ namespace XericUI.ReflectionUIGenerator
 
             if (binding == null || accessor == null) return;
 
-            // 数据 → UI
-            binding.OnUIDataChanged += value =>
+            binding.OnUIDataChanged += (value, state) =>
             {
-                if (value is Color color && _colorDisplay != null)
-                {
-                    _colorDisplay.color = color;
-                }
+                UpdateValueDisplay(value, state);
             };
+            binding.OnValidationStateChanged += OnValidationStateChanged;
 
-            // 首次同步
             var initialValue = accessor.GetValue();
-            if (initialValue is Color initColor && _colorDisplay != null)
-            {
-                _colorDisplay.color = initColor;
-            }
+            UpdateValueDisplay(initialValue, ValidationState.Normal);
         }
 
-        protected override void UpdateDisplayValue(object value)
+        protected override void UpdateValueDisplay(object value, ValidationState state)
         {
-            if (value is Color color && _colorDisplay != null)
-            {
-                _colorDisplay.color = color;
-            }
+            // 值显示：刷新 Image.color
+            if (_colorImage != null && value is Color c)
+                _colorImage.color = c;
+
+            base.UpdateValueDisplay(value, state);
         }
     }
 }

@@ -56,8 +56,8 @@ namespace XericUI.ReflectionUIGenerator
                 });
             }
 
-            // 数据 → UI
-            binding.OnUIDataChanged += value =>
+            // 数据 → UI（带验证状态）
+            binding.OnUIDataChanged += (value, state) =>
             {
                 string valueStr = value?.ToString();
                 for (int i = 0; i < _toggles.Count && i < _optionLabels.Count; i++)
@@ -65,10 +65,15 @@ namespace XericUI.ReflectionUIGenerator
                     if (_optionLabels[i] == valueStr)
                     {
                         _toggles[i].SetIsOnWithoutNotify(true);
-                        return;
+                        break;
                     }
                 }
+
+                base.UpdateValueDisplay(value, state);
             };
+
+            // 验证状态变更
+            binding.OnValidationStateChanged += OnValidationStateChanged;
 
             // 首次同步
             var initialValue = accessor.GetValue();

@@ -1,12 +1,11 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
-using XericLibrary.Runtime.SuperStyleSheet;
 
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
-    /// InputField 值组件 — 处理 string / float / int 类型的文本输入交互
+    /// InputField 值组件 — 处理 string / float / int / double 类型的文本输入交互
     /// </summary>
     [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDInputFieldValue")]
     public class XUIAvrgMDInputFieldValue : XUIAvrgMDValue
@@ -26,10 +25,7 @@ namespace XericUI.ReflectionUIGenerator
         [SerializeField, Tooltip("减少按钮（点击按步进值 -）")]
         private Button _decrementButton;
 
-        // ============ 样式表参数 ============
-        private readonly StyleMember _styleStepValue = new() { StylePath = "xuiavrg/input/stepValue" };
-
-        // ============ 生命周期 ============
+        private const float DefaultStep = 1f;
 
         private void Awake()
         {
@@ -40,16 +36,18 @@ namespace XericUI.ReflectionUIGenerator
 #endif
         }
 
-        protected override void OnEnable()
-        {
-            base.OnEnable();
-            _styleStepValue.Register();
-        }
+        // ============ 对象池生命周期 ============
 
-        protected override void OnDisable()
+        public override void OnPoolRelease()
         {
-            base.OnDisable();
-            _styleStepValue.Unregister();
+            if (_incrementButton != null)
+                _incrementButton.onClick.RemoveAllListeners();
+            if (_decrementButton != null)
+                _decrementButton.onClick.RemoveAllListeners();
+            if (_inputField != null)
+                _inputField.onEndEdit.RemoveAllListeners();
+
+            base.OnPoolRelease();
         }
 
         // ============ 核心绑定 ============
@@ -64,6 +62,7 @@ namespace XericUI.ReflectionUIGenerator
 
             if (binding == null || accessor == null || _inputField == null) return;
 
+            // 根据类型设置输入模式
 #if dUI_TextMeshPro
             if (accessor.ValueType == typeof(float) || accessor.ValueType == typeof(int)
                 || accessor.ValueType == typeof(double))
@@ -92,33 +91,29 @@ namespace XericUI.ReflectionUIGenerator
                 scheduler?.MarkUIDirty(binding);
             });
 
-            // 数据 → UI
-            binding.OnUIDataChanged += value =>
+            // 数据 → UI（带验证状态）
+            binding.OnUIDataChanged += (value, state) =>
             {
                 _inputField.SetTextWithoutNotify(accessor.FormatDisplay(value));
+                base.UpdateValueDisplay(value, state);
             };
+
+            // 验证状态变更
+            binding.OnValidationStateChanged += OnValidationStateChanged;
 
             // 首次同步
             var initialValue = accessor.GetValue();
             _inputField.SetTextWithoutNotify(accessor.FormatDisplay(initialValue));
-
-            RefreshCommonNodes();
+            UpdateValueDisplay(initialValue, ValidationState.Normal);
         }
 
         // ============ 步进 ============
-
-        private float GetStepValue()
-        {
-            var val = GetStyleValue(_styleStepValue);
-            return val?.GetValueAsFloat() ?? 1f;
-        }
 
         private void OnIncrementClicked()
         {
             if (CurrentAccessor?.IsReadOnly == true || _inputField == null) return;
             if (!float.TryParse(_inputField.text, out float current)) return;
-            float step = GetStepValue();
-            float newVal = current + step;
+            float newVal = current + DefaultStep;
             _inputField.text = CurrentAccessor.FormatDisplay(
                 ConvertValueForAccessor(newVal, CurrentAccessor.ValueType));
         }
@@ -127,10 +122,30 @@ namespace XericUI.ReflectionUIGenerator
         {
             if (CurrentAccessor?.IsReadOnly == true || _inputField == null) return;
             if (!float.TryParse(_inputField.text, out float current)) return;
-            float step = GetStepValue();
-            float newVal = current - step;
+            float newVal = current - DefaultStep;
             _inputField.text = CurrentAccessor.FormatDisplay(
                 ConvertValueForAccessor(newVal, CurrentAccessor.ValueType));
+        }
+
+        // ============ 验证状态回调 ============
+
+        protected override void OnValidationStateChanged(ValidationState state)
+        {
+            base.OnValidationStateChanged(state);
+
+            // InputField 文字颜色随验证状态变化（通过 Text 组件）
+            if (_inputField != null)
+            {
+                var textComponent = _inputField.textComponent;
+                if (textComponent != null)
+                {
+                    textComponent.color = state == ValidationState.Invalid
+                        ? Color.red
+                        : state == ValidationState.Warning
+                            ? new Color(1f, 0.92f, 0.016f)
+                            : Color.white;
+                }
+            }
         }
 
         private static object ConvertValueForAccessor(float val, Type targetType)

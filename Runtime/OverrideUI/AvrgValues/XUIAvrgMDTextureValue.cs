@@ -4,25 +4,22 @@ using UnityEngine.UI;
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
-    /// 纹理值组件 — 处理 Texture 类型的预览显示
-    /// 通过 RawImage.texture 展示当前纹理
+    /// Texture 值组件 — 通过 RawImage 显示纹理
     /// </summary>
     [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDTextureValue")]
     public class XUIAvrgMDTextureValue : XUIAvrgMDValue
     {
-        [SerializeField]
-        [Tooltip("用于展示纹理的 RawImage 组件（未设置则自动查找）")]
-        private RawImage _textureDisplay;
+        [SerializeField, Tooltip("关联的 RawImage 组件（未设置则自动查找）")]
+        private RawImage _rawImage;
 
 #if dUI_TextMeshPro
-        [SerializeField]
-        [Tooltip("纹理名称标签（可选，用于显示纹理资源名）")]
+        [SerializeField, Tooltip("纹理名称标签（可选）")]
         private TMPro.TMP_Text _nameLabel;
 #endif
 
         private void Awake()
         {
-            if (_textureDisplay == null) _textureDisplay = GetComponent<RawImage>();
+            if (_rawImage == null) _rawImage = GetComponent<RawImage>();
         }
 
         public override void BindToAccessor(
@@ -35,35 +32,29 @@ namespace XericUI.ReflectionUIGenerator
 
             if (binding == null || accessor == null) return;
 
-            // 数据 → UI
-            binding.OnUIDataChanged += value =>
+            binding.OnUIDataChanged += (value, state) =>
             {
-                if (value is Texture tex && _textureDisplay != null)
-                {
-                    _textureDisplay.texture = tex;
-                }
+                UpdateValueDisplay(value, state);
+            };
+            binding.OnValidationStateChanged += OnValidationStateChanged;
 
+            var initialValue = accessor.GetValue();
+            UpdateValueDisplay(initialValue, ValidationState.Normal);
+        }
+
+        protected override void UpdateValueDisplay(object value, ValidationState state)
+        {
+            // 值显示：刷新 RawImage.texture
+            if (_rawImage != null && value is Texture tex)
+            {
+                _rawImage.texture = tex;
 #if dUI_TextMeshPro
                 if (_nameLabel != null)
-                {
-                    _nameLabel.text = value is Texture t && t != null ? t.name : "None";
-                }
+                    _nameLabel.text = tex?.name ?? "";
 #endif
-            };
-
-            // 首次同步
-            var initialValue = accessor.GetValue();
-            if (initialValue is Texture initTex && _textureDisplay != null)
-            {
-                _textureDisplay.texture = initTex;
             }
 
-#if dUI_TextMeshPro
-            if (_nameLabel != null)
-            {
-                _nameLabel.text = initialValue is Texture t && t != null ? t.name : "None";
-            }
-#endif
+            base.UpdateValueDisplay(value, state);
         }
     }
 }

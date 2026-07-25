@@ -1,19 +1,17 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
-using XericLibrary.Runtime.SuperStyleSheet;
 
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
     /// Slider 值组件 — 处理 float / int / double 类型的滑块交互
-    /// 适用于 Shader Range 属性或标记了 [XuiavrgFieldTag(Slider)] 的字段
+    /// 适用 Shader Range 属性或标记了 [XuiavrgFieldTag(Slider)] 的字段
     /// </summary>
     [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDSliderValue")]
     public class XUIAvrgMDSliderValue : XUIAvrgMDValue
     {
-        [SerializeField]
-        [Tooltip("关联的 Slider 组件（未设置则自动查找）")]
+        [SerializeField, Tooltip("关联的 Slider 组件（未设置则自动查找）")]
         private Slider _slider;
 
         [Header("Slider 专属插槽")]
@@ -24,37 +22,44 @@ namespace XericUI.ReflectionUIGenerator
         private Button _decrementButton;
 
 #if dUI_TextMeshPro
-        [SerializeField]
-        [Tooltip("值显示标签（可选，未设置则不更新）")]
+        [SerializeField, Tooltip("值显示标签（可选，未设置则不更新）")]
         private TMPro.TMP_Text _valueLabel;
 #endif
 
-        // ============ 样式表参数 ============
-        private readonly StyleMember _styleDefaultStep = new() { StylePath = "xuiavrg/slider/defaultStep" };
-        private readonly StyleMember _styleMinStep     = new() { StylePath = "xuiavrg/slider/minStep" };
-        private readonly StyleMember _styleMaxStep     = new() { StylePath = "xuiavrg/slider/maxStep" };
-
-        // ============ 生命周期 ============
+        private const float DefaultStep = 0.1f;
 
         private void Awake()
         {
             if (_slider == null) _slider = GetComponent<Slider>();
         }
 
-        protected override void OnEnable()
+        // ============ 对象池生命周期 ============
+
+        public override void OnPoolGet(AvrgMemberMetaData metaData)
         {
-            base.OnEnable();
-            _styleDefaultStep.Register();
-            _styleMinStep.Register();
-            _styleMaxStep.Register();
+            base.OnPoolGet(metaData);
+
+            if (_slider == null) return;
+
+            // 从元数据初始化 Slider 参数
+            if (metaData?.RangeMin.HasValue == true)
+                _slider.minValue = metaData.RangeMin.Value;
+            if (metaData?.RangeMax.HasValue == true)
+                _slider.maxValue = metaData.RangeMax.Value;
+            _slider.wholeNumbers = metaData?.ValueType == typeof(int);
         }
 
-        protected override void OnDisable()
+        public override void OnPoolRelease()
         {
-            base.OnDisable();
-            _styleDefaultStep.Unregister();
-            _styleMinStep.Unregister();
-            _styleMaxStep.Unregister();
+            // 清除按钮监听
+            if (_incrementButton != null)
+                _incrementButton.onClick.RemoveAllListeners();
+            if (_decrementButton != null)
+                _decrementButton.onClick.RemoveAllListeners();
+            if (_slider != null)
+                _slider.onValueChanged.RemoveAllListeners();
+
+            base.OnPoolRelease();
         }
 
         // ============ 核心绑定 ============
@@ -68,17 +73,6 @@ namespace XericUI.ReflectionUIGenerator
             CurrentBinding = binding;
 
             if (binding == null || accessor == null || _slider == null) return;
-
-            // 设置 Slider 参数
-            _slider.wholeNumbers = accessor.ValueType == typeof(int);
-
-            if (BoundMetaData != null)
-            {
-                if (BoundMetaData.RangeMin.HasValue)
-                    _slider.minValue = BoundMetaData.RangeMin.Value;
-                if (BoundMetaData.RangeMax.HasValue)
-                    _slider.maxValue = BoundMetaData.RangeMax.Value;
-            }
 
             // 增减按钮
             if (_incrementButton != null)
@@ -99,8 +93,8 @@ namespace XericUI.ReflectionUIGenerator
 #endif
             });
 
-            // 数据 → UI
-            binding.OnUIDataChanged += value =>
+            // 数据 → UI（带验证状态）
+            binding.OnUIDataChanged += (value, state) =>
             {
                 float sliderVal = Convert.ToSingle(value);
                 _slider.SetValueWithoutNotify(sliderVal);
@@ -109,7 +103,13 @@ namespace XericUI.ReflectionUIGenerator
                 if (_valueLabel != null)
                     _valueLabel.text = accessor.FormatDisplay(value);
 #endif
+
+                // 委托基类处理标签合成 + 值文本
+                base.UpdateValueDisplay(value, state);
             };
+
+            // 验证状态变更
+            binding.OnValidationStateChanged += OnValidationStateChanged;
 
             // 首次同步
             var initialValue = accessor.GetValue();
@@ -121,23 +121,14 @@ namespace XericUI.ReflectionUIGenerator
                     _valueLabel.text = accessor.FormatDisplay(initialValue);
 #endif
             }
-
-            RefreshCommonNodes();
+            UpdateValueDisplay(initialValue ?? 0f, ValidationState.Normal);
         }
 
         // ============ 步进值 ============
 
         private float GetStepValue()
         {
-            var val = GetStyleValue(_styleDefaultStep);
-            if (val != null)
-            {
-                float step = val.GetValueAsFloat();
-                float min = GetStyleValue(_styleMinStep)?.GetValueAsFloat() ?? 0.001f;
-                float max = GetStyleValue(_styleMaxStep)?.GetValueAsFloat() ?? 1000f;
-                return Mathf.Clamp(step, min, max);
-            }
-            return _slider.wholeNumbers ? 1f : 0.1f;
+            return _slider.wholeNumbers ? 1f : DefaultStep;
         }
 
         private void OnIncrementClicked()
@@ -156,6 +147,28 @@ namespace XericUI.ReflectionUIGenerator
             float current = Convert.ToSingle(CurrentAccessor.GetValue());
             float newVal = Mathf.Clamp(current - step, _slider.minValue, _slider.maxValue);
             _slider.value = newVal;
+        }
+
+        // ============ 验证状态回调 ============
+
+        protected override void OnValidationStateChanged(ValidationState state)
+        {
+            base.OnValidationStateChanged(state);
+
+            // Slider 填充色随验证状态变化
+            if (_slider != null)
+            {
+                var fillArea = _slider.fillRect;
+                if (fillArea != null && fillArea.TryGetComponent<Image>(out var fill))
+                {
+                    fill.color = state switch
+                    {
+                        ValidationState.Invalid => Color.red,
+                        ValidationState.Warning => new Color(1f, 0.92f, 0.016f),
+                        _ => Color.white
+                    };
+                }
+            }
         }
 
         private static object ConvertValueForAccessor(float val, Type targetType)

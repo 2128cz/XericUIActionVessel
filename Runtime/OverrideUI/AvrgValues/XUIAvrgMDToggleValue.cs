@@ -1,43 +1,29 @@
 using UnityEngine;
 using UnityEngine.UI;
-using XericLibrary.Runtime.SuperStyleSheet;
 
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
     /// Toggle 值组件 — 处理 bool 类型的开关交互
-    /// 支持样式表控制开关颜色
     /// </summary>
     [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDToggleValue")]
     public class XUIAvrgMDToggleValue : XUIAvrgMDValue
     {
-        [SerializeField]
-        [Tooltip("关联的 Toggle 组件（未设置则自动查找）")]
+        [SerializeField, Tooltip("关联的 Toggle 组件（未设置则自动查找）")]
         private Toggle _toggle;
-
-        // ============ 样式表参数 ============
-        private readonly StyleMember _styleOnColor  = new() { StylePath = "xuiavrg/toggle/onColor" };
-        private readonly StyleMember _styleOffColor = new() { StylePath = "xuiavrg/toggle/offColor" };
-
-        // ============ 生命周期 ============
 
         private void Awake()
         {
             if (_toggle == null) _toggle = GetComponent<Toggle>();
         }
 
-        protected override void OnEnable()
-        {
-            base.OnEnable();
-            _styleOnColor.Register();
-            _styleOffColor.Register();
-        }
+        // ============ 对象池生命周期 ============
 
-        protected override void OnDisable()
+        public override void OnPoolRelease()
         {
-            base.OnDisable();
-            _styleOnColor.Unregister();
-            _styleOffColor.Unregister();
+            if (_toggle != null)
+                _toggle.onValueChanged.RemoveAllListeners();
+            base.OnPoolRelease();
         }
 
         // ============ 核心绑定 ============
@@ -60,36 +46,53 @@ namespace XericUI.ReflectionUIGenerator
             {
                 binding.WriteFromUI(val);
                 scheduler?.MarkUIDirty(binding);
-                ApplyToggleColor(val);
             });
 
-            // 数据 → UI
-            binding.OnUIDataChanged += value =>
+            // 数据 → UI（带验证状态）
+            binding.OnUIDataChanged += (value, state) =>
             {
                 bool isOn = value is bool b && b;
                 _toggle.SetIsOnWithoutNotify(isOn);
-                ApplyToggleColor(isOn);
+                ApplyToggleColor(isOn, state);
+
+                base.UpdateValueDisplay(value, state);
             };
+
+            // 验证状态变更
+            binding.OnValidationStateChanged += OnValidationStateChanged;
 
             // 首次同步
             var initialValue = accessor.GetValue();
             bool initialOn = initialValue is bool bv && bv;
             _toggle.SetIsOnWithoutNotify(initialOn);
-            ApplyToggleColor(initialOn);
-
-            RefreshCommonNodes();
+            ApplyToggleColor(initialOn, ValidationState.Normal);
+            UpdateValueDisplay(initialValue, ValidationState.Normal);
         }
 
-        // ============ 样式颜色 ============
+        // ============ 验证状态回调 ============
 
-        private void ApplyToggleColor(bool isOn)
+        protected override void OnValidationStateChanged(ValidationState state)
         {
-            var target = _toggle.targetGraphic;
+            base.OnValidationStateChanged(state);
+
+            // Switch 验证状态也影响 targetGraphic 颜色
+            if (_toggle != null)
+            {
+                ApplyToggleColor(_toggle.isOn, state);
+            }
+        }
+
+        private void ApplyToggleColor(bool isOn, ValidationState state)
+        {
+            var target = _toggle?.targetGraphic;
             if (target == null) return;
 
-            var colorVal = isOn ? GetStyleValue(_styleOnColor) : GetStyleValue(_styleOffColor);
-            if (colorVal != null)
-                target.color = colorVal;
+            if (state == ValidationState.Invalid)
+                target.color = Color.red;
+            else if (state == ValidationState.Warning)
+                target.color = new Color(1f, 0.92f, 0.016f);
+            else
+                target.color = isOn ? Color.green : new Color(0.5f, 0.5f, 0.5f, 1f);
         }
     }
 }

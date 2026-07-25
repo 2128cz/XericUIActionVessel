@@ -91,6 +91,12 @@ namespace XericUI.ReflectionUIGenerator
             bindingCollection.SourceMetaDataSet = this;
             var scheduler = new AvrgMvvmScheduler(resolverConfig);
 
+            // ★ 构建前缀树索引
+            var trie = new AvrgBindingTrie();
+            string typePrefix = businessTarget != null
+                ? businessTarget.GetType().FullName + "."
+                : "";
+
             foreach (var metaData in _metaDataList)
             {
                 if (metaData.AccessorFactory == null) continue;
@@ -137,9 +143,14 @@ namespace XericUI.ReflectionUIGenerator
                         string subPath = subMetaData.PropertyPath;
                         if (string.IsNullOrEmpty(subPath)) continue;
 
+                        // 创建子属性访问器
+                        var subAccessor = new AvrgSubPropertyAccessor(
+                            accessor, subPath, subMetaData);
+
                         var subBinding = new AvrgMvvmBinding
                         {
                             MetaData = subMetaData,
+                            Accessor = subAccessor,
                             ReadFunc = () => ReadSubProperty(accessor.GetValue(), subPath),
                             WriteAction = (val) =>
                             {
@@ -157,8 +168,13 @@ namespace XericUI.ReflectionUIGenerator
                 // 注册到调度器
                 scheduler.Register(binding);
                 bindingCollection.Add(binding);
+
+                // ★ 插入前缀树（完整路径: Type.FullName.MemberName）
+                string fullPath = typePrefix + metaData.MemberName;
+                trie.Insert(fullPath, binding);
             }
 
+            bindingCollection.SetTrie(trie);
             bindingCollection.AttachScheduler(scheduler);
             return bindingCollection;
         }

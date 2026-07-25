@@ -1,6 +1,5 @@
 using UnityEngine;
 using UnityEngine.UI;
-using XericLibrary.Runtime.SuperStyleSheet;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -11,37 +10,39 @@ namespace XericUI.ReflectionUIGenerator
     [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDVectorValue")]
     public class XUIAvrgMDVectorValue : XUIAvrgMDValue
     {
-        [SerializeField]
-        [Tooltip("X 分量 InputField（可选，也可通过 BindingSlots 的子节点绑定）")]
+        [SerializeField, Tooltip("X 分量 InputField（可选，也可通过 BindingSlots 的子节点绑定）")]
         private InputField _inputX;
 
-        [SerializeField]
-        [Tooltip("Y 分量 InputField")]
+        [SerializeField, Tooltip("Y 分量 InputField")]
         private InputField _inputY;
 
-        [SerializeField]
-        [Tooltip("Z 分量 InputField（Vector3/Vector4 时使用）")]
+        [SerializeField, Tooltip("Z 分量 InputField（Vector3/Vector4 时使用）")]
         private InputField _inputZ;
 
-        [SerializeField]
-        [Tooltip("W 分量 InputField（Vector4 时使用）")]
+        [SerializeField, Tooltip("W 分量 InputField（Vector4 时使用）")]
         private InputField _inputW;
 
-        // ============ 样式表参数 ============
-        private readonly StyleMember _styleLayoutDirection = new() { StylePath = "xuiavrg/vector/layoutDirection" };
+        // ============ 对象池生命周期 ============
 
-        // ============ 生命周期 ============
-
-        protected override void OnEnable()
+        public override void OnPoolGet(AvrgMemberMetaData metaData)
         {
-            base.OnEnable();
-            _styleLayoutDirection.Register();
+            base.OnPoolGet(metaData);
+
+            int componentCount = GetComponentCount(metaData?.ValueType);
+            SetInputActive(_inputX, 0, componentCount);
+            SetInputActive(_inputY, 1, componentCount);
+            SetInputActive(_inputZ, 2, componentCount);
+            SetInputActive(_inputW, 3, componentCount);
         }
 
-        protected override void OnDisable()
+        public override void OnPoolRelease()
         {
-            base.OnDisable();
-            _styleLayoutDirection.Unregister();
+            if (_inputX != null) _inputX.onEndEdit.RemoveAllListeners();
+            if (_inputY != null) _inputY.onEndEdit.RemoveAllListeners();
+            if (_inputZ != null) _inputZ.onEndEdit.RemoveAllListeners();
+            if (_inputW != null) _inputW.onEndEdit.RemoveAllListeners();
+
+            base.OnPoolRelease();
         }
 
         // ============ 核心绑定 ============
@@ -56,18 +57,6 @@ namespace XericUI.ReflectionUIGenerator
 
             if (binding == null || accessor == null) return;
 
-            // 根据向量类型启用/禁用对应分量
-            int componentCount = GetComponentCount(accessor.ValueType);
-            SetInputActive(_inputX, 0, componentCount);
-            SetInputActive(_inputY, 1, componentCount);
-            SetInputActive(_inputZ, 2, componentCount);
-            SetInputActive(_inputW, 3, componentCount);
-
-            // 样式表控制排列方向
-            var dirVal = GetStyleValue(_styleLayoutDirection);
-            string dir = dirVal?.GetValueAsString() ?? "Horizontal";
-            ApplyLayoutDirection(dir);
-
             // 为每个输入注册事件
             BindInputField(_inputX, 0, accessor, binding, scheduler);
             BindInputField(_inputY, 1, accessor, binding, scheduler);
@@ -75,41 +64,18 @@ namespace XericUI.ReflectionUIGenerator
             BindInputField(_inputW, 3, accessor, binding, scheduler);
 
             // 数据 → UI
-            binding.OnUIDataChanged += value =>
+            binding.OnUIDataChanged += (value, state) =>
             {
                 UpdateAllInputs(value);
+                base.UpdateValueDisplay(value, state);
             };
+
+            binding.OnValidationStateChanged += OnValidationStateChanged;
 
             // 首次同步
             var initialValue = accessor.GetValue();
             UpdateAllInputs(initialValue);
-
-            RefreshCommonNodes();
-        }
-
-        // ============ 布局 ============
-
-        private void ApplyLayoutDirection(string dir)
-        {
-            var layout = GetComponent<HorizontalOrVerticalLayoutGroup>();
-            if (layout == null) return;
-
-            if (dir == "Vertical")
-            {
-                if (layout is HorizontalLayoutGroup)
-                {
-                    Destroy(layout);
-                    gameObject.AddComponent<VerticalLayoutGroup>();
-                }
-            }
-            else
-            {
-                if (layout is VerticalLayoutGroup)
-                {
-                    Destroy(layout);
-                    gameObject.AddComponent<HorizontalLayoutGroup>();
-                }
-            }
+            UpdateValueDisplay(initialValue, ValidationState.Normal);
         }
 
         // ============ 输入绑定 ============

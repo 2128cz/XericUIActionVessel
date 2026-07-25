@@ -308,14 +308,14 @@ namespace XericUI.ReflectionUIGenerator
             foreach (var binding in _bindings)
             {
                 var value = binding.ReadFromDataSource();
-                binding.NotifyUIUpdate(value);
+                binding.NotifyUIUpdate(value, ValidationState.Normal);
 
                 if (binding.SubBindings?.Count > 0)
                 {
                     foreach (var subBinding in binding.SubBindings)
                     {
                         var subValue = subBinding.ReadFromDataSource();
-                        subBinding.NotifyUIUpdate(subValue);
+                        subBinding.NotifyUIUpdate(subValue, ValidationState.Normal);
                     }
                 }
             }
