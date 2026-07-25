@@ -15,16 +15,32 @@ namespace XericUI.ReflectionUIGenerator
         private Slider _slider;
 
         [Header("Slider 专属插槽")]
+        [SerializeField, Tooltip("值显示文本 — 显示当前 Slider 数值")]
+#if dUI_TextMeshPro
+        private TMPro.TMP_Text _valueDisplayText;
+#else
+        private UnityEngine.UI.Text _valueDisplayText;
+#endif
+
+        [SerializeField, Tooltip("最小值文本 — 显示 Slider 下限")]
+#if dUI_TextMeshPro
+        private TMPro.TMP_Text _minValueText;
+#else
+        private UnityEngine.UI.Text _minValueText;
+#endif
+
+        [SerializeField, Tooltip("最大值文本 — 显示 Slider 上限")]
+#if dUI_TextMeshPro
+        private TMPro.TMP_Text _maxValueText;
+#else
+        private UnityEngine.UI.Text _maxValueText;
+#endif
+
         [SerializeField, Tooltip("增加按钮（点击按步进值 +）")]
         private Button _incrementButton;
 
         [SerializeField, Tooltip("减少按钮（点击按步进值 -）")]
         private Button _decrementButton;
-
-#if dUI_TextMeshPro
-        [SerializeField, Tooltip("值显示标签（可选，未设置则不更新）")]
-        private TMPro.TMP_Text _valueLabel;
-#endif
 
         private const float DefaultStep = 0.1f;
 
@@ -51,13 +67,17 @@ namespace XericUI.ReflectionUIGenerator
 
         public override void OnPoolRelease()
         {
-            // 清除按钮监听
             if (_incrementButton != null)
                 _incrementButton.onClick.RemoveAllListeners();
             if (_decrementButton != null)
                 _decrementButton.onClick.RemoveAllListeners();
             if (_slider != null)
                 _slider.onValueChanged.RemoveAllListeners();
+
+            // 重置子类文本
+            if (_valueDisplayText != null) _valueDisplayText.text = "";
+            if (_minValueText != null) _minValueText.text = "";
+            if (_maxValueText != null) _maxValueText.text = "";
 
             base.OnPoolRelease();
         }
@@ -74,6 +94,9 @@ namespace XericUI.ReflectionUIGenerator
 
             if (binding == null || accessor == null || _slider == null) return;
 
+            // 初始化上下限文本
+            ApplyRangeTexts();
+
             // 增减按钮
             if (_incrementButton != null)
                 _incrementButton.onClick.AddListener(OnIncrementClicked);
@@ -87,10 +110,7 @@ namespace XericUI.ReflectionUIGenerator
                 binding.WriteFromUI(convertedVal);
                 scheduler?.MarkUIDirty(binding);
 
-#if dUI_TextMeshPro
-                if (_valueLabel != null)
-                    _valueLabel.text = accessor.FormatDisplay(convertedVal);
-#endif
+                RefreshValueText(convertedVal);
             });
 
             // 数据 → UI（带验证状态）
@@ -99,12 +119,9 @@ namespace XericUI.ReflectionUIGenerator
                 float sliderVal = Convert.ToSingle(value);
                 _slider.SetValueWithoutNotify(sliderVal);
 
-#if dUI_TextMeshPro
-                if (_valueLabel != null)
-                    _valueLabel.text = accessor.FormatDisplay(value);
-#endif
+                RefreshValueText(value);
+                ApplyValueTextColor(state);
 
-                // 委托基类处理标签合成 + 值文本
                 base.UpdateValueDisplay(value, state);
             };
 
@@ -114,14 +131,43 @@ namespace XericUI.ReflectionUIGenerator
             // 首次同步
             var initialValue = accessor.GetValue();
             if (initialValue != null)
-            {
                 _slider.SetValueWithoutNotify(Convert.ToSingle(initialValue));
-#if dUI_TextMeshPro
-                if (_valueLabel != null)
-                    _valueLabel.text = accessor.FormatDisplay(initialValue);
-#endif
-            }
+
+            RefreshValueText(initialValue);
             UpdateValueDisplay(initialValue ?? 0f, ValidationState.Normal);
+        }
+
+        // ============ 值显示 ============
+
+        protected override void UpdateValueDisplay(object value, ValidationState state)
+        {
+            ApplyValueTextColor(state);
+            base.UpdateValueDisplay(value, state);
+        }
+
+        private void RefreshValueText(object value)
+        {
+            if (_valueDisplayText == null || CurrentAccessor == null) return;
+            _valueDisplayText.text = CurrentAccessor.FormatDisplay(value);
+        }
+
+        private void ApplyValueTextColor(ValidationState state)
+        {
+            if (_valueDisplayText == null) return;
+
+            _valueDisplayText.color = state == ValidationState.Invalid
+                ? Color.red
+                : state == ValidationState.Warning
+                    ? new Color(1f, 0.92f, 0.016f)
+                    : Color.white;
+        }
+
+        private void ApplyRangeTexts()
+        {
+            if (_minValueText != null)
+                _minValueText.text = CurrentAccessor?.FormatDisplay(_slider.minValue) ?? _slider.minValue.ToString();
+            if (_maxValueText != null)
+                _maxValueText.text = CurrentAccessor?.FormatDisplay(_slider.maxValue) ?? _slider.maxValue.ToString();
         }
 
         // ============ 步进值 ============
@@ -169,6 +215,8 @@ namespace XericUI.ReflectionUIGenerator
                     };
                 }
             }
+
+            ApplyValueTextColor(state);
         }
 
         private static object ConvertValueForAccessor(float val, Type targetType)

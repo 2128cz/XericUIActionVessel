@@ -13,7 +13,8 @@ namespace XericUI.ReflectionUIGenerator
     /// 3. 通过 virtual BindToAccessor() 让子类自行管理 UI 交互事件
     /// 4. 对象池生命周期：OnPoolGet(meta) 初始化、OnPoolRelease() 重置
     /// 5. 定义绑定槽（BindingSlots），供拆分属性子绑定匹配
-    /// 6. 通过 UpdateValueDisplay() 合成标签文本（名称 + 只读 + 警告标记）
+    /// 6. 基类统一管理标签文本（名称 + 只读 + 警告标记）和单位可见性
+    ///    值显示由各子类自行实现
     /// </summary>
     [AddComponentMenu("Xeric Library/UI Action Vessel/XUIAvrgMDValue")]
     public class XUIAvrgMDValue : MonoBehaviour
@@ -49,19 +50,12 @@ namespace XericUI.ReflectionUIGenerator
 
         // ============ UI 文本插槽 ============
 
-        [Header("UI 文本插槽")]
+        [Header("UI 基类插槽")]
         [SerializeField, Tooltip("字段标签文本 — 显示 \"名称 (只读) ⚠警告\"，为 null 则不显示标签")]
 #if dUI_TextMeshPro
         protected TMPro.TMP_Text _fieldLabelText;
 #else
         protected UnityEngine.UI.Text _fieldLabelText;
-#endif
-
-        [SerializeField, Tooltip("值显示文本 — 可为 null（Slider/Color/Texture 子类不依赖文本）")]
-#if dUI_TextMeshPro
-        protected TMPro.TMP_Text _valueDisplayText;
-#else
-        protected UnityEngine.UI.Text _valueDisplayText;
 #endif
 
         [SerializeField, Tooltip("单位文本 — 可为 null")]
@@ -70,6 +64,9 @@ namespace XericUI.ReflectionUIGenerator
 #else
         protected UnityEngine.UI.Text _unitText;
 #endif
+
+        [SerializeField, Tooltip("单位容器 Transform — 单位文本为空时 SetActive(false) 隐藏")]
+        protected Transform _unitTransform;
 
         // ============ 公共属性 ============
 
@@ -102,7 +99,8 @@ namespace XericUI.ReflectionUIGenerator
             BoundMetaData = metaData;
             CurrentValidationState = ValidationState.Normal;
 
-            // 子类覆写点
+            // 单位可见性：无单位文本则隐藏单位节点
+            ApplyUnitVisibility();
         }
 
         /// <summary>
@@ -118,8 +116,10 @@ namespace XericUI.ReflectionUIGenerator
 
             // 重置 UI 文本
             if (_fieldLabelText != null) _fieldLabelText.text = "";
-            if (_valueDisplayText != null) _valueDisplayText.text = "";
             if (_unitText != null) _unitText.text = "";
+
+            // 重置单位可见性
+            if (_unitTransform != null) _unitTransform.gameObject.SetActive(true);
         }
 
         // ============ 核心绑定接口 ============
@@ -155,34 +155,17 @@ namespace XericUI.ReflectionUIGenerator
 
         /// <summary>
         /// 根据值和验证状态更新 UI 显示
-        /// 子类可覆写以处理专属组件更新（Slider.value, Image.color 等）
-        /// 基类负责合成标签文本、值文本颜色、单位文本
+        /// 子类必须覆写以处理专属组件更新（Slider.value, Image.color 等），
+        /// 并在覆写中调用 base.UpdateValueDisplay(value, state) 以刷新标签。
         /// </summary>
         protected virtual void UpdateValueDisplay(object value, ValidationState state)
         {
             // 1. 字段标签合成
             if (_fieldLabelText != null)
-            {
-                string label = BuildLabel(state);
-                _fieldLabelText.text = label;
-            }
+                _fieldLabelText.text = BuildLabel(state);
 
-            // 2. 值显示
-            if (_valueDisplayText != null)
-            {
-                string display = CurrentAccessor?.FormatDisplay(value) ?? value?.ToString() ?? "";
-                _valueDisplayText.text = display;
-
-                _valueDisplayText.color = state == ValidationState.Invalid
-                    ? Color.red
-                    : state == ValidationState.Warning
-                        ? new Color(1f, 0.92f, 0.016f) // yellow
-                        : Color.white;
-            }
-
-            // 3. 单位文本
-            if (_unitText != null)
-                _unitText.text = BoundMetaData?.UnitLabelName ?? "";
+            // 2. 单位文本 + 可见性
+            ApplyUnitText();
         }
 
         /// <summary>
@@ -211,6 +194,32 @@ namespace XericUI.ReflectionUIGenerator
             return sb.ToString();
         }
 
+        /// <summary>
+        /// 更新单位文本并控制可见性
+        /// </summary>
+        protected void ApplyUnitText()
+        {
+            string unit = BoundMetaData?.UnitLabelName;
+            bool hasUnit = !string.IsNullOrEmpty(unit);
+
+            if (_unitText != null)
+                _unitText.text = hasUnit ? unit : "";
+
+            if (_unitTransform != null)
+                _unitTransform.gameObject.SetActive(hasUnit);
+        }
+
+        /// <summary>
+        /// 仅刷新单位可见性（不更新文本内容）
+        /// </summary>
+        protected void ApplyUnitVisibility()
+        {
+            if (_unitTransform == null) return;
+
+            string unit = BoundMetaData?.UnitLabelName;
+            _unitTransform.gameObject.SetActive(!string.IsNullOrEmpty(unit));
+        }
+
         // ============ 验证状态回调 ============
 
         /// <summary>
@@ -224,16 +233,6 @@ namespace XericUI.ReflectionUIGenerator
             // 刷新标签文本（警告/无效标记在标签上）
             if (_fieldLabelText != null)
                 _fieldLabelText.text = BuildLabel(state);
-
-            // 值文本颜色
-            if (_valueDisplayText != null)
-            {
-                _valueDisplayText.color = state == ValidationState.Invalid
-                    ? Color.red
-                    : state == ValidationState.Warning
-                        ? new Color(1f, 0.92f, 0.016f)
-                        : Color.white;
-            }
         }
 
         // ============ 元数据广播 ============

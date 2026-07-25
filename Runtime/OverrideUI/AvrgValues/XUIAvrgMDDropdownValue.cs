@@ -8,17 +8,23 @@ namespace XericUI.ReflectionUIGenerator
     /// <summary>
     /// Dropdown 值组件 — 处理 string / int / enum 类型的下拉选择交互
     /// 预设选项来源：元数据的 PresetOptions 或 enum 类型的枚举名
+    /// 
+    /// 选项动态创建：OnPoolGet 时根据元数据 PresetOptions 构建选项列表，
+    /// BindToAccessor 时通过 AddOptions() 填充到 Dropdown 组件。
     /// </summary>
     [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDDropdownValue")]
     public class XUIAvrgMDDropdownValue : XUIAvrgMDValue
     {
-        [SerializeField]
-        [Tooltip("关联的 Dropdown 组件（未设置则自动查找）")]
+        [SerializeField, Tooltip("关联的 Dropdown 组件（未设置则自动查找）")]
 #if dUI_TextMeshPro
         private TMPro.TMP_Dropdown _dropdown;
 #else
         private Dropdown _dropdown;
 #endif
+
+        [Header("选项动态创建")]
+        [SerializeField, Tooltip("选项项预制体 Transform（可选，用于自定义选项创建逻辑）")]
+        private Transform _optionItemPrefab;
 
         private List<string> _options;
 
@@ -37,14 +43,53 @@ namespace XericUI.ReflectionUIGenerator
         {
             base.OnPoolGet(metaData);
             _options = BuildOptions(metaData?.ValueType);
+
+            // 动态创建选项对象（子类可覆写）
+            CreateOptionItems();
         }
 
         public override void OnPoolRelease()
         {
             if (_dropdown != null)
                 _dropdown.onValueChanged.RemoveAllListeners();
+
+            DestroyOptionItems();
             _options = null;
             base.OnPoolRelease();
+        }
+
+        // ============ 动态选项创建 ============
+
+        /// <summary>
+        /// 根据预设选项动态创建选项子对象
+        /// 子类可覆写以实现自定义选项创建（如图标、颜色等）
+        /// </summary>
+        protected virtual void CreateOptionItems()
+        {
+            if (_optionItemPrefab == null || _options == null) return;
+
+            for (int i = 0; i < _options.Count; i++)
+            {
+                var item = Instantiate(_optionItemPrefab, _optionItemPrefab.parent);
+                item.name = $"Option_{i}_{_options[i]}";
+                item.gameObject.SetActive(true);
+            }
+        }
+
+        /// <summary>
+        /// 销毁动态创建的选项子对象
+        /// </summary>
+        protected virtual void DestroyOptionItems()
+        {
+            if (_optionItemPrefab == null) return;
+
+            var parent = _optionItemPrefab.parent;
+            for (int i = parent.childCount - 1; i >= 0; i--)
+            {
+                var child = parent.GetChild(i);
+                if (child != _optionItemPrefab)
+                    Destroy(child.gameObject);
+            }
         }
 
         // ============ 核心绑定 ============
