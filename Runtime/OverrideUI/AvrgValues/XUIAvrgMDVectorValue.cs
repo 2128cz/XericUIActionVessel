@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using XericLibrary.Runtime.SuperStyleSheet;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -26,6 +27,25 @@ namespace XericUI.ReflectionUIGenerator
         [Tooltip("W 分量 InputField（Vector4 时使用）")]
         private InputField _inputW;
 
+        // ============ 样式表参数 ============
+        private readonly StyleMember _styleLayoutDirection = new() { StylePath = "xuiavrg/vector/layoutDirection" };
+
+        // ============ 生命周期 ============
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            _styleLayoutDirection.Register();
+        }
+
+        protected override void OnDisable()
+        {
+            base.OnDisable();
+            _styleLayoutDirection.Unregister();
+        }
+
+        // ============ 核心绑定 ============
+
         public override void BindToAccessor(
             IAvrgValueAccessor accessor,
             AvrgMvvmBinding binding,
@@ -43,6 +63,11 @@ namespace XericUI.ReflectionUIGenerator
             SetInputActive(_inputZ, 2, componentCount);
             SetInputActive(_inputW, 3, componentCount);
 
+            // 样式表控制排列方向
+            var dirVal = GetStyleValue(_styleLayoutDirection);
+            string dir = dirVal?.GetValueAsString() ?? "Horizontal";
+            ApplyLayoutDirection(dir);
+
             // 为每个输入注册事件
             BindInputField(_inputX, 0, accessor, binding, scheduler);
             BindInputField(_inputY, 1, accessor, binding, scheduler);
@@ -58,7 +83,36 @@ namespace XericUI.ReflectionUIGenerator
             // 首次同步
             var initialValue = accessor.GetValue();
             UpdateAllInputs(initialValue);
+
+            RefreshCommonNodes();
         }
+
+        // ============ 布局 ============
+
+        private void ApplyLayoutDirection(string dir)
+        {
+            var layout = GetComponent<HorizontalOrVerticalLayoutGroup>();
+            if (layout == null) return;
+
+            if (dir == "Vertical")
+            {
+                if (layout is HorizontalLayoutGroup)
+                {
+                    Destroy(layout);
+                    gameObject.AddComponent<VerticalLayoutGroup>();
+                }
+            }
+            else
+            {
+                if (layout is VerticalLayoutGroup)
+                {
+                    Destroy(layout);
+                    gameObject.AddComponent<HorizontalLayoutGroup>();
+                }
+            }
+        }
+
+        // ============ 输入绑定 ============
 
         private void BindInputField(InputField input, int componentIndex,
             IAvrgValueAccessor accessor, AvrgMvvmBinding binding, AvrgMvvmScheduler scheduler)

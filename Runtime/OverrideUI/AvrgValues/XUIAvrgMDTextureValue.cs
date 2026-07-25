@@ -14,9 +14,11 @@ namespace XericUI.ReflectionUIGenerator
         [Tooltip("用于展示纹理的 RawImage 组件（未设置则自动查找）")]
         private RawImage _textureDisplay;
 
+#if dUI_TextMeshPro
         [SerializeField]
         [Tooltip("纹理名称标签（可选，用于显示纹理资源名）")]
         private TMPro.TMP_Text _nameLabel;
+#endif
 
         private void Awake()
         {
@@ -41,10 +43,12 @@ namespace XericUI.ReflectionUIGenerator
                     _textureDisplay.texture = tex;
                 }
 
+#if dUI_TextMeshPro
                 if (_nameLabel != null)
                 {
                     _nameLabel.text = value is Texture t && t != null ? t.name : "None";
                 }
+#endif
             };
 
             // 首次同步
@@ -54,10 +58,12 @@ namespace XericUI.ReflectionUIGenerator
                 _textureDisplay.texture = initTex;
             }
 
+#if dUI_TextMeshPro
             if (_nameLabel != null)
             {
                 _nameLabel.text = initialValue is Texture t && t != null ? t.name : "None";
             }
+#endif
         }
     }
 }

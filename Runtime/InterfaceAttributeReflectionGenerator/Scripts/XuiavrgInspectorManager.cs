@@ -85,6 +85,20 @@ namespace XericUI.ReflectionUIGenerator
 
         #endregion
 
+        #region Unity 生命周期
+
+        private void OnEnable()
+        {
+            XuiavrgStyleDefaults.EnsureDefaults();
+        }
+
+        private void OnDestroy()
+        {
+            ClearAll();
+        }
+
+        #endregion
+
         #region 核心生命周期
 
         public void BuildFromMetaDataSet(AvrgMemberMetaDataSet metaDataSet,
@@ -443,12 +457,5 @@ namespace XericUI.ReflectionUIGenerator
 
             _leafGroupMap.Clear();
         }
-
-        private void OnDestroy()
-        {
-            ClearAll();
-        }
     }
-
-    #endregion
 }

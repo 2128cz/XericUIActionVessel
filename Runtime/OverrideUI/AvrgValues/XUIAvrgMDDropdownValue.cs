@@ -14,11 +14,19 @@ namespace XericUI.ReflectionUIGenerator
     {
         [SerializeField]
         [Tooltip("关联的 Dropdown 组件（未设置则自动查找）")]
+#if dUI_TextMeshPro
+        private TMPro.TMP_Dropdown _dropdown;
+#else
         private Dropdown _dropdown;
+#endif
 
         private void Awake()
         {
+#if dUI_TextMeshPro
+            if (_dropdown == null) _dropdown = GetComponent<TMPro.TMP_Dropdown>();
+#else
             if (_dropdown == null) _dropdown = GetComponent<Dropdown>();
+#endif
         }
 
         public override void BindToAccessor(
@@ -64,15 +72,12 @@ namespace XericUI.ReflectionUIGenerator
 
         private List<string> BuildOptions(System.Type valueType)
         {
-            // 1. 从元数据 PresetOptions 获取
             if (BoundMetaData?.PresetOptions != null && BoundMetaData.PresetOptions.Count > 0)
                 return BoundMetaData.PresetOptions.ToList();
 
-            // 2. enum 类型：自动提取枚举名
             if (valueType != null && valueType.IsEnum)
                 return System.Enum.GetNames(valueType).ToList();
 
-            // 3. 回退
             return new List<string>();
         }
 

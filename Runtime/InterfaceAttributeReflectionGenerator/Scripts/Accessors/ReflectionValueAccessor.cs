@@ -26,7 +26,7 @@ namespace XericUI.ReflectionUIGenerator
                 _ => typeof(object)
             };
 
-            IsReadOnly = memberInfo is PropertyInfo pi && !pi.CanWrite;
+            IsReadOnly = memberInfo is PropertyInfo pi2 && !pi2.CanWrite;
         }
 
         public object GetValue()

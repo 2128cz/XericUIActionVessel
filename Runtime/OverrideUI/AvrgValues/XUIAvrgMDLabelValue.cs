@@ -13,14 +13,18 @@ namespace XericUI.ReflectionUIGenerator
         [Tooltip("关联的 Text 组件（未设置则自动查找）")]
         private UnityEngine.UI.Text _uiText;
 
+#if dUI_TextMeshPro
         [SerializeField]
         [Tooltip("关联的 TMP_Text 组件（未设置则自动查找）")]
         private TMPro.TMP_Text _tmpText;
+#endif
 
         private void Awake()
         {
             if (_uiText == null) _uiText = GetComponent<UnityEngine.UI.Text>();
+#if dUI_TextMeshPro
             if (_tmpText == null) _tmpText = GetComponent<TMPro.TMP_Text>();
+#endif
         }
 
         public override void BindToAccessor(
@@ -48,9 +52,15 @@ namespace XericUI.ReflectionUIGenerator
         {
             string displayStr = value?.ToString() ?? "";
 
+#if dUI_TextMeshPro
             if (_tmpText != null)
+            {
                 _tmpText.text = displayStr;
-            else if (_uiText != null)
+                return;
+            }
+#endif
+
+            if (_uiText != null)
                 _uiText.text = displayStr;
         }
     }

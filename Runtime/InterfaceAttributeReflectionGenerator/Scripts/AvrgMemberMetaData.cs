@@ -29,6 +29,12 @@ namespace XericUI.ReflectionUIGenerator
         /// <summary>值类型</summary>
         public Type ValueType { get; set; }
 
+        /// <summary>
+        /// 样式表命名空间（用于 SuperStyleSheet 样式查询）
+        /// 默认 "default"。可由类级或字段级 [XuiavrgStyleNamespace] 覆写
+        /// </summary>
+        public string StyleNamespace { get; set; } = "default";
+
         // ============ UI 映射 ============
 
         /// <summary>功能标记</summary>

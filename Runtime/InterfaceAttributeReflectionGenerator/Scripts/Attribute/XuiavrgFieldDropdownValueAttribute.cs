@@ -23,6 +23,11 @@ namespace XericUI.ReflectionUIGenerator
         {
             Options = options ?? Array.Empty<string>();
         }
+        public XuiavrgFieldDropdownValueAttribute(PresetOptionsMergeMode mergeMode, params string[] options)
+        {
+            MergeMode =  mergeMode;
+            Options = options ?? Array.Empty<string>();
+        }
 
         public void BindMetaData(AvrgMemberMetaData metaData)
         {

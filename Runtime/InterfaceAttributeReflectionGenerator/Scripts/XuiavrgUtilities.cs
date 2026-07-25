@@ -35,6 +35,11 @@ namespace XericUI.ReflectionUIGenerator
 
             var metaDataSet = new AvrgMemberMetaDataSet();
 
+            // ★ 收集类级别 IXuiavrgAttribute — 作为所有字段的基础模板
+            var classAttributes = type.GetCustomAttributes()
+                .OfType<IXuiavrgAttribute>()
+                .ToList();
+
             foreach (var memberInfo in type.GetRuntimeMemberInfo())
             {
                 // 检查隐藏标记
@@ -59,16 +64,22 @@ namespace XericUI.ReflectionUIGenerator
                     PropertyCheckKey = valueType?.FullName,
                 };
 
-                // 收集并执行所有 IXuiavrgAttribute
-                var attributes = memberInfo.GetCustomAttributes()
+                // ★ 第1步: 先应用类级特性（设置默认值）
+                foreach (var classAttr in classAttributes)
+                {
+                    classAttr.BindMetaData(metaData);
+                }
+
+                // ★ 第2步: 再应用字段级特性（可覆盖类级设置）
+                var fieldAttributes = memberInfo.GetCustomAttributes()
                     .OfType<IXuiavrgAttribute>()
                     .ToList();
 
-                metaData.Attributes = attributes;
+                metaData.Attributes = fieldAttributes;
 
-                foreach (var attr in attributes)
+                foreach (var fieldAttr in fieldAttributes)
                 {
-                    attr.BindMetaData(metaData);
+                    fieldAttr.BindMetaData(metaData);
                 }
 
                 metaDataSet.Add(metaData);
