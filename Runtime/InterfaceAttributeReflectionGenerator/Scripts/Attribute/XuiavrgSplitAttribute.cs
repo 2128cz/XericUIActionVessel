@@ -8,12 +8,11 @@ namespace XericUI.ReflectionUIGenerator
     /// 将一个复合类型（如 Vector2）拆分为多个子属性，分别绑定到不同的 UI 元素
     /// 
     /// 使用示例：
-    /// [XuiavrgFieldEntryGroup("speed")]
     /// [XuiavrgSplit("x", "最小")]
     /// [XuiavrgSplit("y", "最大")]
     /// public Vector2 speedRange = new Vector2(0, 100);
     /// 
-    /// 上述代码创建一个 "speed" 编组的 Entry，内部包含两个子绑定：
+    /// 上述代码创建一个编组 Entry，内部包含两个子元数据：
     /// speedRange.x 绑定到 UI 的"最小"输入，speedRange.y 绑定到"最大"输入
     /// 子绑定通过 XUIAvrgMDValue.BindingSlots 与预制体上的 UI 组件匹配
     /// </summary>
@@ -39,13 +38,12 @@ namespace XericUI.ReflectionUIGenerator
 
         public void BindMetaData(AvrgMemberMetaData metaData)
         {
-            // 创建子元数据
+            // 创建子元数据 — 纯元数据，不持有实例
             var subMetaData = new AvrgMemberMetaData
             {
                 MemberName = $"{metaData.MemberName}.{PropertyPath}",
                 PropertyPath = PropertyPath,
                 LabelName = DisplayLabel ?? PropertyPath,
-                TargetInstance = null, // 由运行时闭包解析
                 Hide = metaData.Hide,
                 Required = metaData.Required,
                 FieldOrder = metaData.FieldOrder,
@@ -74,7 +72,6 @@ namespace XericUI.ReflectionUIGenerator
             if (parentType == null || string.IsNullOrEmpty(propertyPath))
                 return null;
 
-            // 仅支持单层路径
             if (propertyPath.Contains('/'))
                 return null;
 

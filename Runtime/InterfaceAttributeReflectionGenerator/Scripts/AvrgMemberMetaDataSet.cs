@@ -8,7 +8,7 @@ namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
     /// 元数据集
-    /// 包含从对象反射提取的完整元数据，以及用于生成 MVVM 绑定的 BuildMDVM() 方法
+    /// 包含从对象/材质反射提取的完整元数据，以及用于生成 MVVM 绑定的 BuildMDVM() 方法
     /// </summary>
     public class AvrgMemberMetaDataSet
     {
@@ -33,7 +33,6 @@ namespace XericUI.ReflectionUIGenerator
         /// </summary>
         internal void MergeGroupEntries()
         {
-            // 提取编组和非编组
             var grouped = _metaDataList
                 .Where(m => !string.IsNullOrEmpty(m.GroupPath))
                 .GroupBy(m => m.GroupPath)
@@ -47,9 +46,7 @@ namespace XericUI.ReflectionUIGenerator
 
             foreach (var gEntry in grouped)
             {
-                // 编组内第一个成员作为主元数据
                 var first = gEntry.First();
-                // 收集组内所有成员的 SubMetaDataList（合并拆分属性）
                 foreach (var member in gEntry)
                 {
                     if (member.SubMetaDataList?.Count > 0)
@@ -62,9 +59,7 @@ namespace XericUI.ReflectionUIGenerator
                 merged.Add(first);
             }
 
-            // 非编组直接追加
             merged.AddRange(nonGrouped);
-
             _metaDataList = merged;
         }
 
@@ -82,9 +77,10 @@ namespace XericUI.ReflectionUIGenerator
         }
 
         /// <summary>
-        /// 为元数据生成对应的 MVVM 值绑定模板
+        /// 为元数据生成对应的 MVVM 值绑定
+        /// 通过 AccessorFactory 创建 IAvrgValueAccessor 完成数据读写
         /// </summary>
-        /// <param name="businessTarget">可选的业务目标对象（如果元数据中没有绑定目标，则在此传入）</param>
+        /// <param name="businessTarget">目标实例（C# 对象、Material 等）</param>
         /// <param name="resolverConfig">可选的冲突解决配置</param>
         /// <returns>绑定集合</returns>
         public AvrgMvvmBindingCollection BuildMDVM(
@@ -92,30 +88,46 @@ namespace XericUI.ReflectionUIGenerator
             AvrgMvvmResolverConfig resolverConfig = null)
         {
             var bindingCollection = new AvrgMvvmBindingCollection();
+            bindingCollection.SourceMetaDataSet = this;
             var scheduler = new AvrgMvvmScheduler(resolverConfig);
 
             foreach (var metaData in _metaDataList)
             {
-                // 确定目标实例
-                var target = metaData.TargetInstance ?? businessTarget;
-                if (target == null)
+                if (metaData.AccessorFactory == null) continue;
+                if (businessTarget == null)
+                {
+                    Debug.LogWarning(
+                        $"[Xuiavrg] 元数据 '{metaData.MemberName}' 缺少 targetInstance，跳过绑定");
                     continue;
+                }
+
+                var accessor = metaData.AccessorFactory.CreateAccessor(businessTarget);
+                if (accessor == null) continue;
 
                 // 创建主绑定
                 var binding = new AvrgMvvmBinding
                 {
                     MetaData = metaData,
-                    ReadFunc = () => metaData.GetValue(),
+                    ReadFunc = () => accessor.GetValue(),
+                    Accessor = accessor,
                 };
 
                 var capturedBinding = binding;
-                binding.WriteAction = (val) =>
-                {
-                    metaData.SetValue(val);
-                    scheduler.MarkDataDirty(capturedBinding);
-                };
 
-                // 如果元数据有拆分子属性，创建子绑定
+                if (accessor.IsReadOnly)
+                {
+                    binding.WriteAction = null;
+                }
+                else
+                {
+                    binding.WriteAction = (val) =>
+                    {
+                        accessor.SetValue(val);
+                        scheduler.MarkDataDirty(capturedBinding);
+                    };
+                }
+
+                // 拆分属性子绑定
                 if (metaData.SubMetaDataList?.Count > 0)
                 {
                     binding.SubBindings = new List<AvrgMvvmBinding>();
@@ -128,14 +140,12 @@ namespace XericUI.ReflectionUIGenerator
                         var subBinding = new AvrgMvvmBinding
                         {
                             MetaData = subMetaData,
-                            // 从父值中读取子属性
-                            ReadFunc = () => ReadSubProperty(metaData.GetValue(), subPath),
-                            // 修改子属性并写回父值
+                            ReadFunc = () => ReadSubProperty(accessor.GetValue(), subPath),
                             WriteAction = (val) =>
                             {
-                                var parentVal = metaData.GetValue();
+                                var parentVal = accessor.GetValue();
                                 var modifiedParent = WriteSubProperty(parentVal, subPath, val);
-                                metaData.SetValue(modifiedParent);
+                                accessor.SetValue(modifiedParent);
                                 scheduler.MarkDataDirty(capturedBinding);
                             },
                         };
@@ -155,16 +165,11 @@ namespace XericUI.ReflectionUIGenerator
 
         // ============ 子属性访问辅助方法 ============
 
-        /// <summary>
-        /// 从父值中读取子属性（支持单层路径如 "x"、"y"）
-        /// 例如：ReadSubProperty(Vector2(1,2), "x") → 1f
-        /// </summary>
         private static object ReadSubProperty(object parentValue, string propertyPath)
         {
             if (parentValue == null || string.IsNullOrEmpty(propertyPath))
                 return null;
 
-            // 仅支持单层路径
             if (propertyPath.Contains('/'))
             {
                 Debug.LogWarning($"[Xuiavrg] 暂不支持多层嵌套路径 '{propertyPath}'");
@@ -182,10 +187,6 @@ namespace XericUI.ReflectionUIGenerator
             return null;
         }
 
-        /// <summary>
-        /// 修改父值中的子属性并返回修改后的父值
-        /// 适用于值类型（struct）和引用类型
-        /// </summary>
         private static object WriteSubProperty(object parentValue, string propertyPath, object value)
         {
             if (parentValue == null || string.IsNullOrEmpty(propertyPath))
@@ -221,8 +222,6 @@ namespace XericUI.ReflectionUIGenerator
         /// <summary>
         /// 对当前元数据集执行属性检查验证
         /// </summary>
-        /// <param name="valueRangeConfig">值范围配置（可选，不传入则不执行范围检查）</param>
-        /// <returns>验证结果集合</returns>
         public AvrgValidationResultSet Validate(AvrgValueRangeConfig valueRangeConfig = null)
         {
             var resultSet = new AvrgValidationResultSet();
@@ -232,7 +231,6 @@ namespace XericUI.ReflectionUIGenerator
                 if (metaData.Hide)
                     continue;
 
-                // 只有标记了 PropertyCheck 的才验证
                 if (!metaData.Required && !metaData.ValidateReasonable
                     && !metaData.ValidateWarning && !metaData.ValidateInvalid)
                 {
@@ -240,13 +238,13 @@ namespace XericUI.ReflectionUIGenerator
                     {
                         MetaData = metaData,
                         Result = AvrgMemberCheckResult.Skipped,
-                        CurrentValueString = metaData.GetValue()?.ToString(),
+                        CurrentValueString = metaData.DefaultValue?.ToString(),
                         Message = "未标记属性检查",
                     });
                     continue;
                 }
 
-                var value = metaData.GetValue();
+                var value = metaData.DefaultValue;
                 var checkResult = CheckSingleMember(metaData, value, valueRangeConfig);
                 resultSet.Results.Add(checkResult);
             }
@@ -254,9 +252,6 @@ namespace XericUI.ReflectionUIGenerator
             return resultSet;
         }
 
-        /// <summary>
-        /// 验证单个成员
-        /// </summary>
         private AvrgMemberValidationResult CheckSingleMember(
             AvrgMemberMetaData metaData,
             object value,
@@ -268,7 +263,6 @@ namespace XericUI.ReflectionUIGenerator
                 CurrentValueString = value?.ToString() ?? "(null)",
             };
 
-            // 根据 CheckKey 查找值范围规则
             AvrgValueRangeEntry rangeEntry = null;
             string checkKey = !string.IsNullOrEmpty(metaData.PropertyCheckKey)
                 ? metaData.PropertyCheckKey
@@ -279,22 +273,19 @@ namespace XericUI.ReflectionUIGenerator
                 rangeEntry = rangeConfig.FindEntry(checkKey);
             }
 
-            // ——— 优先级 1: 空值检查 (Required) ———
+            // 优先级 1: 空值检查 (Required)
             if (metaData.Required)
             {
                 bool isEmpty = false;
 
-                // 引用类型 null
                 if (value == null)
                 {
                     isEmpty = true;
                 }
-                // 字符串 null/空
                 else if (value is string str)
                 {
                     isEmpty = string.IsNullOrEmpty(str);
                 }
-                // 使用 ValueRangeEntry 的 IsEmpty 判断
                 else if (rangeEntry != null && !rangeEntry.skipEmptyCheck)
                 {
                     isEmpty = rangeEntry.IsEmpty(value);
@@ -308,7 +299,6 @@ namespace XericUI.ReflectionUIGenerator
                 }
             }
 
-            // 如果没有范围配置，无法继续检查
             if (rangeEntry == null)
             {
                 result.Result = AvrgMemberCheckResult.Valid;
@@ -316,7 +306,7 @@ namespace XericUI.ReflectionUIGenerator
                 return result;
             }
 
-            // ——— 优先级 2: 合理值检查（最高优先级，命中即通过） ———
+            // 优先级 2: 合理值检查
             if (metaData.ValidateReasonable && rangeEntry.IsReasonable(value))
             {
                 result.Result = AvrgMemberCheckResult.Valid;
@@ -324,7 +314,7 @@ namespace XericUI.ReflectionUIGenerator
                 return result;
             }
 
-            // ——— 优先级 3: 无效值检查 ———
+            // 优先级 3: 无效值检查
             if (metaData.ValidateInvalid && rangeEntry.IsInvalid(value))
             {
                 result.Result = AvrgMemberCheckResult.Invalid;
@@ -332,7 +322,7 @@ namespace XericUI.ReflectionUIGenerator
                 return result;
             }
 
-            // ——— 优先级 4: 警告值检查 ———
+            // 优先级 4: 警告值检查
             if (metaData.ValidateWarning && rangeEntry.IsWarning(value))
             {
                 result.Result = AvrgMemberCheckResult.Warning;
@@ -340,7 +330,6 @@ namespace XericUI.ReflectionUIGenerator
                 return result;
             }
 
-            // ——— 最终: 通过 ———
             result.Result = AvrgMemberCheckResult.Valid;
             result.Message = "通过";
             return result;

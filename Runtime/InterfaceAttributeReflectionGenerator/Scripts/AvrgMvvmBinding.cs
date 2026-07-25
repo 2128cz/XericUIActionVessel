@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -19,6 +18,12 @@ namespace XericUI.ReflectionUIGenerator
 
         /// <summary>写入值到数据源的委托</summary>
         public Action<object> WriteAction { get; set; }
+
+        /// <summary>
+        /// 值访问器引用（在 BuildMDVM 时创建，供 UI 组件使用）
+        /// 提供 ValueType / IsReadOnly / FormatDisplay 等扩展能力
+        /// </summary>
+        public IAvrgValueAccessor Accessor { get; set; }
 
         /// <summary>
         /// 拆分属性子绑定列表

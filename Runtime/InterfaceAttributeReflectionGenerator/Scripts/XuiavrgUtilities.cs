@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -18,19 +20,20 @@ namespace XericUI.ReflectionUIGenerator
                 yield return property;
         }
 
+        // ============ C# 对象: 元数据提取（纯元数据，不绑定实例）============
+
         /// <summary>
-        /// 从任意对象提取 AvrgMemberMetaData 元数据集
-        /// 反射识别成员、识别 IXuiavrgAttribute 标记、执行标记绑定的完整流程
+        /// 从类型提取 AvrgMemberMetaData 元数据集（不含实例绑定）
+        /// 用于构建元数据模板，可复用于不同实例
         /// </summary>
-        /// <param name="source">待提取的数据对象</param>
-        /// <returns>提取完成的元数据集</returns>
-        public static AvrgMemberMetaDataSet ExtractAvrgMemberMetaData(this object source)
+        /// <param name="type">待提取的类型</param>
+        /// <returns>纯元数据集（无实例引用，由 AccessorFactory 持有反射信息）</returns>
+        public static AvrgMemberMetaDataSet ExtractAvrgMemberMetaData(this Type type)
         {
-            if (source == null)
-                throw new ArgumentNullException(nameof(source));
+            if (type == null)
+                throw new ArgumentNullException(nameof(type));
 
             var metaDataSet = new AvrgMemberMetaDataSet();
-            var type = source.GetType();
 
             foreach (var memberInfo in type.GetRuntimeMemberInfo())
             {
@@ -39,52 +42,30 @@ namespace XericUI.ReflectionUIGenerator
                 if (hideAttr != null && hideAttr.Hide)
                     continue;
 
-                // 创建元数据
+                // 识别值类型
+                Type valueType = memberInfo switch
+                {
+                    PropertyInfo pi => pi.PropertyType,
+                    FieldInfo fi => fi.FieldType,
+                    _ => typeof(object)
+                };
+
+                // 创建元数据 — 不持有 MemberInfo 和 TargetInstance
                 var metaData = new AvrgMemberMetaData
                 {
                     MemberName = memberInfo.Name,
-                    MemberInfo = memberInfo,
-                    TargetInstance = source,
+                    ValueType = valueType,
+                    AccessorFactory = new ReflectionAccessorFactory(memberInfo),
+                    PropertyCheckKey = valueType?.FullName,
                 };
 
-                // 识别值类型和 IsProperty
-                switch (memberInfo)
-                {
-                    case PropertyInfo pi:
-                        metaData.IsProperty = true;
-                        metaData.ValueType = pi.PropertyType;
-                        break;
-                    case FieldInfo fi:
-                        metaData.IsProperty = false;
-                        metaData.ValueType = fi.FieldType;
-                        break;
-                }
-
-                // 提取字段默认值（类初始值）
-                // Unity 序列化字段可以通过反射读取实例上的当前值作为"默认"参考
-                // 但更准确的在类声明阶段的初始值需要通过运行时观察或 Fallback 判断
-                // 此处策略：如果 TargetInstance 非 null，直接 ReadValue 作为 DefaultValue
-                if (source != null && memberInfo is FieldInfo fi2)
-                {
-                    metaData.DefaultValue = fi2.GetValue(source);
-                }
-                else if (source != null && memberInfo is PropertyInfo pi2 && pi2.CanRead)
-                {
-                    metaData.DefaultValue = pi2.GetValue(source);
-                }
-
-                // 设置 PropertyCheckKey 默认值（用类型全称）
-                if (metaData.ValueType != null)
-                    metaData.PropertyCheckKey = metaData.ValueType.FullName;
-
-                // 收集所有 IXuiavrgAttribute
+                // 收集并执行所有 IXuiavrgAttribute
                 var attributes = memberInfo.GetCustomAttributes()
                     .OfType<IXuiavrgAttribute>()
                     .ToList();
 
                 metaData.Attributes = attributes;
 
-                // 按序执行 BindMetaData
                 foreach (var attr in attributes)
                 {
                     attr.BindMetaData(metaData);
@@ -103,11 +84,147 @@ namespace XericUI.ReflectionUIGenerator
         }
 
         /// <summary>
-        /// 从任意对象提取 AvrgMemberMetaData 元数据集的泛型版本
+        /// 从对象实例提取元数据并一步生成绑定（便捷方法）
+        /// 内部调用 Type.ExtractAvrgMemberMetaData() + BuildMDVM()
         /// </summary>
-        public static AvrgMemberMetaDataSet ExtractAvrgMemberMetaData<T>(this T source)
+        public static AvrgMvvmBindingCollection BuildBindingsFromObject(
+            this object source,
+            AvrgMvvmResolverConfig resolverConfig = null)
         {
-            return ExtractAvrgMemberMetaData((object)source);
+            if (source == null)
+                throw new ArgumentNullException(nameof(source));
+
+            var metaDataSet = source.GetType().ExtractAvrgMemberMetaData();
+            return metaDataSet.BuildMDVM(source, resolverConfig);
+        }
+
+        // ============ Material: 元数据提取 ============
+
+        /// <summary>
+        /// 从 Material 的 Shader 属性中提取元数据集
+        /// </summary>
+        /// <param name="material">目标 Material</param>
+        /// <returns>纯元数据集（AccessorFactory 持有 MaterialPropertyAccessorFactory）</returns>
+        public static AvrgMemberMetaDataSet ExtractFromMaterial(this Material material)
+        {
+            if (material == null)
+                throw new ArgumentNullException(nameof(material));
+
+            var shader = material.shader;
+            if (shader == null)
+            {
+                Debug.LogError("[Xuiavrg] Material 没有关联的 Shader");
+                return null;
+            }
+
+            var metaDataSet = new AvrgMemberMetaDataSet();
+            int propCount = shader.GetPropertyCount();
+
+            for (int i = 0; i < propCount; i++)
+            {
+                var propName = shader.GetPropertyName(i);
+                var shaderType = shader.GetPropertyType(i);
+                var desc = shader.GetPropertyDescription(i);
+                var flags = shader.GetPropertyFlags(i);
+
+                // 跳过隐藏属性
+                if ((flags & UnityEngine.Rendering.ShaderPropertyFlags.HideInInspector) != 0)
+                    continue;
+
+                // ShaderPropertyType → C# Type + Tag
+                (Type valueType, XuiavrgFieldTag tag) = MapShaderPropertyType(shaderType, propName);
+
+                var metaData = new AvrgMemberMetaData
+                {
+                    MemberName = propName,
+                    ValueType = valueType,
+                    LabelName = !string.IsNullOrEmpty(desc) ? desc : FormatPropertyName(propName),
+                    Tag = tag,
+                    AccessorFactory = new MaterialPropertyAccessorFactory(propName, shaderType, valueType),
+                };
+
+                // 读取当前值作为 DefaultValue
+                metaData.DefaultValue = ReadMaterialProperty(material, propName, shaderType);
+
+                // Range 属性：提取范围限制
+                if (shaderType == ShaderPropertyType.Range)
+                {
+                    var limits = shader.GetPropertyRangeLimits(i);
+                    metaData.RangeMin = limits.x;
+                    metaData.RangeMax = limits.y;
+                }
+
+                metaDataSet.Add(metaData);
+            }
+
+            // ===== Shader Keywords 提取（只读）=====
+            try
+            {
+                var keywordSpace = shader.keywordSpace;
+                foreach (var kw in keywordSpace.keywords)
+                {
+                    bool isEnabled = material.IsKeywordEnabled(kw.name);
+                    var kwMetaData = new AvrgMemberMetaData
+                    {
+                        MemberName = $"kwd_{kw.name}",
+                        ValueType = typeof(bool),
+                        LabelName = $"[Keyword] {kw.name}",
+                        Tag = XuiavrgFieldTag.Toggle,
+                        DefaultValue = isEnabled,
+                        AccessorFactory = new MaterialPropertyAccessorFactory(
+                            kw.name,
+                            ShaderPropertyType.Float, // Keywords 不是标准属性，用 Float 占位
+                            typeof(bool),
+                            isReadOnly: true),
+                    };
+                    metaDataSet.Add(kwMetaData);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"[Xuiavrg] 提取 Shader Keywords 失败: {e.Message}");
+            }
+
+            metaDataSet.SortByFieldOrder();
+            return metaDataSet;
+        }
+
+        private static (Type valueType, XuiavrgFieldTag tag) MapShaderPropertyType(
+            ShaderPropertyType shaderType, string propName)
+        {
+            return shaderType switch
+            {
+                ShaderPropertyType.Float => (typeof(float), XuiavrgFieldTag.Input),
+                ShaderPropertyType.Range => (typeof(float), XuiavrgFieldTag.Slider),
+                ShaderPropertyType.Int => (typeof(int), XuiavrgFieldTag.Input),
+                ShaderPropertyType.Color => (typeof(Color), XuiavrgFieldTag.Color),
+                ShaderPropertyType.Vector => (typeof(Vector4), XuiavrgFieldTag.Vector),
+                ShaderPropertyType.Texture => (typeof(Texture), XuiavrgFieldTag.Texture),
+                _ => (typeof(object), XuiavrgFieldTag.None),
+            };
+        }
+
+        private static object ReadMaterialProperty(Material material, string propName,
+            ShaderPropertyType shaderType)
+        {
+            return shaderType switch
+            {
+                ShaderPropertyType.Float or ShaderPropertyType.Range => material.GetFloat(propName),
+                ShaderPropertyType.Int => material.GetInt(propName),
+                ShaderPropertyType.Color => material.GetColor(propName),
+                ShaderPropertyType.Vector => material.GetVector(propName),
+                ShaderPropertyType.Texture => material.GetTexture(propName),
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// 属性名格式化（_MainTex → MainTex, _ShadowColor → Shadow Color）
+        /// </summary>
+        private static string FormatPropertyName(string propName)
+        {
+            if (string.IsNullOrEmpty(propName)) return propName;
+            return propName.TrimStart('_').Replace('_', ' ');
         }
     }
 }

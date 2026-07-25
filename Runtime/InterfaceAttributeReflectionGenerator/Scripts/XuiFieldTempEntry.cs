@@ -74,24 +74,33 @@ namespace XericUI.ReflectionUIGenerator
     /// <summary>
     /// 字段临时 Entry 实现类
     /// 作为数据对象和 UI 组件之间的中间缓存层
+    /// 
+    /// UI 交互事件的分配通过 XUIAvrgMDValue.BindToAccessor() 的多态机制完成，
+    /// 各类 XUIAvrgMDValue 子类自行管理其专属 UI 组件的交互订阅。
     /// </summary>
     public class XuiFieldTempEntry : IFieldEntry
     {
         #region 对象池
 
-        internal static ObjectPool<XuiFieldTempEntry> Pool { get; private set; }
-
-        static XuiFieldTempEntry()
+        private static ObjectPool<XuiFieldTempEntry> _pool;
+        internal static ObjectPool<XuiFieldTempEntry> Pool
         {
-            Pool = new ObjectPool<XuiFieldTempEntry>(
-                createFunc: () => new XuiFieldTempEntry(),
-                actionOnGet: entry => entry.OnEntryCreate(),
-                actionOnRelease: entry => entry.OnEntryRelease(),
-                actionOnDestroy: entry => entry.OnEntryDestroy(),
-                collectionCheck: false,
-                defaultCapacity: 32,
-                maxSize: 512
-            );
+            get
+            {
+                if (_pool == null)
+                {
+                    _pool = new ObjectPool<XuiFieldTempEntry>(
+                        createFunc: () => new XuiFieldTempEntry(),
+                        actionOnGet: entry => entry.OnEntryCreate(),
+                        actionOnRelease: entry => entry.OnEntryRelease(),
+                        actionOnDestroy: entry => entry.OnEntryDestroy(),
+                        collectionCheck: false,
+                        defaultCapacity: 32,
+                        maxSize: 512
+                    );
+                }
+                return _pool;
+            }
         }
 
         /// <summary>从池中获取 Entry 实例</summary>
@@ -113,7 +122,7 @@ namespace XericUI.ReflectionUIGenerator
         private GameObject _uiInstance;
         private GameObject _boundPrefab;
         private int _fieldOrder;
-        private bool _uiBound; // 防止重复绑定
+        private bool _uiBound;
 
         #endregion
 
@@ -166,9 +175,6 @@ namespace XericUI.ReflectionUIGenerator
 
         #region 初始化方法
 
-        /// <summary>
-        /// 设置 Entry 基本属性
-        /// </summary>
         public void Initialize(string entryName, XuiavrgFieldTag tag = XuiavrgFieldTag.None, int tagIndex = 0)
         {
             _entryName = entryName;
@@ -179,18 +185,12 @@ namespace XericUI.ReflectionUIGenerator
             _uiBound = false;
         }
 
-        /// <summary>
-        /// 设置父 Entry（用于嵌套）
-        /// </summary>
         public void SetParent(IFieldEntry parent)
         {
             _parent = parent;
             _entryPath = null;
         }
 
-        /// <summary>
-        /// 添加子 Entry
-        /// </summary>
         public void AddChild(XuiFieldTempEntry child)
         {
             if (child == null) return;
@@ -198,9 +198,6 @@ namespace XericUI.ReflectionUIGenerator
             _children.Add(child);
         }
 
-        /// <summary>
-        /// 添加 MVVM 绑定到此 Entry
-        /// </summary>
         public void AddBinding(AvrgMvvmBinding binding, AvrgMvvmScheduler scheduler)
         {
             if (binding == null) return;
@@ -253,7 +250,7 @@ namespace XericUI.ReflectionUIGenerator
 
         /// <summary>
         /// 将 XUIAvrgMDValue 与 MVVM 绑定连接
-        /// 支持主绑定 + 拆分属性子绑定（通过 BindingSlots）
+        /// 通过多态 BindToAccessor 让 UI 子类自行管理交互事件和显示更新
         /// </summary>
         private void BindComponentWithBinding(XUIAvrgMDValue mdValue)
         {
@@ -261,39 +258,27 @@ namespace XericUI.ReflectionUIGenerator
 
             var primaryBinding = _bindings[0];
 
-            // ——— 1. 主绑定：数据 → UI ———
-            primaryBinding.OnUIDataChanged += value => UpdateUIComponent(mdValue, value);
+            // ★ 多态调用: UI 子类自行处理交互事件和显示更新
+            mdValue.BindToAccessor(primaryBinding.Accessor, primaryBinding, _scheduler);
 
-            // ——— 主绑定：UI → 数据 ———
-            WireUpUIEvents(mdValue, primaryBinding);
-
-            // ——— 2. 拆分属性子绑定匹配 ———
+            // 拆分属性子绑定处理
             if (primaryBinding.SubBindings?.Count > 0 && mdValue.AvailableBindingSlots?.Count > 0)
             {
-                // 收集所有子节点上的 XUIAvrgMDValue
                 var childMDValues = new List<XUIAvrgMDValue>();
                 mdValue.GetComponentsInChildren(true, childMDValues);
 
                 foreach (var slot in mdValue.AvailableBindingSlots)
                 {
-                    // 按 propertyName 匹配子绑定
                     var subBinding = primaryBinding.SubBindings.Find(
                         sb => sb.MetaData?.PropertyPath == slot.propertyName);
                     if (subBinding == null) continue;
 
-                    // 在子节点中查找匹配 Tag 的 XUIAvrgMDValue
                     foreach (var childMD in childMDValues)
                     {
-                        if (childMD == mdValue) continue; // 跳过自身
+                        if (childMD == mdValue) continue;
                         if (childMD.EntryTag == slot.tag || slot.tag == XuiavrgFieldTag.None)
                         {
-                            // 子绑定：数据 → UI
-                            subBinding.OnUIDataChanged += value => UpdateUIComponent(childMD, value);
-
-                            // 子绑定：UI → 数据（订阅子节点的交互事件）
-                            WireUpUIEvents(childMD, subBinding);
-
-                            // 广播子元数据到子节点样式组件
+                            childMD.BindToAccessor(subBinding.Accessor, subBinding, _scheduler);
                             childMD.InitializeWithMetaData(subBinding.MetaData);
                             break;
                         }
@@ -301,102 +286,8 @@ namespace XericUI.ReflectionUIGenerator
                 }
             }
 
-            // 广播主元数据到 XUIAvrgMDValue（触发 IXUIAvrgMDValueStyle 子组件）
+            // 广播主元数据到样式组件
             mdValue.InitializeWithMetaData(primaryBinding.MetaData);
-        }
-
-        /// <summary>
-        /// 订阅 UI 组件的交互事件 → 写入绑定
-        /// </summary>
-        private void WireUpUIEvents(XUIAvrgMDValue mdValue, AvrgMvvmBinding binding)
-        {
-            if (mdValue.TryGetComponent(out UnityEngine.UI.Button uiButton))
-            {
-                uiButton.onClick.AddListener(() =>
-                {
-                    binding.WriteFromUI(true);
-                    _scheduler?.MarkUIDirty(binding);
-                });
-            }
-
-            if (mdValue.TryGetComponent(out UnityEngine.UI.Toggle uiToggle))
-            {
-                uiToggle.onValueChanged.AddListener(val =>
-                {
-                    binding.WriteFromUI(val);
-                    _scheduler?.MarkUIDirty(binding);
-                });
-            }
-
-            if (mdValue.TryGetComponent(out UnityEngine.UI.Slider uiSlider))
-            {
-                uiSlider.onValueChanged.AddListener(val =>
-                {
-                    binding.WriteFromUI(val);
-                    _scheduler?.MarkUIDirty(binding);
-                });
-            }
-
-            if (mdValue.TryGetComponent(out UnityEngine.UI.InputField uiInput))
-            {
-                uiInput.onEndEdit.AddListener(val =>
-                {
-                    binding.WriteFromUI(val);
-                    _scheduler?.MarkUIDirty(binding);
-                });
-            }
-
-            if (mdValue.TryGetComponent(out UnityEngine.UI.Dropdown uiDropdown))
-            {
-                uiDropdown.onValueChanged.AddListener(val =>
-                {
-                    binding.WriteFromUI(val);
-                    _scheduler?.MarkUIDirty(binding);
-                });
-            }
-        }
-
-        /// <summary>
-        /// 更新 UI 组件的显示值（通过 XUIAvrgMDValue 所在 GameObject 上的具体组件）
-        /// </summary>
-        private static void UpdateUIComponent(XUIAvrgMDValue mdValue, object value)
-        {
-            if (mdValue == null || value == null) return;
-
-            // Text
-            if (mdValue.TryGetComponent(out UnityEngine.UI.Text uiText))
-            {
-                uiText.text = value.ToString();
-                return;
-            }
-
-            // Toggle
-            if (value is bool boolVal && mdValue.TryGetComponent(out UnityEngine.UI.Toggle uiToggle))
-            {
-                uiToggle.isOn = boolVal;
-                return;
-            }
-
-            // Slider
-            if (value is float floatVal && mdValue.TryGetComponent(out UnityEngine.UI.Slider uiSlider))
-            {
-                uiSlider.value = floatVal;
-                return;
-            }
-
-            // InputField
-            if (mdValue.TryGetComponent(out UnityEngine.UI.InputField uiInput))
-            {
-                uiInput.text = value.ToString();
-                return;
-            }
-
-            // Dropdown
-            if (value is int intVal && mdValue.TryGetComponent(out UnityEngine.UI.Dropdown uiDropdown))
-            {
-                uiDropdown.value = intVal;
-                return;
-            }
         }
 
         #endregion
@@ -419,7 +310,6 @@ namespace XericUI.ReflectionUIGenerator
                 var value = binding.ReadFromDataSource();
                 binding.NotifyUIUpdate(value);
 
-                // 子绑定也做初始值推送
                 if (binding.SubBindings?.Count > 0)
                 {
                     foreach (var subBinding in binding.SubBindings)
@@ -446,7 +336,6 @@ namespace XericUI.ReflectionUIGenerator
             foreach (var binding in _bindings)
             {
                 binding.ClearUIEvent();
-                // 子绑定也清理
                 if (binding.SubBindings?.Count > 0)
                 {
                     foreach (var sub in binding.SubBindings)
