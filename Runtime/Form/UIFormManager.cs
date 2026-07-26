@@ -4,91 +4,57 @@ using UnityEngine;
 namespace XericUI.Form
 {
     /// <summary>
-    /// UI 窗体管理器 — 窗口管理中心。
-    /// 挂载在 Canvas 所在 GameObject 上（或通过代码自动创建），
-    /// 管理所有窗口的注册、最小化恢复、边缘触发隐藏窗口的显隐调度。
+    /// UI 窗体管理器 — 窗口管理中心。挂载在 Canvas 下作为所有窗口的父容器。
+    /// 通过 Entry 驱动管理窗口生命周期、层级排序、委托事件发布。
+    /// 支持任务栏和边缘触发隐藏窗口。
     /// </summary>
     [AddComponentMenu("Xeric UI Vessel/Form/UI Form Manager")]
     [DefaultExecutionOrder(32000)]
     public class UIFormManager : MonoBehaviour
     {
         [Header("边缘触发")]
-        [SerializeField, Tooltip("边缘触发区域大小（x=宽度方向，y=高度方向），鼠标进入此区域时触发对应方向隐藏窗口的显示")]
+        [SerializeField, Tooltip("边缘触发区域大小")]
         private Vector2 m_EdgeTriggerSize = new Vector2(80, 60);
 
         [Header("调试")]
         [SerializeField, Tooltip("输出事件日志")]
         private bool m_EnableDebugLog;
 
-        #region 静态单例
+        #region === 委托事件 ===
 
-        private static UIFormManager s_Main;
+        /// <summary>窗口创建</summary>
+        public event WindowEntryEventHandler OnWindowCreated;
 
-        /// <summary>全局单例引用</summary>
-        public static UIFormManager Main => s_Main;
+        /// <summary>窗口销毁</summary>
+        public event WindowEntryEventHandler OnWindowDestroyed;
+
+        /// <summary>窗口状态变更</summary>
+        public event WindowEntryEventHandler OnWindowStateChanged;
+
+        /// <summary>窗口获得焦点（置顶）</summary>
+        public event WindowEntryEventHandler OnWindowFocused;
 
         #endregion
 
-        #region 内部状态
+        #region === 内部状态 ===
 
-        // 所有窗口
-        private readonly List<UIFormController> _windows = new List<UIFormController>();
+        private readonly Dictionary<string, WindowEntry> _entries = new Dictionary<string, WindowEntry>();
+        private readonly List<WindowEntry> _orderedEntries = new List<WindowEntry>();
+        private string _focusedEntryId;
 
-        // 最小化窗口数据
-        private struct MinimizedData
+        // 边缘隐藏（按方向分组）
+        private readonly Dictionary<AutoHideDirection, List<WindowEntry>> _edgeHidden = new()
         {
-            public Vector2 anchoredPosition;
-            public Vector2 sizeDelta;
-            public Vector2 anchorMin;
-            public Vector2 anchorMax;
-        }
-        private readonly Dictionary<UIFormController, MinimizedData> _minimized = new();
-
-        // 边缘隐藏窗口（按方向分组）
-        private readonly Dictionary<AutoHideDirection, List<UIFormController>> _edgeHidden = new()
-        {
-            { AutoHideDirection.Left, new List<UIFormController>() },
-            { AutoHideDirection.Right, new List<UIFormController>() },
-            { AutoHideDirection.Up, new List<UIFormController>() },
-            { AutoHideDirection.Down, new List<UIFormController>() },
+            { AutoHideDirection.Left, new List<WindowEntry>() },
+            { AutoHideDirection.Right, new List<WindowEntry>() },
+            { AutoHideDirection.Up, new List<WindowEntry>() },
+            { AutoHideDirection.Down, new List<WindowEntry>() },
         };
-
-        // 边缘触发状态跟踪（避免重复触发）
         private AutoHideDirection? _lastEdgeTrigger;
 
         #endregion
 
-        #region 生命周期
-
-        protected virtual void Awake()
-        {
-            if (s_Main != null && s_Main != this)
-            {
-                Debug.LogWarning($"[UIFormManager] 已存在单例，销毁重复实例: {name}", this);
-                Destroy(this);
-                return;
-            }
-
-            s_Main = this;
-        }
-
-        protected virtual void OnEnable()
-        {
-            if (s_Main == null) s_Main = this;
-        }
-
-        protected virtual void OnDisable()
-        {
-            if (s_Main == this) s_Main = null;
-        }
-
-        protected virtual void OnDestroy()
-        {
-            if (s_Main == this) s_Main = null;
-            _windows.Clear();
-            _minimized.Clear();
-            foreach (var list in _edgeHidden.Values) list.Clear();
-        }
+        #region === 生命周期 ===
 
         protected virtual void Update()
         {
@@ -97,63 +63,221 @@ namespace XericUI.Form
 
         #endregion
 
-        #region === 窗口注册 / 注销 ===
+        #region === 程序化窗口创建 / 销毁 ===
 
-        public void RegisterWindow(UIFormController window)
+        /// <summary>程序化创建一个窗口实例并返回其 Entry</summary>
+        public WindowEntry CreateWindow(RectTransform prefab, string title = null, Sprite icon = null)
         {
-            if (window == null || _windows.Contains(window)) return;
-            _windows.Add(window);
+            if (prefab == null)
+            {
+                Debug.LogError("[UIFormManager] CreateWindow: prefab 为空", this);
+                return null;
+            }
+
+            var instance = Instantiate(prefab, transform);
+            instance.name = title ?? prefab.name;
+
+            var controller = instance.GetComponent<UIFormController>();
+            var entry = new WindowEntry
+            {
+                Title = title ?? prefab.name,
+                Icon = icon,
+                Prefab = prefab,
+                Controller = controller,
+                State = WindowState.Normal,
+            };
+
+            if (controller != null)
+                controller.Entry = entry;
+
+            _entries[entry.Id] = entry;
+            _orderedEntries.Add(entry);
+
+            MoveToFront(entry.Id);
+
+            NotifyCreated(entry);
 
             if (m_EnableDebugLog)
-                Debug.Log($"[UIFormManager] 注册窗口: {window.name}");
+                Debug.Log($"[UIFormManager] 创建窗口: {entry.Title} (ID={entry.Id})");
+
+            return entry;
         }
 
-        public void UnregisterWindow(UIFormController window)
+        /// <summary>销毁窗口及其所有子窗口</summary>
+        public void DestroyWindow(string entryId)
         {
-            if (window == null) return;
-            _windows.Remove(window);
-            UnregisterEdgeHidden(window);
-            _minimized.Remove(window);
+            if (!_entries.TryGetValue(entryId, out var entry)) return;
 
-            if (m_EnableDebugLog)
-                Debug.Log($"[UIFormManager] 注销窗口: {window.name}");
+            // 级联关闭子窗口
+            CascadeCloseChildren(entry);
+
+            UnregisterEdgeHiddenForEntry(entry);
+
+            _orderedEntries.Remove(entry);
+            _entries.Remove(entryId);
+
+            if (_focusedEntryId == entryId)
+                _focusedEntryId = null;
+
+            var controller = entry.Controller;
+            entry.Controller = null;
+
+            NotifyDestroyed(entry);
+
+            if (controller != null && Application.isPlaying)
+                Destroy(controller.gameObject);
+        }
+
+        private void CascadeCloseChildren(WindowEntry entry)
+        {
+            for (int i = entry.ChildEntries.Count - 1; i >= 0; i--)
+            {
+                var child = entry.ChildEntries[i];
+                DestroyWindow(child.Id);
+            }
         }
 
         #endregion
 
-        #region === 边缘隐藏窗口管理 ===
+        #region === 显示控制 ===
 
-        /// <summary>注册边缘隐藏窗口</summary>
-        public void RegisterEdgeHidden(UIFormController window, AutoHideDirection direction)
+        /// <summary>显示窗口并置顶</summary>
+        public void ShowWindow(string entryId)
         {
-            if (window == null) return;
+            if (!TryGetEntry(entryId, out var entry)) return;
+            if (entry.Controller == null) return;
 
+            entry.Controller.gameObject.SetActive(true);
+            MoveToFront(entryId);
+        }
+
+        /// <summary>隐藏窗口</summary>
+        public void HideWindow(string entryId)
+        {
+            if (!TryGetEntry(entryId, out var entry)) return;
+            if (entry.Controller == null) return;
+
+            entry.Controller.gameObject.SetActive(false);
+        }
+
+        /// <summary>切换窗口显示/隐藏</summary>
+        public void ToggleWindow(string entryId)
+        {
+            if (!TryGetEntry(entryId, out var entry)) return;
+            if (entry.Controller == null) return;
+
+            if (entry.State == WindowState.Minimized)
+            {
+                RestoreWindow(entryId);
+            }
+            else if (entry.Controller.gameObject.activeSelf)
+            {
+                MinimizeWindow(entryId);
+            }
+            else
+            {
+                ShowWindow(entryId);
+            }
+        }
+
+        /// <summary>将窗口置顶</summary>
+        public void MoveToFront(string entryId)
+        {
+            if (!TryGetEntry(entryId, out var entry)) return;
+            if (entry.Controller == null) return;
+
+            entry.Controller.transform.SetAsLastSibling();
+
+            _orderedEntries.Remove(entry);
+            _orderedEntries.Add(entry);
+
+            _focusedEntryId = entryId;
+
+            NotifyFocused(entry);
+        }
+
+        #endregion
+
+        #region === 最小化 / 恢复 ===
+
+        /// <summary>最小化窗口</summary>
+        public void MinimizeWindow(string entryId)
+        {
+            if (!TryGetEntry(entryId, out var entry)) return;
+            if (entry.Controller == null) return;
+            if (entry.State == WindowState.Minimized) return;
+
+            entry.Controller.gameObject.SetActive(false);
+            entry.State = WindowState.Minimized;
+
+            NotifyStateChanged(entry);
+        }
+
+        /// <summary>恢复已最小化的窗口</summary>
+        public void RestoreWindow(string entryId)
+        {
+            if (!TryGetEntry(entryId, out var entry)) return;
+            if (entry.Controller == null) return;
+            if (entry.State != WindowState.Minimized) return;
+
+            ShowWindow(entryId);
+            entry.State = WindowState.Normal;
+
+            NotifyStateChanged(entry);
+        }
+
+        public void ToggleMaximize(string entryId)
+        {
+            if (!TryGetEntry(entryId, out var entry)) return;
+            if (entry.Controller == null) return;
+
+            entry.Controller.ToggleMaximize();
+            NotifyStateChanged(entry);
+        }
+
+        #endregion
+
+        #region === 查询 ===
+
+        public WindowEntry GetEntry(string id)
+        {
+            _entries.TryGetValue(id, out var entry);
+            return entry;
+        }
+
+        public IReadOnlyList<WindowEntry> GetAllEntries() => _orderedEntries;
+
+        public WindowEntry GetFocusedEntry()
+        {
+            if (string.IsNullOrEmpty(_focusedEntryId)) return null;
+            return GetEntry(_focusedEntryId);
+        }
+
+        public int EntryCount => _entries.Count;
+
+        #endregion
+
+        #region === 边缘隐藏 ===
+
+        public void RegisterEdgeHidden(WindowEntry entry, AutoHideDirection direction)
+        {
+            if (entry == null) return;
             var list = _edgeHidden[direction];
-            if (!list.Contains(window))
-                list.Add(window);
-
-            if (m_EnableDebugLog)
-                Debug.Log($"[UIFormManager] 边缘隐藏注册: {window.name} (方向={direction})");
+            if (!list.Contains(entry))
+                list.Add(entry);
         }
 
-        /// <summary>注销边缘隐藏窗口</summary>
-        public void UnregisterEdgeHidden(UIFormController window)
+        public void UnregisterEdgeHidden(WindowEntry entry)
         {
-            if (window == null) return;
-
+            if (entry == null) return;
             foreach (var list in _edgeHidden.Values)
-                list.Remove(window);
+                list.Remove(entry);
         }
 
-        /// <summary>获取指定方向的隐藏窗口列表</summary>
-        public IReadOnlyList<UIFormController> GetEdgeWindows(AutoHideDirection direction)
+        private void UnregisterEdgeHiddenForEntry(WindowEntry entry)
         {
-            return _edgeHidden[direction];
+            UnregisterEdgeHidden(entry);
         }
-
-        #endregion
-
-        #region === 边缘触发检测 ===
 
         private void CheckEdgeTriggers()
         {
@@ -167,123 +291,59 @@ namespace XericUI.Form
             bool topTrigger = mousePos.y > (sh - m_EdgeTriggerSize.y);
 
             AutoHideDirection? activeTrigger = null;
-
             if (leftTrigger) activeTrigger = AutoHideDirection.Left;
             else if (rightTrigger) activeTrigger = AutoHideDirection.Right;
             else if (bottomTrigger) activeTrigger = AutoHideDirection.Down;
             else if (topTrigger) activeTrigger = AutoHideDirection.Up;
 
-            // 触发进入 → 显示该方向窗口
             if (activeTrigger.HasValue && activeTrigger != _lastEdgeTrigger)
             {
                 ShowEdgeWindows(activeTrigger.Value);
             }
 
-            // 鼠标离开所有边缘触发区
             if (!activeTrigger.HasValue)
-            {
                 _lastEdgeTrigger = null;
-            }
         }
 
-        /// <summary>显示指定方向的所有边缘隐藏窗口</summary>
         public void ShowEdgeWindows(AutoHideDirection direction)
         {
             _lastEdgeTrigger = direction;
-
             var list = _edgeHidden[direction];
+
             for (int i = list.Count - 1; i >= 0; i--)
             {
-                var window = list[i];
-                if (window == null)
+                var entry = list[i];
+                if (entry?.Controller == null)
                 {
                     list.RemoveAt(i);
                     continue;
                 }
-
-                window.SlideInFromEdge();
+                entry.Controller.SlideInFromEdge();
             }
-
-            if (m_EnableDebugLog && list.Count > 0)
-                Debug.Log($"[UIFormManager] 边缘触发: 方向={direction}, 显示 {list.Count} 个窗口");
         }
 
         #endregion
 
-        #region === 最小化 / 恢复 ===
+        #region === 内部通知 ===
 
-        internal void MinimizeWindow(UIFormController window)
+        private void NotifyCreated(WindowEntry entry) => OnWindowCreated?.Invoke(entry);
+        private void NotifyDestroyed(WindowEntry entry) => OnWindowDestroyed?.Invoke(entry);
+        private void NotifyStateChanged(WindowEntry entry) => OnWindowStateChanged?.Invoke(entry);
+        private void NotifyFocused(WindowEntry entry) => OnWindowFocused?.Invoke(entry);
+
+        #endregion
+
+        #region === 工具 ===
+
+        private bool TryGetEntry(string id, out WindowEntry entry)
         {
-            if (window == null || _minimized.ContainsKey(window)) return;
-
-            var rt = window.transform as RectTransform;
-            if (rt == null) return;
-
-            _minimized[window] = new MinimizedData
+            if (string.IsNullOrEmpty(id))
             {
-                anchoredPosition = rt.anchoredPosition,
-                sizeDelta = rt.sizeDelta,
-                anchorMin = rt.anchorMin,
-                anchorMax = rt.anchorMax,
-            };
-
-            window.gameObject.SetActive(false);
-
-            if (m_EnableDebugLog)
-                Debug.Log($"[UIFormManager] 最小化窗口: {window.name}");
+                entry = null;
+                return false;
+            }
+            return _entries.TryGetValue(id, out entry);
         }
-
-        /// <summary>恢复已最小化的窗口</summary>
-        public void RestoreWindow(UIFormController window)
-        {
-            if (window == null || !_minimized.TryGetValue(window, out var data)) return;
-
-            var rt = window.transform as RectTransform;
-            if (rt == null) return;
-
-            rt.anchorMin = data.anchorMin;
-            rt.anchorMax = data.anchorMax;
-            rt.anchoredPosition = data.anchoredPosition;
-            rt.sizeDelta = data.sizeDelta;
-
-            window.gameObject.SetActive(true);
-            _minimized.Remove(window);
-
-            if (m_EnableDebugLog)
-                Debug.Log($"[UIFormManager] 恢复窗口: {window.name}");
-        }
-
-        /// <summary>获取所有已最小化的窗口列表</summary>
-        public IReadOnlyList<UIFormController> GetMinimizedWindows()
-        {
-            return new List<UIFormController>(_minimized.Keys);
-        }
-
-        #endregion
-
-        #region === 关闭 ===
-
-        internal void CloseWindow(UIFormController window)
-        {
-            if (window == null) return;
-
-            _windows.Remove(window);
-            UnregisterEdgeHidden(window);
-            _minimized.Remove(window);
-
-            if (m_EnableDebugLog)
-                Debug.Log($"[UIFormManager] 关闭窗口: {window.name}");
-        }
-
-        #endregion
-
-        #region === 查询 ===
-
-        /// <summary>已注册窗口数量</summary>
-        public int WindowCount => _windows.Count;
-
-        /// <summary>获取所有已注册窗口</summary>
-        public IReadOnlyList<UIFormController> GetAllWindows() => _windows;
 
         #endregion
     }

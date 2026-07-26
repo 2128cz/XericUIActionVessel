@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEngine;
+using XericUI.Form;
 
 namespace XericUIEditor.Form
 {
@@ -24,18 +25,12 @@ namespace XericUIEditor.Form
             serializedObject.ApplyModifiedProperties();
         }
 
-        #region 基本设置
-
         private void DrawBasicSection()
         {
             EditorGUILayout.LabelField("窗口基本设置", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(serializedObject.FindProperty("m_WindowTitle"), new GUIContent("窗口标题 (Title)"));
             EditorGUILayout.Space();
         }
-
-        #endregion
-
-        #region 边缘行为
 
         private void DrawEdgeSection()
         {
@@ -58,10 +53,6 @@ namespace XericUIEditor.Form
             EditorGUILayout.Space();
         }
 
-        #endregion
-
-        #region 调试与测试
-
         private void DrawDebugSection()
         {
             EditorGUILayout.LabelField("调试", EditorStyles.boldLabel);
@@ -72,74 +63,49 @@ namespace XericUIEditor.Form
 
             // 当前状态
             EditorGUILayout.LabelField("当前状态", EditorStyles.boldLabel);
-
             var state = _controller.CurrentState;
-            Color stateColor;
-            string stateText;
-
-            switch (state)
+            Color stateColor = state switch
             {
-                case XericUI.Form.WindowState.Normal:
-                    stateColor = Color.white;
-                    stateText = "● 窗口化 (Normal)";
-                    break;
-                case XericUI.Form.WindowState.Maximized:
-                    stateColor = Color.green;
-                    stateText = "■ 全屏 (Maximized)";
-                    break;
-                case XericUI.Form.WindowState.Minimized:
-                    stateColor = Color.gray;
-                    stateText = "○ 最小化 (Minimized)";
-                    break;
-                case XericUI.Form.WindowState.EdgeHidden:
-                    stateColor = new Color(1f, 0.6f, 0f);
-                    stateText = "◄ 边缘隐藏 (Edge Hidden)";
-                    break;
-                default:
-                    stateColor = Color.white;
-                    stateText = state.ToString();
-                    break;
-            }
+                XericUI.Form.WindowState.Normal => Color.white,
+                XericUI.Form.WindowState.Maximized => Color.green,
+                XericUI.Form.WindowState.Minimized => Color.gray,
+                XericUI.Form.WindowState.EdgeHidden => new Color(1f, 0.6f, 0f),
+                _ => Color.white
+            };
+            var entries = _controller.Manager?.GetAllEntries();
+            WindowEntry entry = _controller.Entry;
+            string extra = entry != null ? $" | ID={entry.Id}" : "";
 
             GUI.color = stateColor;
-            EditorGUILayout.LabelField(stateText, EditorStyles.miniBoldLabel);
+            EditorGUILayout.LabelField($"{state}{extra}", EditorStyles.miniBoldLabel);
             GUI.color = Color.white;
 
             EditorGUILayout.Space();
 
-            // 手动测试按钮
+            // 手动测试
             EditorGUILayout.LabelField("手动测试", EditorStyles.boldLabel);
-
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button("全屏/还原"))
             {
                 _controller.ToggleMaximize();
                 SceneView.RepaintAll();
             }
-            if (GUILayout.Button("模拟进入"))
+            if (GUILayout.Button("置顶 (Focus)"))
             {
-                _controller.SimulateEnter();
-                SceneView.RepaintAll();
-            }
-            if (GUILayout.Button("模拟退出"))
-            {
-                _controller.SimulateExit();
+                _controller.MoveToFront();
                 SceneView.RepaintAll();
             }
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.Space();
 
-            // 调试提示
             if (!Application.isPlaying && _controller.DebugMode)
             {
                 EditorGUILayout.HelpBox(
-                    "调试模式已启用 — 在 SceneView 中移动鼠标即可预览。\n" +
-                    "蓝色边框 = 窗口范围 | 绿色 = 鼠标悬停中 | 橙色 = 吸附阈值范围",
+                    "调试模式已启用 — SceneView 中移动鼠标实时预览。\n" +
+                    "蓝色边框=窗口范围 | 绿色=鼠标悬停中",
                     MessageType.Info);
             }
         }
-
-        #endregion
     }
 }
