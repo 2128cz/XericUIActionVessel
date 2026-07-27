@@ -6,10 +6,11 @@ using Sirenix.OdinInspector;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using XericUI.Form;
 
 namespace XericUI.Core.Base
 {
-    public class XericUIBehaviour : UIBehaviour
+    public class XericUIBehaviour : UIBehaviour, IActivity
     {
 #if ODIN_INSPECTOR
         [InfoBox("脚本必填属性存在空引用！请检查开放属性后再试", InfoMessageType.Error, VisibleIf = "PublicFieldNullReference")]
@@ -272,23 +273,9 @@ namespace XericUI.Core.Base
 
         #region 显影
 
-        public virtual void Show()
-        {
-            gameObject.SetActive(true);
-        }
+        public virtual void Show() => gameObject.SetActive(true);
 
-        public void Show(bool isShow)
-        {
-            if (isShow)
-                Show();
-            else
-                Hide();
-        }
-
-        public virtual void Hide()
-        {
-            gameObject.SetActive(false);
-        }
+        public virtual void Hide() => gameObject.SetActive(false);
 
         #endregion
     }
