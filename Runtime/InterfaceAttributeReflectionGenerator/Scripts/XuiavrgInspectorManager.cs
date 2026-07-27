@@ -85,6 +85,20 @@ namespace XericUI.ReflectionUIGenerator
 
         #endregion
 
+        #region Unity 生命周期
+
+        private void OnEnable()
+        {
+            XuiavrgStyleDefaults.EnsureDefaults();
+        }
+
+        private void OnDestroy()
+        {
+            ClearAll();
+        }
+
+        #endregion
+
         #region 核心生命周期
 
         public void BuildFromMetaDataSet(AvrgMemberMetaDataSet metaDataSet,
@@ -113,16 +127,17 @@ namespace XericUI.ReflectionUIGenerator
 
                 if (bindingCollection != null)
                 {
-                    var matchedBindings = bindingCollection.FindByMemberName(metaData.MemberName);
-                    if (matchedBindings != null)
+                    var scheduler = bindingCollection.Scheduler;
+                    var matchedBinding = bindingCollection.FindByMemberName(metaData.MemberName);
+                    if (matchedBinding != null)
                     {
-                        entry.AddBinding(matchedBindings, null);
+                        entry.AddBinding(matchedBinding, scheduler);
                     }
                     else
                     {
                         foreach (var binding in bindingCollection)
                         {
-                            entry.AddBinding(binding, null);
+                            entry.AddBinding(binding, scheduler);
                             break;
                         }
                     }
@@ -142,13 +157,14 @@ namespace XericUI.ReflectionUIGenerator
 
             if (CurrentEntries != null && bindingCollection != null)
             {
+                var scheduler = bindingCollection.Scheduler;
                 foreach (var entry in CurrentEntries)
                 {
                     if (entry is XuiFieldTempEntry tempEntry)
                     {
                         var matched = bindingCollection.FindByMemberName(entry.EntryName);
                         if (matched != null)
-                            tempEntry.AddBinding(matched, null);
+                            tempEntry.AddBinding(matched, scheduler);
                     }
                 }
             }
@@ -443,12 +459,7 @@ namespace XericUI.ReflectionUIGenerator
 
             _leafGroupMap.Clear();
         }
-
-        private void OnDestroy()
-        {
-            ClearAll();
-        }
+        
+        #endregion
     }
-
-    #endregion
 }
