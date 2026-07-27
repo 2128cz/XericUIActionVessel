@@ -527,7 +527,14 @@ namespace XericUI.XTable.Rendering.Component
 
         private void Update()
         {
-            if (m_DirtyFlag.IsDirty) RefreshView();
+            if (!m_DirtyFlag.IsDirty) return;
+
+            var flags = m_DirtyFlag.Flags;
+            // 仅滚动或选区变更 → 轻刷新（不重建边框/背景/预制体全回收）
+            if ((flags & ~(TableDirtyType.ScrollChanged | TableDirtyType.SelectionChanged)) == 0)
+                RefreshViewLight();
+            else
+                RefreshView();
         }
 
         #endregion
@@ -586,7 +593,12 @@ namespace XericUI.XTable.Rendering.Component
                 return;
             }
 
-            if (m_DirtyFlag.IsDirty)
+            if (!m_DirtyFlag.IsDirty) return;
+
+            var flags = m_DirtyFlag.Flags;
+            if ((flags & ~(TableDirtyType.ScrollChanged | TableDirtyType.SelectionChanged)) == 0)
+                RefreshViewLight();
+            else
                 RefreshView();
         }
 #endif
@@ -1087,6 +1099,98 @@ namespace XericUI.XTable.Rendering.Component
             SetChildrenVisible(m_ChildrenVisible);
         }
 
+        /// <summary>
+        /// 轻刷新——仅更新可见矩形和可见单元格内容。
+        /// 不重建背景、边框、不重置 content.sizeDelta、不做孤儿清理。
+        /// 用于滚动和选区变更场景。
+        /// </summary>
+        private void RefreshViewLight()
+        {
+            if (m_Assembler == null)
+            {
+                if (rectTransform != null)
+                    m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+                else return;
+            }
+
+            if (m_RowHeights == null || m_ColWidths == null) return;
+            if (m_RowHeights.Length == 0 || m_ColWidths.Length == 0) return;
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+                Canvas.ForceUpdateCanvases();
+#endif
+
+            // 1. 回收 CellAssembler 对象（轻量操作：SetActive(false) + 压栈）
+            m_Assembler.ReturnAll();
+
+            // 2. 计算新可见单元格集合并回收不再可见的预制体
+            HashSet<(int, int)> newVisibleCells;
+
+            if (m_Quadtree != null && m_Quadtree.IsBuilt)
+            {
+                var quadrants = new List<QuadrantResult>();
+                m_Quadtree.QueryVisible(m_VisibleRect, quadrants);
+
+                newVisibleCells = new HashSet<(int, int)>();
+                foreach (var q in quadrants)
+                {
+                    if (q.Cells != null)
+                    {
+                        foreach (var cell in q.Cells)
+                            newVisibleCells.Add(cell);
+                    }
+                }
+            }
+            else
+            {
+                // 回退：计算可见行列范围
+                CalcVisibleRange(out int vrSr, out int vrEr, out int vrSc, out int vrEc);
+                newVisibleCells = new HashSet<(int, int)>();
+                for (int vr = vrSr; vr < vrEr; vr++)
+                for (int vc = vrSc; vc < vrEc; vc++)
+                    newVisibleCells.Add((vr, vc));
+            }
+
+            // 回收不再可见的预制体
+            if (m_ActivePrefabMap != null && m_ActivePrefabMap.Count > 0)
+            {
+                var toRelease = new List<(int, int)>();
+                foreach (var kv in m_ActivePrefabMap)
+                {
+                    if (!newVisibleCells.Contains(kv.Key))
+                        toRelease.Add(kv.Key);
+                }
+
+                foreach (var key in toRelease)
+                {
+                    var data = TableData.GetCell(key.Item1, key.Item2);
+                    data?.OnPrefabRelease?.Invoke(m_ActivePrefabMap[key]);
+                    m_PrefabPool.Release(m_ActivePrefabMap[key]);
+                    m_ActivePrefabMap.Remove(key);
+                }
+            }
+
+            // 3. 渲染可见单元格（仅内容 + 选择高亮，无边框/背景）
+            if (m_Quadtree != null && m_Quadtree.IsBuilt)
+            {
+                var quadrants = new List<QuadrantResult>();
+                m_Quadtree.QueryVisible(m_VisibleRect, quadrants);
+                RenderQuadrants(quadrants);
+            }
+            else
+            {
+                CalcVisibleRange(out int sr, out int er, out int sc, out int ec);
+                if (er > sr && ec > sc)
+                    RenderCellsLight(sr, er, sc, ec);
+            }
+
+            // 仅清除滚动和选区脏标记，保留其他标记（如 DataChanged 下次触发重刷新）
+            m_DirtyFlag.ClearFlags(TableDirtyType.ScrollChanged | TableDirtyType.SelectionChanged);
+            OnTableRefreshed?.Invoke();
+            SetChildrenVisible(m_ChildrenVisible);
+        }
+
         #endregion
 
         #region 背景
@@ -1516,6 +1620,192 @@ namespace XericUI.XTable.Rendering.Component
             }
         }
 
+        /// <summary>
+        /// 轻渲染——与 RenderCells 相同但跳过网格线 Image 绘制。
+        /// 用于滚动场景，网格线由 RebuildBorders 的 UILineRendererV2 统一处理。
+        /// </summary>
+        private void RenderCellsLight(int sr, int er, int sc, int ec)
+        {
+            string ns = m_DefaultStyleNamespace;
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                Color selectionColor = GetCellSelectionBgColor(ns);
+                Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b,
+                    selectionColor.a * Config.MultiSelectAlphaFactor);
+                Color focusColor = new Color(selectionColor.r + Config.FocusRAdd,
+                    selectionColor.g + Config.FocusGAdd, selectionColor.b + Config.FocusBAdd,
+                    selectionColor.a * Config.FocusAlphaMul);
+
+                for (int r = sr; r < er && r < m_RowHeights.Length; r++)
+                {
+                    for (int c = sc; c < ec && c < m_ColWidths.Length; c++)
+                    {
+                        if (TableData.IsCellMerged(r, c)) continue;
+
+                        float cellX = GetColLeftX(c) + m_ContentOffset;
+                        float cellY = -GetRowTopY(r) - m_ContentOffset;
+                        float cellW = m_ColWidths[c];
+                        float cellH = m_RowHeights[r];
+
+                        if (TableData.IsMergeSource(r, c, out int mergeRS, out int mergeCS))
+                        {
+                            for (int i = 1; i < mergeCS && c + i < m_ColWidths.Length; i++)
+                                cellW += m_ColWidths[c + i];
+                            for (int i = 1; i < mergeRS && r + i < m_RowHeights.Length; i++)
+                                cellH += m_RowHeights[r + i];
+                        }
+
+                        XTableCellData data = TableData.GetCell(r, c);
+                        string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
+                            ? data.StyleNamespace : ns;
+
+                        // 选择高亮（无网格线）
+                        if (IsInSelectionRange(r, c))
+                        {
+                            var selImg = m_Assembler.GetImage("cell_multiselect");
+                            selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                            selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                            selImg.Image.color = (r == SelectionHandle.StartRow && c == SelectionHandle.StartCol)
+                                ? focusColor : multiSelectColor;
+                        }
+                        else if (r == SelectionHandle.StartRow && c == SelectionHandle.StartCol)
+                        {
+                            var selImg = m_Assembler.GetImage("cell_select");
+                            selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                            selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                            selImg.Image.color = selectionColor;
+                        }
+
+                        if (data == null) continue;
+
+                        switch (data.ContentType)
+                        {
+                            case CellContentType.Text:
+                                if (!string.IsNullOrEmpty(data.Text))
+                                {
+                                    var txt = m_Assembler.GetText("cell_text", cellNS);
+                                    txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                    txt.Text.text = data.Text;
+                                    txt.Text.color = GetCellFgColor(cellNS);
+                                    txt.Text.fontSize = GetCellFontSize(cellNS);
+                                    txt.Text.alignment = TextAlignmentOptions.Midline;
+                                    txt.Text.font = GetCellFontAsset(cellNS) ?? txt.Text.font;
+                                }
+                                break;
+                            case CellContentType.Image:
+                                if (data.Image != null)
+                                {
+                                    Sprite sprite = GetOrCreateSprite(data.Image);
+                                    var img = m_Assembler.GetImage("cell_image", cellNS);
+                                    img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                    img.Image.sprite = sprite;
+                                }
+                                break;
+                            case CellContentType.Prefab:
+                                if (data.Prefab != null)
+                                {
+                                    GameObject instance = m_PrefabPool.Acquire(data.Prefab, r, c);
+                                    RectTransform prt = instance.GetComponent<RectTransform>();
+                                    prt.anchoredPosition = new Vector2(cellX, cellY);
+                                    prt.sizeDelta = new Vector2(cellW, cellH);
+                                    m_ActivePrefabMap[(r, c)] = instance;
+                                    data.OnPrefabAcquire?.Invoke(instance);
+                                }
+                                break;
+                        }
+                    }
+                }
+                return;
+            }
+#endif
+
+            // 运行时模式（无网格线）
+            Color rtSelectionColor = Config.RuntimeSelectionColor;
+            Color rtMultiSelectColor = Config.RuntimeMultiSelectColor;
+            Color rtFocusColor = Config.RuntimeFocusColor;
+
+            for (int r = sr; r < er && r < m_RowHeights.Length; r++)
+            {
+                for (int c = sc; c < ec && c < m_ColWidths.Length; c++)
+                {
+                    if (TableData.IsCellMerged(r, c)) continue;
+
+                    float cellX = GetColLeftX(c) + m_ContentOffset;
+                    float cellY = -GetRowTopY(r) - m_ContentOffset;
+                    float cellW = m_ColWidths[c];
+                    float cellH = m_RowHeights[r];
+
+                    if (TableData.IsMergeSource(r, c, out int mergeRS, out int mergeCS))
+                    {
+                        for (int i = 1; i < mergeCS && c + i < m_ColWidths.Length; i++)
+                            cellW += m_ColWidths[c + i];
+                        for (int i = 1; i < mergeRS && r + i < m_RowHeights.Length; i++)
+                            cellH += m_RowHeights[r + i];
+                    }
+
+                    XTableCellData data = TableData.GetCell(r, c);
+                    string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
+                        ? data.StyleNamespace : ns;
+
+                    if (IsInSelectionRange(r, c))
+                    {
+                        var selImg = m_Assembler.GetImage("cell_multiselect");
+                        selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                        selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                        selImg.Image.color = (r == SelectionHandle.StartRow && c == SelectionHandle.StartCol)
+                            ? rtFocusColor : rtMultiSelectColor;
+                    }
+                    else if (r == SelectionHandle.StartRow && c == SelectionHandle.StartCol)
+                    {
+                        var selImg = m_Assembler.GetImage("cell_select");
+                        selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                        selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                        selImg.Image.color = rtSelectionColor;
+                    }
+
+                    if (data == null) continue;
+
+                    switch (data.ContentType)
+                    {
+                        case CellContentType.Text:
+                            if (!string.IsNullOrEmpty(data.Text))
+                            {
+                                var txt = m_Assembler.GetText("cell_text", cellNS);
+                                txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                txt.Text.text = data.Text;
+                            }
+                            break;
+                        case CellContentType.Image:
+                            if (data.Image != null)
+                            {
+                                Sprite sprite = GetOrCreateSprite(data.Image);
+                                var img = m_Assembler.GetImage("cell_image", cellNS);
+                                img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                img.Image.sprite = sprite;
+                            }
+                            break;
+                        case CellContentType.Prefab:
+                            if (data.Prefab != null)
+                            {
+                                GameObject instance = m_PrefabPool.Acquire(data.Prefab, r, c);
+                                RectTransform prt = instance.GetComponent<RectTransform>();
+                                prt.anchoredPosition = new Vector2(cellX, cellY);
+                                prt.sizeDelta = new Vector2(cellW, cellH);
+                                m_ActivePrefabMap[(r, c)] = instance;
+                                data.OnPrefabAcquire?.Invoke(instance);
+                            }
+                            break;
+                    }
+                }
+            }
+        }
+
         #endregion
 
         #region 坐标计算
@@ -1708,8 +1998,8 @@ namespace XericUI.XTable.Rendering.Component
         {
             m_DirtyFlag.Mark(type);
 
-            // 数据或布局变更时重建四叉树
-            if ((type & (TableDirtyType.DataChanged | TableDirtyType.LayoutChanged)) != 0)
+            // 仅数据或布局变更时重建四叉树；滚动/选区变更无需重建
+            if ((type & (TableDirtyType.DataChanged | TableDirtyType.LayoutChanged | TableDirtyType.StyleChanged)) != 0)
                 MaintainQuadtree();
         }
 
@@ -1720,17 +2010,16 @@ namespace XericUI.XTable.Rendering.Component
 
         private void OnScrollValueChanged(Vector2 _)
         {
-            // 防重入：RefreshView 中修改 content.sizeDelta 可能触发 ScrollRect 再次回调
+            // 防重入：RefreshViewLight 中操作 content 可能触发 ScrollRect 再次回调
             if (m_IsRefreshingFromScroll) return;
             m_IsRefreshingFromScroll = true;
 
             try
             {
-                // 滚动时立即更新可见矩形并刷新视图，不依赖脏标记延迟机制。
-                // 表格本身没有移动能力，完全依赖 ScrollRect 的 content 偏移和 Mask 裁剪，
-                // 因此必须在 ScrollRect 值变化时立即重算可见范围。
+                // 滚动时仅做轻刷新：更新可见矩形 + 渲染可见单元格内容，
+                // 不重建背景、边框、不重置 content.sizeDelta、不做孤儿清理。
                 UpdateVisibleRect();
-                RefreshView();
+                RefreshViewLight();
             }
             finally
             {

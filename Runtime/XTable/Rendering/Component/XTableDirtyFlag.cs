@@ -19,8 +19,10 @@ namespace XericUI.XTable.Rendering.Component
 		SelectionChanged = 1 << 3,
 		/// <summary>行列尺寸变更</summary>
 		LayoutChanged = 1 << 4,
+		/// <summary>滚动偏移变更（轻刷新：仅更新可见单元格内容，不重建边框/背景）</summary>
+		ScrollChanged = 1 << 5,
 		/// <summary>全部脏（强制完整刷新）</summary>
-		All = DataChanged | ViewChanged | StyleChanged | SelectionChanged | LayoutChanged
+		All = DataChanged | ViewChanged | StyleChanged | SelectionChanged | LayoutChanged | ScrollChanged
 	}
 
 	/// <summary>
@@ -44,6 +46,12 @@ namespace XericUI.XTable.Rendering.Component
 		public void Clear()
 		{
 			Flags = TableDirtyType.None;
+		}
+
+		/// <summary>清除指定的脏标记（保留其他标记）</summary>
+		public void ClearFlags(TableDirtyType type)
+		{
+			Flags &= ~type;
 		}
 
 		/// <summary>检查是否包含特定脏类型</summary>
