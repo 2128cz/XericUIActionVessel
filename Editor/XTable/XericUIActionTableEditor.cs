@@ -95,14 +95,14 @@ namespace XericUIEditor.XTable
                 if (GUILayout.Button("重新生成表格", GUILayout.Height(26)))
                 {
                     m_Table.FullRebuildPreservingData();
-                    m_Table.SetChildrenVisible(m_ShowChildren);
+                    m_ShowChildren = m_Table.ChildrenVisible;
                     EditorApplication.RepaintHierarchyWindow();
                 }
 
                 if (GUILayout.Button("强制刷新样式", GUILayout.Height(26)))
                 {
                     m_Table.ForceStyleRefresh();
-                    m_Table.SetChildrenVisible(m_ShowChildren);
+                    m_ShowChildren = m_Table.ChildrenVisible;
                     EditorApplication.RepaintHierarchyWindow();
                 }
 

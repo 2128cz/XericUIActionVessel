@@ -318,9 +318,12 @@ namespace XericUI.XTable.Rendering.Component
             base.OnDestroy();
         }
 
+        /// <summary>是否正在同步重建中，此时 Update / EditorUpdate 应跳过以避免重入</summary>
+        [System.NonSerialized] private bool m_IsRebuilding;
+
         private void Update()
         {
-            if (!m_DirtyFlag.IsDirty) return;
+            if (m_IsRebuilding || !m_DirtyFlag.IsDirty) return;
 
             var flags = m_DirtyFlag.Flags;
             // 仅滚动或选区变更 → 轻刷新（不重建边框/背景/预制体全回收）

@@ -421,58 +421,100 @@ namespace XericUI.XTable.Rendering.Component
         [ContextMenu("Xeric UI/完全重建表格")]
         public void FullRebuild()
         {
-            m_Assembler?.DestroyAll();
-            m_PrefabPool?.DestroyAll();
-            ClearAllChildren();
-            m_BackgroundGo = null;
-            m_BorderRenderer = null;
+            m_IsRebuilding = true;
+            try
+            {
+                // 清理跟踪状态（在销毁旧 Assembler 前先解除引用）
+                ReleaseAllTrackedCells();
+                m_ActivePrefabMap?.Clear();
 
-            m_TableData = new XTableData();
+                m_Assembler?.DestroyAll();
+                m_PrefabPool?.DestroyAll();
+                ClearAllChildren();
+                m_BackgroundGo = null;
+                m_BorderRenderer = null;
 
-            m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
-            m_PrefabPool = new PrefabPrototypePool(ContentTransform);
-            m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
-            RecalculateTotalSize();
-            CreateDefaultSampleData();
-            CreateBackground();
-            CreateViewportRenderer();
-            MarkDirty(TableDirtyType.All);
-            RefreshView();
-            SetChildrenVisible(m_ChildrenVisible);
+                m_TableData = new XTableData();
+
+                m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+                m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+                m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
+                RecalculateTotalSize();
+                CreateDefaultSampleData();
+                CreateBackground();
+                CreateViewportRenderer();
+                MarkDirty(TableDirtyType.All);
+                RefreshView();
+                SetChildrenVisible(m_ChildrenVisible);
+            }
+            finally
+            {
+                m_IsRebuilding = false;
+            }
         }
 
         /// <summary>重新生成表格但保留已有文本数据——先保存，重建后再回填</summary>
         public void FullRebuildPreservingData()
         {
-            // 保存当前单元格文本
-            var savedTexts = new Dictionary<(int, int), string>();
-            if (m_TableData != null)
+            m_IsRebuilding = true;
+            try
             {
-                int rows = m_RowHeights?.Length ?? 0;
-                int cols = m_ColWidths?.Length ?? 0;
-                for (int r = 0; r < rows; r++)
+                // 保存当前单元格文本
+                var savedTexts = new Dictionary<(int, int), string>();
+                if (m_TableData != null)
                 {
-                    for (int c = 0; c < cols; c++)
+                    int rows = m_RowHeights?.Length ?? 0;
+                    int cols = m_ColWidths?.Length ?? 0;
+                    for (int r = 0; r < rows; r++)
                     {
-                        var cell = m_TableData.GetCell(r, c);
-                        if (cell != null && !string.IsNullOrEmpty(cell.Text))
-                            savedTexts[(r, c)] = cell.Text;
+                        for (int c = 0; c < cols; c++)
+                        {
+                            var cell = m_TableData.GetCell(r, c);
+                            if (cell != null && !string.IsNullOrEmpty(cell.Text))
+                                savedTexts[(r, c)] = cell.Text;
+                        }
                     }
                 }
+
+                // 先清理跟踪状态再销毁旧对象
+                ReleaseAllTrackedCells();
+                m_ActivePrefabMap?.Clear();
+
+                m_Assembler?.DestroyAll();
+                m_PrefabPool?.DestroyAll();
+                ClearAllChildren();
+                m_BackgroundGo = null;
+                m_BorderRenderer = null;
+
+                m_TableData = new XTableData();
+
+                m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+                m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+                m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
+                RecalculateTotalSize();
+
+                // 恢复文本数据到新 TableData
+                foreach (var kv in savedTexts)
+                {
+                    int r = kv.Key.Item1, c = kv.Key.Item2;
+                    if (r < (m_RowHeights?.Length ?? 0) && c < (m_ColWidths?.Length ?? 0))
+                        m_TableData.GetOrCreateCell(r, c).Text = kv.Value;
+                }
+
+                // 如果没有恢复任何数据，则创建默认示例
+                if (savedTexts.Count == 0)
+                    CreateDefaultSampleData();
+
+                CreateBackground();
+                CreateViewportRenderer();
+                MarkDirty(TableDirtyType.All);
+                RefreshView();
+                SetChildrenVisible(m_ChildrenVisible);
             }
-
-            FullRebuild();
-
-            // 恢复文本数据
-            foreach (var kv in savedTexts)
+            finally
             {
-                int r = kv.Key.Item1, c = kv.Key.Item2;
-                if (r < (m_RowHeights?.Length ?? 0) && c < (m_ColWidths?.Length ?? 0))
-                    m_TableData.GetOrCreateCell(r, c).Text = kv.Value;
+                m_IsRebuilding = false;
             }
-
-            RefreshView();
-            SetChildrenVisible(m_ChildrenVisible);
         }
 
         /// <summary>
@@ -483,11 +525,21 @@ namespace XericUI.XTable.Rendering.Component
         {
             if (m_TableData != null)
             {
+                // 清理预制体：先调用 OnPrefabRelease 再清理映射
+                if (m_ActivePrefabMap != null)
+                {
+                    foreach (var kv in m_ActivePrefabMap)
+                    {
+                        var cellData = m_TableData.GetCell(kv.Key.Item1, kv.Key.Item2);
+                        cellData?.OnPrefabRelease?.Invoke(kv.Value);
+                    }
+                    m_ActivePrefabMap.Clear();
+                }
+                m_PrefabPool?.ReturnAll();
+
                 m_TableData.ClearAllMerges();
                 m_TableData.BlockMap.Clear();
             }
-            m_ActivePrefabMap?.Clear();
-            m_PrefabPool?.ReturnAll();
             m_Quadtree?.Clear();
             ClearSelection();
             MarkDirty(TableDirtyType.DataChanged);
@@ -499,28 +551,46 @@ namespace XericUI.XTable.Rendering.Component
         /// </summary>
         public void ClearTable()
         {
-            m_Assembler?.DestroyAll();
-            m_PrefabPool?.DestroyAll();
-            m_ActivePrefabMap?.Clear();
-            m_Quadtree?.Clear();
-            ClearAllChildren();
-            m_BackgroundGo = null;
-            m_BorderRenderer = null;
+            m_IsRebuilding = true;
+            try
+            {
+                // 清理预制体回调
+                if (m_ActivePrefabMap != null && m_TableData != null)
+                {
+                    foreach (var kv in m_ActivePrefabMap)
+                    {
+                        var cellData = m_TableData.GetCell(kv.Key.Item1, kv.Key.Item2);
+                        cellData?.OnPrefabRelease?.Invoke(kv.Value);
+                    }
+                }
 
-            m_TableData = new XTableData();
-            m_RowHeights = null;
-            m_ColWidths = null;
-            ClearSelection();
+                ReleaseAllTrackedCells();
+                m_ActivePrefabMap?.Clear();
+                m_Quadtree?.Clear();
 
-            m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
-            m_PrefabPool = new PrefabPrototypePool(ContentTransform);
-            m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
-            MarkDirty(TableDirtyType.All);
-            RecalculateTotalSize();
-            CreateBackground();
-            CreateViewportRenderer();
-            RefreshView();
-            SetChildrenVisible(m_ChildrenVisible);
+                m_Assembler?.DestroyAll();
+                m_PrefabPool?.DestroyAll();
+                ClearAllChildren();
+                m_BackgroundGo = null;
+                m_BorderRenderer = null;
+
+                m_TableData = new XTableData();
+                ClearSelection();
+
+                m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+                m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+                m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
+                MarkDirty(TableDirtyType.All);
+                RecalculateTotalSize();
+                CreateBackground();
+                CreateViewportRenderer();
+                RefreshView();
+                SetChildrenVisible(m_ChildrenVisible);
+            }
+            finally
+            {
+                m_IsRebuilding = false;
+            }
         }
 
         /// <summary>仅强制刷新样式，不重建数据结构</summary>
