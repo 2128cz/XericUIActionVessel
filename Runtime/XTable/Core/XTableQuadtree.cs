@@ -232,6 +232,25 @@ namespace XericUI.XTable.Core
 			QueryNode(m_Root, visibleRect, results);
 		}
 
+		/// <summary>获取完整表格的所有均匀叶子，用于背景分区提交。</summary>
+		public void QueryAll(List<QuadrantResult> results)
+		{
+			if (results == null || m_Root == null) return;
+			QueryAllNodes(m_Root, results);
+		}
+
+		private void QueryAllNodes(Node node, List<QuadrantResult> results)
+		{
+			if (node.IsUniform)
+			{
+				results.Add(new QuadrantResult { Region = node.Region, Namespace = node.UniformNamespace, Cells = node.Cells });
+				return;
+			}
+			if (node.Children == null) return;
+			for (int i = 0; i < node.Children.Length; i++)
+				if (node.Children[i] != null) QueryAllNodes(node.Children[i], results);
+		}
+
 		private void QueryNode(Node node, Rect visibleRect, List<QuadrantResult> results)
 		{
 			// 不相交则跳过

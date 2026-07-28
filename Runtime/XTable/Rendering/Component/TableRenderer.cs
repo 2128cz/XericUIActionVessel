@@ -196,10 +196,6 @@ namespace XericUI.XTable.Rendering.Component
         {
             Color selectionColor = GetStyleColor(defaultNs, XericUIActionTable.STYLE_CELL_SELECTION_BG_COLOR,
                 XericUIActionTable.SELECTION_COLOR_FALLBACK);
-            Color borderColor = GetStyleColor(defaultNs, XericUIActionTable.STYLE_CELL_BORDER_BOTTOM_COLOR,
-                XericUIActionTable.BORDER_COLOR_FALLBACK);
-            float borderWidth = GetStyleFloat(defaultNs, XericUIActionTable.STYLE_CELL_BORDER_BOTTOM_WIDTH,
-                XericUIActionTable.BORDER_WIDTH_FALLBACK);
 
             Color multiSelectColor = new Color(selectionColor.r, selectionColor.g, selectionColor.b, selectionColor.a * Config.MultiSelectAlphaFactor);
             Color focusColor = new Color(selectionColor.r + Config.FocusRAdd, selectionColor.g + Config.FocusGAdd, selectionColor.b + Config.FocusBAdd, selectionColor.a * Config.FocusAlphaMul);
@@ -227,8 +223,7 @@ namespace XericUI.XTable.Rendering.Component
                     }
 
                     XTableCellData data = tableData?.GetCell(r, c);
-                    string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
-                        ? data.StyleNamespace : defaultNs;
+                    string cellNS = data != null ? data.GetEffectiveStyleNamespace(defaultNs) : defaultNs;
                     int cellId = r * colWidths.Length + c;
 
                     // 选择高亮
@@ -251,23 +246,6 @@ namespace XericUI.XTable.Rendering.Component
                             selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
                             selImg.Image.color = selectionColor;
                         }
-                    }
-
-                    // 网格线
-                    var hLine = m_Assembler.GetImage(cellId, "cell_hline");
-                    if (hLine != null)
-                    {
-                        hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
-                        hLine.Rect.sizeDelta = new Vector2(cellW, borderWidth);
-                        hLine.Image.color = borderColor;
-                    }
-
-                    var vLine = m_Assembler.GetImage(cellId, "cell_vline");
-                    if (vLine != null)
-                    {
-                        vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - borderWidth, cellY);
-                        vLine.Rect.sizeDelta = new Vector2(borderWidth, cellH);
-                        vLine.Image.color = borderColor;
                     }
 
                     if (data == null) continue;
@@ -356,8 +334,7 @@ namespace XericUI.XTable.Rendering.Component
                     }
 
                     XTableCellData data = tableData?.GetCell(r, c);
-                    string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
-                        ? data.StyleNamespace : defaultNs;
+                    string cellNS = data != null ? data.GetEffectiveStyleNamespace(defaultNs) : defaultNs;
                     int cellId = r * colWidths.Length + c;
 
                     if (IsInSelectionRange != null && IsInSelectionRange(r, c))
@@ -379,22 +356,6 @@ namespace XericUI.XTable.Rendering.Component
                             selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
                             selImg.Image.color = rtSelectionColor;
                         }
-                    }
-
-                    var hLine = m_Assembler.GetImage(cellId, "cell_hline");
-                    if (hLine != null)
-                    {
-                        hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
-                        hLine.Rect.sizeDelta = new Vector2(cellW, Config.RuntimeBorderWidth);
-                        hLine.Image.color = Config.RuntimeBorderColor;
-                    }
-
-                    var vLine = m_Assembler.GetImage(cellId, "cell_vline");
-                    if (vLine != null)
-                    {
-                        vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - Config.RuntimeBorderWidth, cellY);
-                        vLine.Rect.sizeDelta = new Vector2(Config.RuntimeBorderWidth, cellH);
-                        vLine.Image.color = Config.RuntimeBorderColor;
                     }
 
                     if (data == null) continue;

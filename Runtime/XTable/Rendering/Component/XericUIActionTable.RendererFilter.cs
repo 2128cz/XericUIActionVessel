@@ -30,8 +30,6 @@ namespace XericUI.XTable.Rendering.Component
             public CellAssembler.PooledText CellText;
             public CellAssembler.PooledImage CellImage;
             public CellAssembler.PooledImage SelectBg;
-            public CellAssembler.PooledImage HLine;
-            public CellAssembler.PooledImage VLine;
         }
 
         #endregion
@@ -45,8 +43,6 @@ namespace XericUI.XTable.Rendering.Component
             m_Assembler?.ReleaseText(objs.CellText);
             m_Assembler?.ReleaseImage(objs.CellImage);
             m_Assembler?.ReleaseImage(objs.SelectBg);
-            m_Assembler?.ReleaseImage(objs.HLine);
-            m_Assembler?.ReleaseImage(objs.VLine);
             m_CellTracked.Remove(key);
         }
 
@@ -58,8 +54,6 @@ namespace XericUI.XTable.Rendering.Component
                 m_Assembler?.ReleaseText(objs.CellText);
                 m_Assembler?.ReleaseImage(objs.CellImage);
                 m_Assembler?.ReleaseImage(objs.SelectBg);
-                m_Assembler?.ReleaseImage(objs.HLine);
-                m_Assembler?.ReleaseImage(objs.VLine);
             }
             m_CellTracked.Clear();
             m_LastRenderedCells.Clear();
@@ -132,13 +126,11 @@ namespace XericUI.XTable.Rendering.Component
 
         #region 单元格内容渲染（统一入口）
 
-        /// <summary>渲染单个单元格的完整内容（选择高亮 + 网格线 + 文本/图片/预制体）。</summary>
-        private void RenderCellContent(int row, int col, string defaultNs,
-            bool withGridLines, bool editorMode)
+        /// <summary>渲染单个单元格内容（选择高亮 + 文本/图片/预制体）。</summary>
+        private void RenderCellContent(int row, int col, string defaultNs, bool editorMode)
         {
             XTableCellData data = TableData.GetCell(row, col);
-            string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
-                ? data.StyleNamespace : defaultNs;
+            string cellNS = ResolveCellNamespace(data);
 
             float cellX = GetCellContentX(col);
             float cellY = GetCellContentY(row);
@@ -159,10 +151,6 @@ namespace XericUI.XTable.Rendering.Component
 
             // ── 选择高亮 ──
             ApplySelectionHighlight(cellId, row, col, cellX, cellY, cellW, cellH, cellNS, editorMode, ref objs);
-
-            // ── 网格线（仅完整刷新时）──
-            if (withGridLines)
-                ApplyGridLines(cellId, cellX, cellY, cellW, cellH, cellNS, editorMode, ref objs);
 
             // ── 单元格内容 ──
             if (data != null)
@@ -221,44 +209,6 @@ namespace XericUI.XTable.Rendering.Component
             }
 
             objs.SelectBg = img;
-        }
-
-        private void ApplyGridLines(int cellId, float cellX, float cellY, float cellW, float cellH,
-            string cellNS, bool editorMode, ref CellTrackedObjs objs)
-        {
-            Color borderColor;
-            float borderWidth;
-
-            if (editorMode)
-            {
-                borderColor = GetCellBorderColor(cellNS);
-                borderWidth = GetCellBorderWidth(cellNS);
-            }
-            else
-            {
-                borderColor = Config.RuntimeBorderColor;
-                borderWidth = Config.RuntimeBorderWidth;
-            }
-
-            // 水平网格线（底部）
-            var hLine = m_Assembler.GetImage(cellId, "cell_hline", cellNS);
-            if (hLine != null)
-            {
-                hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
-                hLine.Rect.sizeDelta = new Vector2(cellW, borderWidth);
-                hLine.Image.color = borderColor;
-                objs.HLine = hLine;
-            }
-
-            // 垂直网格线（右侧）
-            var vLine = m_Assembler.GetImage(cellId, "cell_vline", cellNS);
-            if (vLine != null)
-            {
-                vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - borderWidth, cellY);
-                vLine.Rect.sizeDelta = new Vector2(borderWidth, cellH);
-                vLine.Image.color = borderColor;
-                objs.VLine = vLine;
-            }
         }
 
         private void RenderCellText(int cellId, XTableCellData data,
@@ -348,12 +298,7 @@ namespace XericUI.XTable.Rendering.Component
                 ctRt.sizeDelta = new Vector2(m_TotalWidth + pad2, m_TotalHeight + pad2);
             }
 
-            // 更新背景尺寸
-            if (m_BackgroundGo != null)
-            {
-                var bgRt = m_BackgroundGo.GetComponent<RectTransform>();
-                bgRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
-            }
+            UpdateBackground();
 
             // 归还所有追踪对象 + 预制体
             if (m_ActivePrefabMap != null)
@@ -380,7 +325,7 @@ namespace XericUI.XTable.Rendering.Component
             string ns = m_DefaultStyleNamespace;
             ComputeVisibleCellsInto(m_LastRenderedCells);
             foreach (var (r, c) in m_LastRenderedCells)
-                RenderCellContent(r, c, ns, withGridLines: true, editorMode: editorMode);
+                RenderCellContent(r, c, ns, editorMode);
 
             // 边框 + 冻结
             RebuildBorders();
@@ -462,8 +407,7 @@ namespace XericUI.XTable.Rendering.Component
             foreach (var cell in newVisible)
             {
                 if (selectionChanged || !m_LastRenderedCells.Contains(cell))
-                    RenderCellContent(cell.Item1, cell.Item2, ns,
-                        withGridLines: false, editorMode: editorMode);
+                    RenderCellContent(cell.Item1, cell.Item2, ns, editorMode);
             }
 
             // 5. 交换：将 newVisible 作为下一帧的比较基准
@@ -488,7 +432,7 @@ namespace XericUI.XTable.Rendering.Component
                 var child = contentT.GetChild(i);
                 // 跳过池管理的对象（标记有 POOL_FLAGS = DontSave | HideInHierarchy）
                 if ((child.hideFlags & HideFlags.DontSave) != 0) continue;
-                if (m_BackgroundGo != null && child.gameObject == m_BackgroundGo) continue;
+                if (m_BackgroundRenderer != null && child.gameObject == m_BackgroundRenderer.gameObject) continue;
                 if (borderT != null && child == borderT) continue;
 
                 child.gameObject.hideFlags = HideFlags.None;
@@ -505,24 +449,67 @@ namespace XericUI.XTable.Rendering.Component
 
         private void CreateBackground()
         {
-            if (m_BackgroundGo != null) return;
+            if (m_BackgroundRenderer != null) return;
 
-            m_BackgroundGo = new GameObject("_TableBackground",
-                typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            m_BackgroundGo.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
-            m_BackgroundGo.transform.SetParent(ContentTransform, false);
-            m_BackgroundGo.transform.SetAsFirstSibling();
+            var backgroundGo = new GameObject("_TableBackground",
+                typeof(RectTransform), typeof(CanvasRenderer), typeof(XTableBackgroundRenderer));
+            backgroundGo.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
+            backgroundGo.transform.SetParent(ContentTransform, false);
+            backgroundGo.transform.SetAsFirstSibling();
 
-            RectTransform bgRt = m_BackgroundGo.GetComponent<RectTransform>();
-            bgRt.anchorMin = new Vector2(0, 1);
-            bgRt.anchorMax = new Vector2(0, 1);
-            bgRt.pivot = new Vector2(0, 1);
-            bgRt.anchoredPosition = new Vector2(m_ContentOffset, -m_ContentOffset);
-            bgRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+            RectTransform backgroundRt = backgroundGo.GetComponent<RectTransform>();
+            backgroundRt.anchorMin = new Vector2(0, 1);
+            backgroundRt.anchorMax = new Vector2(0, 1);
+            backgroundRt.pivot = new Vector2(0, 1);
+            backgroundRt.anchoredPosition = new Vector2(m_ContentOffset, -m_ContentOffset);
+            backgroundRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
 
-            var bgImg = m_BackgroundGo.GetComponent<Image>();
-            bgImg.color = GetCellBgColor(m_DefaultStyleNamespace);
-            bgImg.raycastTarget = false;
+            m_BackgroundRenderer = backgroundGo.GetComponent<XTableBackgroundRenderer>();
+            m_BackgroundRenderer.raycastTarget = false;
+            UpdateBackground();
+        }
+
+        private void UpdateBackground()
+        {
+            if (m_BackgroundRenderer == null) return;
+
+            m_BackgroundRenderer.rectTransform.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+            string baseNamespace = GetSingleStyleNamespace();
+            var rects = new List<XTableBackgroundRenderer.RectData>
+            {
+                new(new Rect(0f, 0f, m_TotalWidth, m_TotalHeight), GetCellBgColor(baseNamespace))
+            };
+
+            if (HasMultipleStyleNamespaces())
+            {
+                EnsureQuadtreeBuilt();
+                if (m_Quadtree != null && m_Quadtree.IsBuilt)
+                {
+                    m_ReusableQuadrants.Clear();
+                    m_Quadtree.QueryAll(m_ReusableQuadrants);
+                    foreach (var quadrant in m_ReusableQuadrants)
+                    {
+                        if (string.IsNullOrEmpty(quadrant.Namespace) || quadrant.Namespace == baseNamespace)
+                            continue;
+                        rects.Add(new XTableBackgroundRenderer.RectData(quadrant.Region, GetCellBgColor(quadrant.Namespace)));
+                    }
+                }
+            }
+            else
+            {
+                m_Quadtree?.Clear();
+            }
+
+            m_BackgroundRenderer.ReplaceRects(rects);
+        }
+
+        private void DestroyBackgroundRenderer()
+        {
+            if (m_BackgroundRenderer == null) return;
+
+            if (Application.isPlaying) Destroy(m_BackgroundRenderer.gameObject);
+            else DestroyImmediate(m_BackgroundRenderer.gameObject);
+            m_BackgroundRenderer = null;
         }
 
         #endregion

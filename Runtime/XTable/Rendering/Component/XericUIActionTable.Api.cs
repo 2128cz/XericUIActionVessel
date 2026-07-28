@@ -79,17 +79,13 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>设置单元格的样式命名空间（兼容旧版，等同于 StyleNamespace 字段）</summary>
         public void SetCellStyleNamespace(int row, int col, string styleNamespace)
         {
-            // 合并源：遍历所有被合并单元格，全部写入该样式
             if (TableData.IsMergeSource(row, col, out int rowSpan, out int colSpan))
             {
-                for (int r = row; r < row + rowSpan; r++)
-                {
-                    for (int c = col; c < col + colSpan; c++)
-                    {
-                        if (r < m_RowHeights.Length && c < m_ColWidths.Length)
-                            ApplyCellStyleToCell(r, c, styleNamespace);
-                    }
-                }
+                for (int r = row; r < row + rowSpan && r < m_RowHeights.Length; r++)
+                for (int c = col; c < col + colSpan && c < m_ColWidths.Length; c++)
+                    TableData.GetOrCreateCell(r, c).StyleNamespace = styleNamespace ?? string.Empty;
+
+                ApplyCellStyleBorders(row, col, rowSpan, colSpan, styleNamespace);
             }
             else
             {
@@ -99,13 +95,26 @@ namespace XericUI.XTable.Rendering.Component
             MarkDirty(TableDirtyType.StyleChanged);
         }
 
-        /// <summary>在单个单元格上设置样式，同时写入其右侧和底部的边框缓存</summary>
+        /// <summary>设置单元格样式并写入其可见右侧、底部边框范围。</summary>
         private void ApplyCellStyleToCell(int row, int col, string ns)
         {
             var data = TableData.GetOrCreateCell(row, col);
-            data.StyleNamespace = ns;
-            TableData.SetBorderRightNs(row, col, ns);
-            TableData.SetBorderBottomNs(row, col, ns);
+            data.StyleNamespace = ns ?? string.Empty;
+
+            int rowSpan = 1;
+            int colSpan = 1;
+            if (TableData.IsMergeSource(row, col, out int mergedRows, out int mergedCols))
+            {
+                rowSpan = mergedRows;
+                colSpan = mergedCols;
+            }
+            ApplyCellStyleBorders(row, col, rowSpan, colSpan, ns);
+        }
+
+        private void ApplyCellStyleBorders(int row, int col, int rowSpan, int colSpan, string ns)
+        {
+            TableData.SetBorderRange(XTableBorderAxis.Vertical, col + colSpan, row, rowSpan, ns);
+            TableData.SetBorderRange(XTableBorderAxis.Horizontal, row + rowSpan, col, colSpan, ns);
         }
 
         /// <summary>清除文本内容</summary>
@@ -431,10 +440,13 @@ namespace XericUI.XTable.Rendering.Component
                 m_Assembler?.DestroyAll();
                 m_PrefabPool?.DestroyAll();
                 ClearAllChildren();
-                m_BackgroundGo = null;
+                m_BackgroundRenderer = null;
                 m_BorderRenderer = null;
 
                 m_TableData = new XTableData();
+                m_Quadtree?.Clear();
+                m_QuadtreeDirty = true;
+                m_StyleNamespaceDirty = true;
 
                 m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
                 m_PrefabPool = new PrefabPrototypePool(ContentTransform);
@@ -483,10 +495,13 @@ namespace XericUI.XTable.Rendering.Component
                 m_Assembler?.DestroyAll();
                 m_PrefabPool?.DestroyAll();
                 ClearAllChildren();
-                m_BackgroundGo = null;
+                m_BackgroundRenderer = null;
                 m_BorderRenderer = null;
 
                 m_TableData = new XTableData();
+                m_Quadtree?.Clear();
+                m_QuadtreeDirty = true;
+                m_StyleNamespaceDirty = true;
 
                 m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
                 m_PrefabPool = new PrefabPrototypePool(ContentTransform);
@@ -539,6 +554,7 @@ namespace XericUI.XTable.Rendering.Component
 
                 m_TableData.ClearAllMerges();
                 m_TableData.BlockMap.Clear();
+                m_StyleNamespaceDirty = true;
             }
             m_Quadtree?.Clear();
             ClearSelection();
@@ -571,10 +587,12 @@ namespace XericUI.XTable.Rendering.Component
                 m_Assembler?.DestroyAll();
                 m_PrefabPool?.DestroyAll();
                 ClearAllChildren();
-                m_BackgroundGo = null;
+                m_BackgroundRenderer = null;
                 m_BorderRenderer = null;
 
                 m_TableData = new XTableData();
+                m_QuadtreeDirty = true;
+                m_StyleNamespaceDirty = true;
                 ClearSelection();
 
                 m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);

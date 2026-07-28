@@ -65,7 +65,7 @@ namespace XericUI.XTable.Rendering.Component
 
         [System.NonSerialized] private XTableSelectionHandle m_SelectionHandle;
 
-        [System.NonSerialized] private GameObject m_BackgroundGo;
+        [System.NonSerialized] private XTableBackgroundRenderer m_BackgroundRenderer;
 
 		/// <summary>预制体对象池——按原型分组管理</summary>
 		[System.NonSerialized] private PrefabPrototypePool m_PrefabPool;
@@ -76,8 +76,11 @@ namespace XericUI.XTable.Rendering.Component
 		/// <summary>Texture2D → Sprite 缓存，避免每帧 Sprite.Create 分配</summary>
 		[System.NonSerialized] private Dictionary<Texture2D, Sprite> m_SpriteCache;
 
-        /// <summary>表格四叉树——按 StyleNamespace 分区，渲染阶段查询可见象限</summary>
+        /// <summary>表格四叉树——仅多样式背景分区时按需构建</summary>
         [System.NonSerialized] private XTableQuadtree m_Quadtree;
+        [System.NonSerialized] private bool m_QuadtreeDirty = true;
+        [System.NonSerialized] private readonly HashSet<string> m_ActiveStyleNamespaces = new();
+        [System.NonSerialized] private bool m_StyleNamespaceDirty = true;
 
         /// <summary>边框线段渲染器——使用 UILineRendererV2 的坐标线段绘制</summary>
         [System.NonSerialized] private UILineRendererV2 m_BorderRenderer;
@@ -304,12 +307,7 @@ namespace XericUI.XTable.Rendering.Component
             m_PrefabPool?.DestroyAll();
             m_ActivePrefabMap?.Clear();
             DestroyBorderRenderer();
-            if (m_BackgroundGo != null)
-            {
-                if (Application.isPlaying) Destroy(m_BackgroundGo);
-                else DestroyImmediate(m_BackgroundGo);
-                m_BackgroundGo = null;
-            }
+            DestroyBackgroundRenderer();
 
             // 销毁 Viewport 冻结渲染器
             m_ViewportRenderer?.DestroyAll();
@@ -364,9 +362,11 @@ namespace XericUI.XTable.Rendering.Component
         {
             m_DirtyFlag.Mark(type);
 
-            // 仅数据或布局变更时重建四叉树；滚动/选区变更无需重建
+            // 数据、布局或样式改变只使四叉树失效；仅多样式背景需要时再构建。
             if ((type & (TableDirtyType.DataChanged | TableDirtyType.LayoutChanged | TableDirtyType.StyleChanged)) != 0)
-                MaintainQuadtree();
+                m_QuadtreeDirty = true;
+            if ((type & (TableDirtyType.LayoutChanged | TableDirtyType.StyleChanged)) != 0)
+                m_StyleNamespaceDirty = true;
         }
 
         /// <summary>运行时样式变更回调：标记脏数据，下一帧重绘</summary>

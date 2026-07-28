@@ -316,9 +316,7 @@ namespace XericUI.XTable.Rendering.Component
                     if (!string.IsNullOrEmpty(cell.Text))
                         excelCell.Value = cell.Text;
 
-                    string ns = !string.IsNullOrEmpty(cell.StyleNamespace)
-                        ? cell.StyleNamespace
-                        : m_DefaultStyleNamespace;
+                    string ns = ResolveCellNamespace(cell);
                     if (!string.IsNullOrEmpty(ns))
                         ApplyStyleToExcelCell(excelCell, ns);
                 }
@@ -332,13 +330,7 @@ namespace XericUI.XTable.Rendering.Component
             if (m_TableData != null)
                 WriteBorderCacheToExcel(ws, rows, cols);
 
-            // 写入表格外边框
-            if (m_TableData?.OuterBorderNs != null && m_TableData.OuterBorderNs.Count > 0)
-            {
-                var outerRange = ws.Cells[1, 1, rows, cols];
-                outerRange.Style.Border.BorderAround(ExcelBorderStyle.Thin,
-                    System.Drawing.Color.FromArgb(180, 180, 180));
-            }
+            // 外边框样式已由范围边框写入，无需额外的统一 BorderAround。
         }
 
         #endregion
@@ -519,7 +511,7 @@ namespace XericUI.XTable.Rendering.Component
             // 顶部外框（第一行顶部）
             for (int c = 0; c < cols; c++)
             {
-                string topNs = m_TableData.GetBorderBottomNs(-1, c);
+                string topNs = m_TableData.GetOuterBorderNs(-1, c);
                 if (string.IsNullOrEmpty(topNs)) continue;
                 Color color = GetCellBorderColor(topNs);
                 float width = GetCellBorderWidth(topNs);
@@ -533,7 +525,7 @@ namespace XericUI.XTable.Rendering.Component
             // 左侧外框（第一列左侧）
             for (int r = 0; r < rows; r++)
             {
-                string leftNs = m_TableData.GetBorderRightNs(r, -1);
+                string leftNs = m_TableData.GetOuterBorderNs(r, -1);
                 if (string.IsNullOrEmpty(leftNs)) continue;
                 Color color = GetCellBorderColor(leftNs);
                 float width = GetCellBorderWidth(leftNs);

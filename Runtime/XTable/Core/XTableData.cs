@@ -7,6 +7,24 @@ using XericUI.XTable.Mapping;
 
 namespace XericUI.XTable.Core
 {
+	public enum XTableBorderAxis : byte
+	{
+		Horizontal,
+		Vertical,
+	}
+
+	[Serializable]
+	public struct XTableBorderRange
+	{
+		public XTableBorderAxis Axis;
+		public int FixedIndex;
+		public int StartIndex;
+		public int Length;
+		public int StyleIndex;
+
+		public int EndIndex => StartIndex + Length;
+	}
+
 	/// <summary>
 	/// 表格数据主类——持有块字典，提供单元格级别的读写接口。
 	/// 块按需创建（SetCell 时自动创建不存在的块），通过 Z 曲线索引映射。
@@ -37,6 +55,16 @@ namespace XericUI.XTable.Core
 		// 使用两个平行列表在 OnBeforeSerialize/OnAfterDeserialize 中转换。
 		[SerializeField] private List<ulong> m_BlockKeys = new List<ulong>();
 		[SerializeField] private List<XTableBlock> m_BlockValues = new List<XTableBlock>();
+
+		[SerializeField] private List<string> m_BorderStyles = new List<string>();
+		[SerializeField] private List<XTableBorderRange> m_BorderRanges = new List<XTableBorderRange>();
+
+		// 仅用于读取旧资产的外边框序列化代理；迁移后不再写入。
+		[SerializeField] private List<int> m_OuterBorderRows = new List<int>();
+		[SerializeField] private List<int> m_OuterBorderCols = new List<int>();
+		[SerializeField] private List<string> m_OuterBorderValues = new List<string>();
+
+		[NonSerialized] private Dictionary<(XTableBorderAxis axis, int fixedIndex), List<XTableBorderRange>> m_BorderRangeIndex;
 
 		/// <summary>
 		/// 获取或创建单元格——如果单元格不存在则自动创建空数据。
@@ -83,6 +111,8 @@ namespace XericUI.XTable.Core
 
 		public void OnBeforeSerialize()
 		{
+			if (m_BorderRangeIndex != null)
+				RebuildSerializedBorderRanges();
 			// Dictionary → 平行列表
 			m_BlockKeys.Clear();
 			m_BlockValues.Clear();
@@ -98,6 +128,9 @@ namespace XericUI.XTable.Core
 
 		public void OnAfterDeserialize()
 		{
+			if (m_BorderStyles == null) m_BorderStyles = new List<string>();
+			if (m_BorderRanges == null) m_BorderRanges = new List<XTableBorderRange>();
+			m_BorderRangeIndex = null;
 			if (BlockSizeX <= 0) BlockSizeX = DefaultBlockSize;
 			if (BlockSizeY <= 0) BlockSizeY = DefaultBlockSize;
 
@@ -111,6 +144,7 @@ namespace XericUI.XTable.Core
 				if (m_BlockValues[i] != null)
 					BlockMap[m_BlockKeys[i]] = m_BlockValues[i];
 			}
+			MigrateLegacyBorderCache();
 		}
 
 		#endregion
@@ -408,166 +442,183 @@ namespace XericUI.XTable.Core
 
 		#endregion
 
-		#region 边框缓存
+		#region 边框范围
 
-		/// <summary>
-		/// 外边框样式管理器——维护 -1 行 / -1 列的边框样式命名空间。
-		/// key = (row, col)，其中 row / col 可为 -1。
-		/// (-1, -1) = 表格最外框,
-		/// (-1, c) = 第 c 列顶部边框,
-		/// (r, -1) = 第 r 行左侧边框。
-		/// </summary>
-		[NonSerialized] public Dictionary<(int row, int col), string> OuterBorderNs;
+		public IReadOnlyList<XTableBorderRange> BorderRanges => m_BorderRanges;
 
-		// OuterBorderNs 序列化代理
-		[SerializeField] private List<int> m_OuterBorderRows = new List<int>();
-		[SerializeField] private List<int> m_OuterBorderCols = new List<int>();
-		[SerializeField] private List<string> m_OuterBorderValues = new List<string>();
-
-		/// <summary>
-		/// 获取右侧边框样式命名空间。
-		/// col &lt; 0 时退回到 OuterBorderNs。
-		/// </summary>
-		public string GetBorderRightNs(int row, int col)
-		{
-			if (col < 0 || row < 0)
-				return GetOuterBorderNs(row, col);
-
-			XTableCoordinateUtility.CellToBlockCoordinate(row, col, BlockSizeX, BlockSizeY,
-				out int blockRow, out int blockCol,
-				out int localRow, out int localCol);
-			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
-
-			if (!BlockMap.TryGetValue(zIndex, out XTableBlock block))
-				return null;
-			return block.GetBorderRight(localRow, localCol);
-		}
-
-		/// <summary>
-		/// 设置右侧边框样式命名空间。
-		/// col &lt; 0 时写入 OuterBorderNs。
-		/// </summary>
+		public string GetBorderRightNs(int row, int col) =>
+			row < 0 || col < 0 ? GetOuterBorderNs(row, col) : GetBorderNamespace(XTableBorderAxis.Vertical, col + 1, row);
+		public string GetBorderBottomNs(int row, int col) =>
+			row < 0 || col < 0 ? GetOuterBorderNs(row, col) : GetBorderNamespace(XTableBorderAxis.Horizontal, row + 1, col);
 		public void SetBorderRightNs(int row, int col, string ns)
 		{
-			if (col < 0 || row < 0)
-			{
-				SetOuterBorderNs(row, col, ns);
-				return;
-			}
-
-			XTableCoordinateUtility.CellToBlockCoordinate(row, col, BlockSizeX, BlockSizeY,
-				out int blockRow, out int blockCol,
-				out int localRow, out int localCol);
-			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
-
-			if (!BlockMap.TryGetValue(zIndex, out XTableBlock block))
-			{
-				block = new XTableBlock(BlockSizeX, BlockSizeY, blockRow, blockCol);
-				BlockMap[zIndex] = block;
-			}
-			block.SetBorderRight(localRow, localCol, ns);
+			if (row < 0 || col < 0) SetOuterBorderNs(row, col, ns);
+			else SetBorderRange(XTableBorderAxis.Vertical, col + 1, row, 1, ns);
 		}
-
-		/// <summary>
-		/// 获取底部边框样式命名空间。
-		/// row &lt; 0 时退回到 OuterBorderNs。
-		/// </summary>
-		public string GetBorderBottomNs(int row, int col)
-		{
-			if (col < 0 || row < 0)
-				return GetOuterBorderNs(row, col);
-
-			XTableCoordinateUtility.CellToBlockCoordinate(row, col, BlockSizeX, BlockSizeY,
-				out int blockRow, out int blockCol,
-				out int localRow, out int localCol);
-			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
-
-			if (!BlockMap.TryGetValue(zIndex, out XTableBlock block))
-				return null;
-			return block.GetBorderBottom(localRow, localCol);
-		}
-
-		/// <summary>
-		/// 设置底部边框样式命名空间。
-		/// row &lt; 0 时写入 OuterBorderNs。
-		/// </summary>
 		public void SetBorderBottomNs(int row, int col, string ns)
 		{
-			if (col < 0 || row < 0)
-			{
-				SetOuterBorderNs(row, col, ns);
-				return;
-			}
-
-			XTableCoordinateUtility.CellToBlockCoordinate(row, col, BlockSizeX, BlockSizeY,
-				out int blockRow, out int blockCol,
-				out int localRow, out int localCol);
-			ulong zIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
-
-			if (!BlockMap.TryGetValue(zIndex, out XTableBlock block))
-			{
-				block = new XTableBlock(BlockSizeX, BlockSizeY, blockRow, blockCol);
-				BlockMap[zIndex] = block;
-			}
-			block.SetBorderBottom(localRow, localCol, ns);
+			if (row < 0 || col < 0) SetOuterBorderNs(row, col, ns);
+			else SetBorderRange(XTableBorderAxis.Horizontal, row + 1, col, 1, ns);
 		}
 
-		/// <summary>获取外边框样式（-1 行 / -1 列）</summary>
 		public string GetOuterBorderNs(int row, int col)
 		{
-			if (OuterBorderNs == null) return null;
-			OuterBorderNs.TryGetValue((row, col), out string ns);
-			return ns;
+			if (row < 0 && col >= 0) return GetBorderNamespace(XTableBorderAxis.Horizontal, 0, col);
+			if (col < 0 && row >= 0) return GetBorderNamespace(XTableBorderAxis.Vertical, 0, row);
+			return null;
 		}
 
-		/// <summary>设置外边框样式（-1 行 / -1 列）</summary>
 		public void SetOuterBorderNs(int row, int col, string ns)
 		{
-			if (OuterBorderNs == null)
-				OuterBorderNs = new Dictionary<(int, int), string>();
-			OuterBorderNs[(row, col)] = ns;
+			if (row < 0 && col >= 0) SetBorderRange(XTableBorderAxis.Horizontal, 0, col, 1, ns);
+			else if (col < 0 && row >= 0) SetBorderRange(XTableBorderAxis.Vertical, 0, row, 1, ns);
 		}
 
-		/// <summary>清空所有边框缓存</summary>
-		public void ClearAllBorderCache()
+		public void SetBorderRange(XTableBorderAxis axis, int fixedIndex, int startIndex, int length, string ns)
 		{
-			OuterBorderNs?.Clear();
-			foreach (var kv in BlockMap)
+			if (length <= 0) return;
+			EnsureBorderIndex();
+			var key = (axis, fixedIndex);
+			if (!m_BorderRangeIndex.TryGetValue(key, out var ranges))
 			{
-				var b = kv.Value;
-				if (b.BorderRightNs != null)
-					System.Array.Clear(b.BorderRightNs, 0, b.BorderRightNs.Length);
-				if (b.BorderBottomNs != null)
-					System.Array.Clear(b.BorderBottomNs, 0, b.BorderBottomNs.Length);
+				ranges = new List<XTableBorderRange>();
+				m_BorderRangeIndex[key] = ranges;
 			}
-		}
 
-		// ── OuterBorderNs 序列化 ──
-		private void SerializeOuterBorder()
-		{
-			m_OuterBorderRows.Clear();
-			m_OuterBorderCols.Clear();
-			m_OuterBorderValues.Clear();
-			if (OuterBorderNs != null)
+			int end = startIndex + length;
+			var updated = new List<XTableBorderRange>(ranges.Count + 1);
+			for (int i = 0; i < ranges.Count; i++)
 			{
-				foreach (var kv in OuterBorderNs)
+				var old = ranges[i];
+				if (old.EndIndex <= startIndex || old.StartIndex >= end)
 				{
-					m_OuterBorderRows.Add(kv.Key.row);
-					m_OuterBorderCols.Add(kv.Key.col);
-					m_OuterBorderValues.Add(kv.Value);
+					updated.Add(old);
+					continue;
+				}
+				if (old.StartIndex < startIndex)
+				{
+					old.Length = startIndex - old.StartIndex;
+					updated.Add(old);
+				}
+				if (old.EndIndex > end)
+				{
+					int oldEnd = old.EndIndex;
+					old.StartIndex = end;
+					old.Length = oldEnd - end;
+					updated.Add(old);
 				}
 			}
+
+			if (!string.IsNullOrEmpty(ns))
+			{
+				updated.Add(new XTableBorderRange
+				{
+					Axis = axis, FixedIndex = fixedIndex, StartIndex = startIndex,
+					Length = length, StyleIndex = GetOrAddBorderStyle(ns)
+				});
+			}
+			updated.Sort((a, b) => a.StartIndex.CompareTo(b.StartIndex));
+			MergeAdjacentRanges(updated);
+			ranges.Clear();
+			ranges.AddRange(updated);
+			RebuildSerializedBorderRanges();
 		}
 
-		private void DeserializeOuterBorder()
+		public string GetBorderNamespace(XTableBorderAxis axis, int fixedIndex, int index)
 		{
-			OuterBorderNs = new Dictionary<(int, int), string>();
-			int count = System.Math.Min(m_OuterBorderRows.Count,
-				System.Math.Min(m_OuterBorderCols.Count, m_OuterBorderValues.Count));
-			for (int i = 0; i < count; i++)
+			EnsureBorderIndex();
+			if (!m_BorderRangeIndex.TryGetValue((axis, fixedIndex), out var ranges)) return null;
+			for (int i = 0; i < ranges.Count; i++)
+				if (index >= ranges[i].StartIndex && index < ranges[i].EndIndex)
+					return GetBorderStyle(ranges[i].StyleIndex);
+			return null;
+		}
+
+		public void ClearAllBorderCache()
+		{
+			m_BorderStyles.Clear();
+			m_BorderRanges.Clear();
+			m_BorderRangeIndex?.Clear();
+		}
+
+		private void MigrateLegacyBorderCache()
+		{
+			if (m_BorderRanges.Count > 0 || BlockMap == null) return;
+			int outerCount = Math.Min(m_OuterBorderRows?.Count ?? 0, Math.Min(m_OuterBorderCols?.Count ?? 0, m_OuterBorderValues?.Count ?? 0));
+			for (int i = 0; i < outerCount; i++)
+				SetOuterBorderNs(m_OuterBorderRows[i], m_OuterBorderCols[i], m_OuterBorderValues[i]);
+			m_OuterBorderRows?.Clear();
+			m_OuterBorderCols?.Clear();
+			m_OuterBorderValues?.Clear();
+			foreach (var pair in BlockMap)
 			{
-				if (m_OuterBorderValues[i] != null)
-					OuterBorderNs[(m_OuterBorderRows[i], m_OuterBorderCols[i])] = m_OuterBorderValues[i];
+				var block = pair.Value;
+				if (block == null) continue;
+				int count = block.BlockSizeX * block.BlockSizeY;
+				for (int i = 0; i < count; i++)
+				{
+					int row = block.BlockRow * block.BlockSizeY + i / block.BlockSizeX;
+					int col = block.BlockCol * block.BlockSizeX + i % block.BlockSizeX;
+					if (block.BorderRightNs != null && i < block.BorderRightNs.Length && !string.IsNullOrEmpty(block.BorderRightNs[i]))
+						SetBorderRange(XTableBorderAxis.Vertical, col + 1, row, 1, block.BorderRightNs[i]);
+					if (block.BorderBottomNs != null && i < block.BorderBottomNs.Length && !string.IsNullOrEmpty(block.BorderBottomNs[i]))
+						SetBorderRange(XTableBorderAxis.Horizontal, row + 1, col, 1, block.BorderBottomNs[i]);
+				}
+				block.BorderRightNs = null;
+				block.BorderBottomNs = null;
+			}
+		}
+
+		private int GetOrAddBorderStyle(string ns)
+		{
+			for (int i = 0; i < m_BorderStyles.Count; i++)
+				if (m_BorderStyles[i] == ns) return i;
+			m_BorderStyles.Add(ns);
+			return m_BorderStyles.Count - 1;
+		}
+
+		private string GetBorderStyle(int styleIndex)
+		{
+			return styleIndex >= 0 && styleIndex < m_BorderStyles.Count ? m_BorderStyles[styleIndex] : null;
+		}
+
+		private void EnsureBorderIndex()
+		{
+			if (m_BorderRangeIndex != null) return;
+			m_BorderRangeIndex = new Dictionary<(XTableBorderAxis axis, int fixedIndex), List<XTableBorderRange>>();
+			for (int i = 0; i < m_BorderRanges.Count; i++)
+			{
+				var range = m_BorderRanges[i];
+				var key = (range.Axis, range.FixedIndex);
+				if (!m_BorderRangeIndex.TryGetValue(key, out var ranges))
+				{
+					ranges = new List<XTableBorderRange>();
+					m_BorderRangeIndex[key] = ranges;
+				}
+				ranges.Add(range);
+			}
+		}
+
+		private void RebuildSerializedBorderRanges()
+		{
+			EnsureBorderIndex();
+			m_BorderRanges.Clear();
+			foreach (var pair in m_BorderRangeIndex)
+				m_BorderRanges.AddRange(pair.Value);
+		}
+
+		private static void MergeAdjacentRanges(List<XTableBorderRange> ranges)
+		{
+			for (int i = ranges.Count - 2; i >= 0; i--)
+			{
+				var current = ranges[i];
+				var next = ranges[i + 1];
+				if (current.EndIndex == next.StartIndex && current.StyleIndex == next.StyleIndex)
+				{
+					current.Length += next.Length;
+					ranges[i] = current;
+					ranges.RemoveAt(i + 1);
+				}
 			}
 		}
 

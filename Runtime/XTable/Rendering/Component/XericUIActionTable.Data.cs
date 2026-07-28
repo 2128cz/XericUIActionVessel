@@ -153,40 +153,81 @@ namespace XericUI.XTable.Rendering.Component
 
         #region 四叉树
 
-        /// <summary>强制重建四叉树（外部调用入口，适合编辑器调试或手动刷新）</summary>
+        /// <summary>强制重建四叉树（仅多样式表会实际构建）。</summary>
         public void ForceRebuildQuadtree()
         {
-            if (m_Quadtree == null)
-                m_Quadtree = new XTableQuadtree();
+            m_QuadtreeDirty = true;
+            EnsureQuadtreeBuilt();
+        }
+
+        private string ResolveCellNamespace(XTableCellData data)
+        {
+            return data != null ? data.GetEffectiveStyleNamespace(m_DefaultStyleNamespace) : m_DefaultStyleNamespace;
+        }
+
+        private bool HasMultipleStyleNamespaces()
+        {
+            RefreshActiveStyleNamespaces();
+            return m_ActiveStyleNamespaces.Count > 1;
+        }
+
+        private string GetSingleStyleNamespace()
+        {
+            RefreshActiveStyleNamespaces();
+            foreach (string ns in m_ActiveStyleNamespaces) return ns;
+            return m_DefaultStyleNamespace;
+        }
+
+        private void RefreshActiveStyleNamespaces()
+        {
+            if (!m_StyleNamespaceDirty) return;
+            m_ActiveStyleNamespaces.Clear();
+            if (m_TableData == null || m_RowHeights == null || m_ColWidths == null)
+            {
+                m_ActiveStyleNamespaces.Add(m_DefaultStyleNamespace);
+                m_StyleNamespaceDirty = false;
+                return;
+            }
+            for (int r = 0; r < m_RowHeights.Length; r++)
+            for (int c = 0; c < m_ColWidths.Length; c++)
+            {
+                if (m_TableData.IsCellMerged(r, c)) continue;
+                m_ActiveStyleNamespaces.Add(ResolveCellNamespace(m_TableData.GetCell(r, c)));
+            }
+            if (m_ActiveStyleNamespaces.Count == 0)
+                m_ActiveStyleNamespaces.Add(m_DefaultStyleNamespace);
+            m_StyleNamespaceDirty = false;
+        }
+
+        /// <summary>只在多样式背景分区需要时，从当前数据构建四叉树。</summary>
+        private void EnsureQuadtreeBuilt()
+        {
+            if (!HasMultipleStyleNamespaces())
+            {
+                m_Quadtree?.Clear();
+                m_QuadtreeDirty = false;
+                return;
+            }
+            if (!m_QuadtreeDirty && m_Quadtree != null && m_Quadtree.IsBuilt) return;
             MaintainQuadtree();
         }
 
-        /// <summary>从当前 XTableData 收集单元格信息并重建四叉树</summary>
         private void MaintainQuadtree()
         {
-            if (m_TableData == null || m_RowHeights == null || m_ColWidths == null)
-                return;
-            if (m_Quadtree == null)
-                m_Quadtree = new XTableQuadtree();
+            if (m_TableData == null || m_RowHeights == null || m_ColWidths == null) return;
+            if (m_Quadtree == null) m_Quadtree = new XTableQuadtree();
 
-            // 收集所有有数据的单元格（跳过被合并覆盖的子单元格）
             var cells = new List<XTableQuadtreeCell>();
             for (int r = 0; r < m_RowHeights.Length; r++)
+            for (int c = 0; c < m_ColWidths.Length; c++)
             {
-                for (int c = 0; c < m_ColWidths.Length; c++)
-                {
-                    if (m_TableData.IsCellMerged(r, c)) continue;
-
-                    var data = m_TableData.GetCell(r, c);
-                    if (data == null) continue;
-
-                    string ns = !string.IsNullOrEmpty(data.StyleNamespace)
-                        ? data.StyleNamespace : m_DefaultStyleNamespace;
-                    cells.Add(new XTableQuadtreeCell { Row = r, Col = c, Namespace = ns });
-                }
+                if (m_TableData.IsCellMerged(r, c)) continue;
+                var data = m_TableData.GetCell(r, c);
+                cells.Add(new XTableQuadtreeCell { Row = r, Col = c, Namespace = ResolveCellNamespace(data) });
             }
 
             m_Quadtree.Build(m_TotalWidth, m_TotalHeight, m_RowHeights, m_ColWidths, cells, Config.QuadtreeMaxCellsPerNode);
+            m_QuadtreeDirty = false;
         }
 
         #endregion

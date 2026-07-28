@@ -65,139 +65,88 @@ namespace XericUI.XTable.Rendering.Component
             }
         }
 
-        /// <summary>
-        /// 重建表格的全部边框线段。
-        /// 第一阶段：从 OuterBorderNs 绘制 -1 行（顶部外框）和 -1 列（左侧外框）。
-        /// 第二阶段：遍历非合并覆盖单元格，从边框缓存读取样式命名空间，按 per-cell 样式绘制右侧和底部边框。
-        /// 合并源在最外沿绘制，内部边框自动跳过。
-        /// </summary>
+        /// <summary>按边界范围提交表格边框；默认样式连续边会合并为单条线段。</summary>
         private void RebuildBorders()
         {
-            if (m_RowHeights == null || m_ColWidths == null) return;
-            if (m_RowHeights.Length == 0 || m_ColWidths.Length == 0) return;
+            if (m_RowHeights == null || m_ColWidths == null || m_RowHeights.Length == 0 || m_ColWidths.Length == 0)
+                return;
 
             var renderer = GetOrCreateBorderRenderer();
             renderer.ClearAll();
-
-            var borderRt = renderer.GetComponent<RectTransform>();
-            borderRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
-
-#if UNITY_EDITOR
-            Color borderColor;
-            float borderWidth;
-            if (!Application.isPlaying)
-            {
-                borderColor = GetCellBorderColor(m_DefaultStyleNamespace);
-                borderWidth = GetCellBorderWidth(m_DefaultStyleNamespace);
-            }
-            else
-            {
-                borderColor = Config.RuntimeBorderColor;
-                borderWidth = Config.RuntimeBorderWidth;
-            }
-#else
-            Color borderColor = Config.RuntimeBorderColor;
-            float borderWidth = Config.RuntimeBorderWidth;
-#endif
+            renderer.rectTransform.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
 
             int rows = m_RowHeights.Length;
             int cols = m_ColWidths.Length;
+            for (int boundary = 0; boundary <= rows; boundary++)
+                SubmitHorizontalBoundary(renderer, boundary, cols);
+            for (int boundary = 0; boundary <= cols; boundary++)
+                SubmitVerticalBoundary(renderer, boundary, rows);
+        }
 
-            // ════════════════════════════════════════════
-            // 阶段 1：-1 行（顶部外框）和 -1 列（左侧外框）
-            // ════════════════════════════════════════════
-
-            // 顶部外框：从 col=0 到 col=cols-1，每列一段
-            float topY = 0;
-            for (int c = 0; c < cols; c++)
+        private void SubmitHorizontalBoundary(UILineRendererV2 renderer, int boundary, int cols)
+        {
+            int start = 0;
+            while (start < cols)
             {
-                string ns = m_TableData?.GetOuterBorderNs(-1, c);
-                if (string.IsNullOrEmpty(ns)) ns = m_DefaultStyleNamespace;
-                Color color = GetCellBorderColor(ns);
-                float width = GetCellBorderWidth(ns);
-                float leftX = GetColLeftX(c);
-                renderer.DrawLine(
-                    new Vector2(leftX, topY),
-                    new Vector2(leftX + m_ColWidths[c], topY),
-                    color, width, UVMode.ByDistance);
-            }
-
-            // 左侧外框：从 row=0 到 row=rows-1，每行一段
-            float xEdge = 0;
-            for (int r = 0; r < rows; r++)
-            {
-                string ns = m_TableData?.GetOuterBorderNs(r, -1);
-                if (string.IsNullOrEmpty(ns)) ns = m_DefaultStyleNamespace;
-                Color color = GetCellBorderColor(ns);
-                float width = GetCellBorderWidth(ns);
-                float rowTopY = -GetRowTopY(r);
-                renderer.DrawLine(
-                    new Vector2(xEdge, rowTopY),
-                    new Vector2(xEdge, rowTopY - m_RowHeights[r]),
-                    color, width, UVMode.ByDistance);
-            }
-
-            // ════════════════════════════════════════════
-            // 阶段 2：每个单元格的右侧和底部边框
-            // ════════════════════════════════════════════
-
-            for (int r = 0; r < rows; r++)
-            {
-                for (int c = 0; c < cols; c++)
+                if (IsMergedInteriorBoundary(XTableBorderAxis.Horizontal, boundary, start))
                 {
-                    // 跳过被合并覆盖的单元格
-                    if (m_TableData != null && m_TableData.IsCellMerged(r, c))
-                        continue;
-
-                    float cellX = GetColLeftX(c);
-                    float cellY = -GetRowTopY(r);
-                    float cellW = m_ColWidths[c];
-                    float cellH = m_RowHeights[r];
-
-                    int mergeRS = 1, mergeCS = 1;
-                    if (m_TableData != null)
-                        m_TableData.IsMergeSource(r, c, out mergeRS, out mergeCS);
-
-                    // 扩展合并尺寸
-                    for (int i = 1; i < mergeCS && c + i < cols; i++)
-                        cellW += m_ColWidths[c + i];
-                    for (int i = 1; i < mergeRS && r + i < rows; i++)
-                        cellH += m_RowHeights[r + i];
-
-                    float rightX = cellX + cellW;
-                    float bottomY = cellY - cellH;
-
-                    // —— 右侧边框 ——
-                    string rightNs = m_TableData?.GetBorderRightNs(r, c);
-                    if (string.IsNullOrEmpty(rightNs)) rightNs = m_DefaultStyleNamespace;
-                    Color rightColor = GetCellBorderColor(rightNs);
-                    float rightWidth = GetCellBorderWidth(rightNs);
-
-                    int rightCol = c + mergeCS;
-                    if (rightCol <= cols)
-                    {
-                        renderer.DrawLine(
-                            new Vector2(rightX, cellY),
-                            new Vector2(rightX, bottomY),
-                            rightColor, rightWidth, UVMode.ByDistance);
-                    }
-
-                    // —— 底部边框 ——
-                    string bottomNs = m_TableData?.GetBorderBottomNs(r, c);
-                    if (string.IsNullOrEmpty(bottomNs)) bottomNs = m_DefaultStyleNamespace;
-                    Color bottomColor = GetCellBorderColor(bottomNs);
-                    float bottomWidth = GetCellBorderWidth(bottomNs);
-
-                    int bottomRow = r + mergeRS;
-                    if (bottomRow <= rows)
-                    {
-                        renderer.DrawLine(
-                            new Vector2(cellX, bottomY),
-                            new Vector2(rightX, bottomY),
-                            bottomColor, bottomWidth, UVMode.ByDistance);
-                    }
+                    start++;
+                    continue;
                 }
+                string ns = ResolveBorderNamespace(XTableBorderAxis.Horizontal, boundary, start);
+                int end = start + 1;
+                while (end < cols && !IsMergedInteriorBoundary(XTableBorderAxis.Horizontal, boundary, end)
+                    && ResolveBorderNamespace(XTableBorderAxis.Horizontal, boundary, end) == ns)
+                    end++;
+
+                float y = -GetRowTopY(boundary);
+                renderer.DrawLine(new Vector2(GetColLeftX(start), y), new Vector2(GetColLeftX(end), y),
+                    GetCellBorderColor(ns), GetCellBorderWidth(ns), UVMode.ByDistance);
+                start = end;
             }
+        }
+
+        private void SubmitVerticalBoundary(UILineRendererV2 renderer, int boundary, int rows)
+        {
+            int start = 0;
+            while (start < rows)
+            {
+                if (IsMergedInteriorBoundary(XTableBorderAxis.Vertical, boundary, start))
+                {
+                    start++;
+                    continue;
+                }
+                string ns = ResolveBorderNamespace(XTableBorderAxis.Vertical, boundary, start);
+                int end = start + 1;
+                while (end < rows && !IsMergedInteriorBoundary(XTableBorderAxis.Vertical, boundary, end)
+                    && ResolveBorderNamespace(XTableBorderAxis.Vertical, boundary, end) == ns)
+                    end++;
+
+                float x = GetColLeftX(boundary);
+                renderer.DrawLine(new Vector2(x, -GetRowTopY(start)), new Vector2(x, -GetRowTopY(end)),
+                    GetCellBorderColor(ns), GetCellBorderWidth(ns), UVMode.ByDistance);
+                start = end;
+            }
+        }
+
+        private string ResolveBorderNamespace(XTableBorderAxis axis, int fixedIndex, int index)
+        {
+            string ns = m_TableData?.GetBorderNamespace(axis, fixedIndex, index);
+            return string.IsNullOrEmpty(ns) ? m_DefaultStyleNamespace : ns;
+        }
+
+        private bool IsMergedInteriorBoundary(XTableBorderAxis axis, int fixedIndex, int index)
+        {
+            if (m_TableData == null) return false;
+            if (axis == XTableBorderAxis.Horizontal)
+            {
+                if (fixedIndex <= 0 || fixedIndex >= m_RowHeights.Length) return false;
+                return m_TableData.IsCellMerged(fixedIndex - 1, index)
+                    || m_TableData.IsCellMerged(fixedIndex, index);
+            }
+            if (fixedIndex <= 0 || fixedIndex >= m_ColWidths.Length) return false;
+            return m_TableData.IsCellMerged(index, fixedIndex - 1)
+                || m_TableData.IsCellMerged(index, fixedIndex);
         }
     }
 }
