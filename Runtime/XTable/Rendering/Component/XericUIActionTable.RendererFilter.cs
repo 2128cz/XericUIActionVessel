@@ -195,6 +195,7 @@ namespace XericUI.XTable.Rendering.Component
 
             string key = inRange ? "cell_multiselect" : "cell_select";
             var img = m_Assembler.GetImage(key, cellNS);
+            if (img == null) return;
             img.Rect.anchoredPosition = new Vector2(cellX, cellY);
             img.Rect.sizeDelta = new Vector2(cellW, cellH);
 
@@ -240,17 +241,23 @@ namespace XericUI.XTable.Rendering.Component
 
             // 水平网格线（底部）
             var hLine = m_Assembler.GetImage("cell_hline", cellNS);
-            hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
-            hLine.Rect.sizeDelta = new Vector2(cellW, borderWidth);
-            hLine.Image.color = borderColor;
-            objs.HLine = hLine;
+            if (hLine != null)
+            {
+                hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
+                hLine.Rect.sizeDelta = new Vector2(cellW, borderWidth);
+                hLine.Image.color = borderColor;
+                objs.HLine = hLine;
+            }
 
             // 垂直网格线（右侧）
             var vLine = m_Assembler.GetImage("cell_vline", cellNS);
-            vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - borderWidth, cellY);
-            vLine.Rect.sizeDelta = new Vector2(borderWidth, cellH);
-            vLine.Image.color = borderColor;
-            objs.VLine = vLine;
+            if (vLine != null)
+            {
+                vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - borderWidth, cellY);
+                vLine.Rect.sizeDelta = new Vector2(borderWidth, cellH);
+                vLine.Image.color = borderColor;
+                objs.VLine = vLine;
+            }
         }
 
         private void RenderCellText(XTableCellData data,
@@ -260,9 +267,10 @@ namespace XericUI.XTable.Rendering.Component
             if (string.IsNullOrEmpty(data.Text)) return;
 
             var txt = m_Assembler.GetText("cell_text", cellNS);
+            if (txt == null) return;
             txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
             txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
-            txt.Text.text = data.Text;
+            txt.Text.SetText(data.Text);
 
             if (editorMode)
             {
@@ -283,6 +291,7 @@ namespace XericUI.XTable.Rendering.Component
 
             Sprite sprite = GetOrCreateSprite(data.Image);
             var img = m_Assembler.GetImage("cell_image", cellNS);
+            if (img == null) return;
             img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
             img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
             img.Image.sprite = sprite;
@@ -296,6 +305,7 @@ namespace XericUI.XTable.Rendering.Component
             if (data.Prefab == null) return;
 
             GameObject instance = m_PrefabPool.Acquire(data.Prefab, row, col);
+            if (instance == null) return;
             RectTransform prt = instance.GetComponent<RectTransform>();
             prt.anchoredPosition = new Vector2(cellX, cellY);
             prt.sizeDelta = new Vector2(cellW, cellH);
@@ -471,16 +481,14 @@ namespace XericUI.XTable.Rendering.Component
 
         private void CleanOrphanChildren()
         {
-            Transform poolRoot = m_Assembler?.PoolRoot;
-            Transform prefabPoolRoot = m_PrefabPool?.PoolRoot;
             Transform contentT = ContentTransform;
             Transform borderT = contentT?.Find("_TableBorders");
 
             for (int i = contentT.childCount - 1; i >= 0; i--)
             {
                 var child = contentT.GetChild(i);
-                if (poolRoot != null && child == poolRoot) continue;
-                if (prefabPoolRoot != null && child == prefabPoolRoot) continue;
+                // 跳过池管理的对象（标记有 POOL_FLAGS = DontSave | HideInHierarchy）
+                if ((child.hideFlags & HideFlags.DontSave) != 0) continue;
                 if (m_BackgroundGo != null && child.gameObject == m_BackgroundGo) continue;
                 if (borderT != null && child == borderT) continue;
 

@@ -1,13 +1,12 @@
 using System.Collections.Generic;
 
 using UnityEngine;
-using UnityEngine.Pool;
 
 namespace XericUI.XTable.Rendering.Elements
 {
 	/// <summary>
 	/// 预制体对象池——按原型分组管理，每个预制体对应一个独立的对象池。
-	/// 使用 Stack + HashSet 模式与 <see cref="CellAssembler"/> 保持一致。
+	/// 使用 Queue + HashSet 模式，FIFO 保证对象按回收顺序均匀复用。
 	/// </summary>
 	public class PrefabPrototypePool
 	{
@@ -16,8 +15,8 @@ namespace XericUI.XTable.Rendering.Elements
 		private class PrefabPool
 		{
 			public GameObject Prototype;
-			/// <summary>休眠实例栈（池满时先归还的优先复用）</summary>
-			public Stack<GameObject> Available = new Stack<GameObject>();
+			/// <summary>休眠实例队列（FIFO，先归还的优先复用）</summary>
+			public Queue<GameObject> Available = new Queue<GameObject>();
 			/// <summary>活跃实例集合（O(1) 查找 + 防止重复归还）</summary>
 			public HashSet<GameObject> Active = new HashSet<GameObject>();
 		}
@@ -28,10 +27,10 @@ namespace XericUI.XTable.Rendering.Elements
 
 		private Dictionary<GameObject, PrefabPool> m_Pools = new Dictionary<GameObject, PrefabPool>();
 		private Transform m_Parent;
-		private Transform m_PoolRoot;
 
-		/// <summary>池根节点（所有回收对象均挂在此节点下，节点本身处于 inactive）</summary>
-		public Transform PoolRoot => m_PoolRoot;
+		/// <summary>渲染项目总数上限</summary>
+		private const int MAX_PREFAB_ITEMS = 256;
+		private int m_TotalCreated;
 
 		private const HideFlags POOL_FLAGS = HideFlags.DontSave | HideFlags.HideInHierarchy;
 
@@ -45,15 +44,9 @@ namespace XericUI.XTable.Rendering.Elements
 		public PrefabPrototypePool(Transform parent)
 		{
 			m_Parent = parent;
-
-			GameObject poolRoot = new GameObject("_PrefabPoolRoot");
-			poolRoot.hideFlags = POOL_FLAGS;
-			poolRoot.transform.SetParent(parent, false);
-			poolRoot.SetActive(false);
-			m_PoolRoot = poolRoot.transform;
 		}
 
-		/// <summary>彻底销毁所有池对象（活跃 + 休眠 + 池根）</summary>
+		/// <summary>彻底销毁所有池对象（活跃 + 休眠）</summary>
 		public void DestroyAll()
 		{
 			foreach (var kv in m_Pools)
@@ -65,15 +58,9 @@ namespace XericUI.XTable.Rendering.Elements
 				pool.Active.Clear();
 				// 销毁休眠实例
 				while (pool.Available.Count > 0)
-					KillObject(pool.Available.Pop());
+					KillObject(pool.Available.Dequeue());
 			}
 			m_Pools.Clear();
-
-			if (m_PoolRoot != null)
-			{
-				KillObject(m_PoolRoot.gameObject);
-				m_PoolRoot = null;
-			}
 		}
 
 		private static void KillObject(GameObject go)
@@ -89,7 +76,7 @@ namespace XericUI.XTable.Rendering.Elements
 
 		#region 池操作
 
-		/// <summary>从池中获取实例（池空则 Instantiate 新的）</summary>
+		/// <summary>从池中获取实例（FIFO 复用；池空且未达上限则 Instantiate；已达上限返回 null）</summary>
 		public GameObject Acquire(GameObject prefab, int row, int col)
 		{
 			if (prefab == null) return null;
@@ -99,14 +86,18 @@ namespace XericUI.XTable.Rendering.Elements
 			GameObject instance;
 			if (pool.Available.Count > 0)
 			{
-				instance = pool.Available.Pop();
-				instance.SetActive(true);
-				instance.transform.SetParent(m_Parent, false);
+				instance = pool.Available.Dequeue();
 			}
-			else
+			else if (m_TotalCreated < MAX_PREFAB_ITEMS)
 			{
 				instance = Object.Instantiate(prefab, m_Parent);
 				instance.hideFlags = POOL_FLAGS;
+				m_TotalCreated++;
+			}
+			else
+			{
+				Debug.LogWarning($"[XericUIActionTable] Prefab 池已达上限 {MAX_PREFAB_ITEMS}，无法分配新实例");
+				return null;
 			}
 
 			instance.name = $"_prefab_{row}_{col}";
@@ -122,7 +113,7 @@ namespace XericUI.XTable.Rendering.Elements
 			return instance;
 		}
 
-		/// <summary>将指定实例归还对象池（Deactivate + 移入 PoolRoot）</summary>
+		/// <summary>将指定实例归还对象池（不入池根，原地保留避免 OnEnable/OnDisable）</summary>
 		public void Release(GameObject instance)
 		{
 			if (instance == null) return;
@@ -132,9 +123,7 @@ namespace XericUI.XTable.Rendering.Elements
 			{
 				if (kv.Value.Active.Remove(instance))
 				{
-					instance.SetActive(false);
-					instance.transform.SetParent(m_PoolRoot, false);
-					kv.Value.Available.Push(instance);
+					kv.Value.Available.Enqueue(instance);
 					return;
 				}
 			}
@@ -143,7 +132,7 @@ namespace XericUI.XTable.Rendering.Elements
 			KillObject(instance);
 		}
 
-		/// <summary>将所有活跃实例回收至池</summary>
+		/// <summary>将所有活跃实例回收至池（原地保留，仅从活跃集移除并入队）</summary>
 		public void ReturnAll()
 		{
 			foreach (var kv in m_Pools)
@@ -151,9 +140,7 @@ namespace XericUI.XTable.Rendering.Elements
 				var pool = kv.Value;
 				foreach (var go in pool.Active)
 				{
-					go.SetActive(false);
-					go.transform.SetParent(m_PoolRoot, false);
-					pool.Available.Push(go);
+					pool.Available.Enqueue(go);
 				}
 				pool.Active.Clear();
 			}

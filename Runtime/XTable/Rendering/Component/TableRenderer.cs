@@ -234,28 +234,40 @@ namespace XericUI.XTable.Rendering.Component
                     if (IsInSelectionRange != null && IsInSelectionRange(r, c))
                     {
                         var selImg = m_Assembler.GetImage("cell_multiselect");
-                        selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
-                        selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
-                        selImg.Image.color = (r == selRow && c == selCol) ? focusColor : multiSelectColor;
+                        if (selImg != null)
+                        {
+                            selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                            selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                            selImg.Image.color = (r == selRow && c == selCol) ? focusColor : multiSelectColor;
+                        }
                     }
                     else if (r == selRow && c == selCol)
                     {
                         var selImg = m_Assembler.GetImage("cell_select");
-                        selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
-                        selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
-                        selImg.Image.color = selectionColor;
+                        if (selImg != null)
+                        {
+                            selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                            selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                            selImg.Image.color = selectionColor;
+                        }
                     }
 
                     // 网格线
                     var hLine = m_Assembler.GetImage("cell_hline");
-                    hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
-                    hLine.Rect.sizeDelta = new Vector2(cellW, borderWidth);
-                    hLine.Image.color = borderColor;
+                    if (hLine != null)
+                    {
+                        hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
+                        hLine.Rect.sizeDelta = new Vector2(cellW, borderWidth);
+                        hLine.Image.color = borderColor;
+                    }
 
                     var vLine = m_Assembler.GetImage("cell_vline");
-                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - borderWidth, cellY);
-                    vLine.Rect.sizeDelta = new Vector2(borderWidth, cellH);
-                    vLine.Image.color = borderColor;
+                    if (vLine != null)
+                    {
+                        vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - borderWidth, cellY);
+                        vLine.Rect.sizeDelta = new Vector2(borderWidth, cellH);
+                        vLine.Image.color = borderColor;
+                    }
 
                     if (data == null) continue;
 
@@ -265,16 +277,19 @@ namespace XericUI.XTable.Rendering.Component
                             if (!string.IsNullOrEmpty(data.Text))
                             {
                                 var txt = m_Assembler.GetText("cell_text", cellNS);
-                                txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
-                                txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
-                                txt.Text.text = data.Text;
-                                txt.Text.color = GetStyleColor(cellNS, XericUIActionTable.STYLE_CELL_FG_COLOR,
-                                    XericUIActionTable.FG_COLOR_FALLBACK);
-                                txt.Text.fontSize = GetStyleInt(cellNS, XericUIActionTable.STYLE_CELL_FONT_SIZE,
-                                    XericUIActionTable.FONT_SIZE_FALLBACK);
-                                txt.Text.alignment = TextAlignmentOptions.Midline;
-                                txt.Text.font = GetStyleFontAsset?.Invoke(cellNS,
-                                    XericUIActionTable.STYLE_CELL_FONT_ASSET) ?? txt.Text.font;
+                                if (txt != null)
+                                {
+                                    txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                    txt.Text.SetText(data.Text);
+                                    txt.Text.color = GetStyleColor(cellNS, XericUIActionTable.STYLE_CELL_FG_COLOR,
+                                        XericUIActionTable.FG_COLOR_FALLBACK);
+                                    txt.Text.fontSize = GetStyleInt(cellNS, XericUIActionTable.STYLE_CELL_FONT_SIZE,
+                                        XericUIActionTable.FONT_SIZE_FALLBACK);
+                                    txt.Text.alignment = TextAlignmentOptions.Midline;
+                                    txt.Text.font = GetStyleFontAsset?.Invoke(cellNS,
+                                        XericUIActionTable.STYLE_CELL_FONT_ASSET) ?? txt.Text.font;
+                                }
                             }
                             break;
                         case CellContentType.Image:
@@ -282,21 +297,27 @@ namespace XericUI.XTable.Rendering.Component
                             {
                                 Sprite sprite = GetOrCreateSprite(data.Image);
                                 var img = m_Assembler.GetImage("cell_image", cellNS);
-                                img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
-                                img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
-                                img.Image.sprite = sprite;
+                                if (img != null)
+                                {
+                                    img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                    img.Image.sprite = sprite;
+                                }
                             }
                             break;
                         case CellContentType.Prefab:
                             if (data.Prefab != null && PrefabPool != null)
                             {
                                 GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
-                                RectTransform prt = instance.GetComponent<RectTransform>();
-                                prt.anchoredPosition = new Vector2(cellX, cellY);
-                                prt.sizeDelta = new Vector2(cellW, cellH);
-                                if (ActivePrefabMap != null)
-                                    ActivePrefabMap[(r, c)] = instance;
-                                data.OnPrefabAcquire?.Invoke(instance);
+                                if (instance != null)
+                                {
+                                    RectTransform prt = instance.GetComponent<RectTransform>();
+                                    prt.anchoredPosition = new Vector2(cellX, cellY);
+                                    prt.sizeDelta = new Vector2(cellW, cellH);
+                                    if (ActivePrefabMap != null)
+                                        ActivePrefabMap[(r, c)] = instance;
+                                    data.OnPrefabAcquire?.Invoke(instance);
+                                }
                             }
                             break;
                     }
@@ -340,27 +361,39 @@ namespace XericUI.XTable.Rendering.Component
                     if (IsInSelectionRange != null && IsInSelectionRange(r, c))
                     {
                         var selImg = m_Assembler.GetImage("cell_multiselect");
-                        selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
-                        selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
-                        selImg.Image.color = (r == selRow && c == selCol) ? rtFocusColor : rtMultiSelectColor;
+                        if (selImg != null)
+                        {
+                            selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                            selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                            selImg.Image.color = (r == selRow && c == selCol) ? rtFocusColor : rtMultiSelectColor;
+                        }
                     }
                     else if (r == selRow && c == selCol)
                     {
                         var selImg = m_Assembler.GetImage("cell_select");
-                        selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
-                        selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
-                        selImg.Image.color = rtSelectionColor;
+                        if (selImg != null)
+                        {
+                            selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
+                            selImg.Rect.sizeDelta = new Vector2(cellW, cellH);
+                            selImg.Image.color = rtSelectionColor;
+                        }
                     }
 
                     var hLine = m_Assembler.GetImage("cell_hline");
-                    hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
-                    hLine.Rect.sizeDelta = new Vector2(cellW, Config.RuntimeBorderWidth);
-                    hLine.Image.color = Config.RuntimeBorderColor;
+                    if (hLine != null)
+                    {
+                        hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
+                        hLine.Rect.sizeDelta = new Vector2(cellW, Config.RuntimeBorderWidth);
+                        hLine.Image.color = Config.RuntimeBorderColor;
+                    }
 
                     var vLine = m_Assembler.GetImage("cell_vline");
-                    vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - Config.RuntimeBorderWidth, cellY);
-                    vLine.Rect.sizeDelta = new Vector2(Config.RuntimeBorderWidth, cellH);
-                    vLine.Image.color = Config.RuntimeBorderColor;
+                    if (vLine != null)
+                    {
+                        vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - Config.RuntimeBorderWidth, cellY);
+                        vLine.Rect.sizeDelta = new Vector2(Config.RuntimeBorderWidth, cellH);
+                        vLine.Image.color = Config.RuntimeBorderColor;
+                    }
 
                     if (data == null) continue;
 
@@ -370,9 +403,12 @@ namespace XericUI.XTable.Rendering.Component
                             if (!string.IsNullOrEmpty(data.Text))
                             {
                                 var txt = m_Assembler.GetText("cell_text", cellNS);
-                                txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
-                                txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
-                                txt.Text.text = data.Text;
+                                if (txt != null)
+                                {
+                                    txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                    txt.Text.SetText(data.Text);
+                                }
                             }
                             break;
                         case CellContentType.Image:
@@ -380,21 +416,27 @@ namespace XericUI.XTable.Rendering.Component
                             {
                                 Sprite sprite = GetOrCreateSprite(data.Image);
                                 var img = m_Assembler.GetImage("cell_image", cellNS);
-                                img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
-                                img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
-                                img.Image.sprite = sprite;
+                                if (img != null)
+                                {
+                                    img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
+                                    img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
+                                    img.Image.sprite = sprite;
+                                }
                             }
                             break;
                         case CellContentType.Prefab:
                             if (data.Prefab != null && PrefabPool != null)
                             {
                                 GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
-                                RectTransform prt = instance.GetComponent<RectTransform>();
-                                prt.anchoredPosition = new Vector2(cellX, cellY);
-                                prt.sizeDelta = new Vector2(cellW, cellH);
-                                if (ActivePrefabMap != null)
-                                    ActivePrefabMap[(r, c)] = instance;
-                                data.OnPrefabAcquire?.Invoke(instance);
+                                if (instance != null)
+                                {
+                                    RectTransform prt = instance.GetComponent<RectTransform>();
+                                    prt.anchoredPosition = new Vector2(cellX, cellY);
+                                    prt.sizeDelta = new Vector2(cellW, cellH);
+                                    if (ActivePrefabMap != null)
+                                        ActivePrefabMap[(r, c)] = instance;
+                                    data.OnPrefabAcquire?.Invoke(instance);
+                                }
                             }
                             break;
                     }

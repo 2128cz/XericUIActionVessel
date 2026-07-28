@@ -37,10 +37,6 @@ namespace XericUI.XTable.Rendering.Elements
 		#region 字段
 
 		private Transform m_Parent;
-		private Transform m_PoolRoot;
-
-		/// <summary>池根节点（所有回收对象均挂在此节点下，节点本身处于 inactive）</summary>
-		public Transform PoolRoot => m_PoolRoot;
 
 		/// <summary>运行时的默认样式命名空间（编辑器下为 null，不绑定）</summary>
 		private string m_DefaultStyleNamespace;
@@ -48,13 +44,19 @@ namespace XericUI.XTable.Rendering.Elements
 		/// <summary>所有已绑定的 StyleBoundElement 回调集合（用于样式变更时通知外部）</summary>
 		public event System.Action OnStyleChangeDetected;
 
-		private Stack<PooledImage> m_ImagePool = new Stack<PooledImage>();
-		private Stack<PooledText> m_TextPool = new Stack<PooledText>();
+		private Queue<PooledImage> m_ImagePool = new Queue<PooledImage>();
+		private Queue<PooledText> m_TextPool = new Queue<PooledText>();
 		private List<PooledImage> m_ActiveImages = new List<PooledImage>();
 		private List<PooledText> m_ActiveTexts = new List<PooledText>();
 
 		/// <summary>HideFlags 应用于所有动态创建的对象（不保存、不在 Hierarchy 显示）</summary>
 		private const HideFlags POOL_FLAGS = HideFlags.DontSave | HideFlags.HideInHierarchy;
+
+		/// <summary>渲染项目总数上限，超出后 GetImage/GetText 返回 null 并发出警告</summary>
+		private const int MAX_POOL_ITEMS = 256;
+
+		private int m_ImageCreatedCount;
+		private int m_TextCreatedCount;
 
 		#endregion
 
@@ -64,12 +66,6 @@ namespace XericUI.XTable.Rendering.Elements
 		{
 			m_Parent = parent;
 			m_DefaultStyleNamespace = defaultStyleNamespace;
-
-			GameObject poolRoot = new GameObject("_CellPool");
-			poolRoot.hideFlags = POOL_FLAGS;
-			poolRoot.transform.SetParent(parent, false);
-			poolRoot.SetActive(false);
-			m_PoolRoot = poolRoot.transform;
 		}
 
 		/// <summary>彻底销毁所有池对象（包括活跃和休眠的）</summary>
@@ -91,18 +87,11 @@ namespace XericUI.XTable.Rendering.Elements
 			// 杀死池中对象
 			while (m_ImagePool.Count > 0)
 			{
-				KillObject(m_ImagePool.Pop().Root);
+				KillObject(m_ImagePool.Dequeue().Root);
 			}
 			while (m_TextPool.Count > 0)
 			{
-				KillObject(m_TextPool.Pop().Root);
-			}
-
-			// 杀死池根
-			if (m_PoolRoot != null)
-			{
-				KillObject(m_PoolRoot.gameObject);
-				m_PoolRoot = null;
+				KillObject(m_TextPool.Dequeue().Root);
 			}
 		}
 
@@ -132,14 +121,18 @@ namespace XericUI.XTable.Rendering.Elements
 			PooledImage item;
 			if (m_ImagePool.Count > 0)
 			{
-				item = m_ImagePool.Pop();
-				item.Root.SetActive(true);
-				item.Root.transform.SetParent(m_Parent, false);
+				item = m_ImagePool.Dequeue();
 				ResetImageDefaults(item);
+			}
+			else if (m_ImageCreatedCount < MAX_POOL_ITEMS)
+			{
+				item = CreateImage(name);
+				m_ImageCreatedCount++;
 			}
 			else
 			{
-				item = CreateImage(name);
+				Debug.LogWarning($"[XericUIActionTable] Image 池已达上限 {MAX_POOL_ITEMS}，无法分配新对象");
+				return null;
 			}
 			BindStyle(item.Style, styleNamespace);
 			m_ActiveImages.Add(item);
@@ -151,14 +144,18 @@ namespace XericUI.XTable.Rendering.Elements
 			PooledText item;
 			if (m_TextPool.Count > 0)
 			{
-				item = m_TextPool.Pop();
-				item.Root.SetActive(true);
-				item.Root.transform.SetParent(m_Parent, false);
+				item = m_TextPool.Dequeue();
 				ResetTextDefaults(item);
+			}
+			else if (m_TextCreatedCount < MAX_POOL_ITEMS)
+			{
+				item = CreateText(name);
+				m_TextCreatedCount++;
 			}
 			else
 			{
-				item = CreateText(name);
+				Debug.LogWarning($"[XericUIActionTable] Text 池已达上限 {MAX_POOL_ITEMS}，无法分配新对象");
+				return null;
 			}
 			BindStyle(item.Style, styleNamespace);
 			m_ActiveTexts.Add(item);
@@ -214,18 +211,13 @@ namespace XericUI.XTable.Rendering.Elements
 		private void ReturnImage(PooledImage item)
 		{
 			item.Style?.Unbind();
-			item.Root.SetActive(false);
-			item.Root.transform.SetParent(m_PoolRoot, false);
-			m_ImagePool.Push(item);
+			m_ImagePool.Enqueue(item);
 		}
 
 		private void ReturnText(PooledText item)
 		{
 			item.Style?.Unbind();
-			item.Text.text = "";
-			item.Root.SetActive(false);
-			item.Root.transform.SetParent(m_PoolRoot, false);
-			m_TextPool.Push(item);
+			m_TextPool.Enqueue(item);
 		}
 
 		#endregion
@@ -251,7 +243,7 @@ namespace XericUI.XTable.Rendering.Elements
 			item.Rect.pivot = PIVOT_TOPLEFT;
 			item.Rect.anchoredPosition = Vector2.zero;
 			item.Rect.sizeDelta = Vector2.zero;
-			item.Text.text = "";
+			item.Text.SetText(string.Empty);
 			item.Text.color = Color.black;
 			item.Text.fontSize = 14;
 			item.Text.alignment = TextAlignmentOptions.Midline;
