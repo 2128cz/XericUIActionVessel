@@ -195,6 +195,22 @@ namespace XericUI.XTable.Rendering.Elements
 			m_ActiveTexts.Clear();
 		}
 
+		/// <summary>归还单个 Image 池对象（从活跃列表移除并推入休眠栈）</summary>
+		public void ReleaseImage(PooledImage item)
+		{
+			if (item == null) return;
+			m_ActiveImages.Remove(item);
+			ReturnImage(item);
+		}
+
+		/// <summary>归还单个 Text 池对象（从活跃列表移除并推入休眠栈）</summary>
+		public void ReleaseText(PooledText item)
+		{
+			if (item == null) return;
+			m_ActiveTexts.Remove(item);
+			ReturnText(item);
+		}
+
 		private void ReturnImage(PooledImage item)
 		{
 			item.Style?.Unbind();

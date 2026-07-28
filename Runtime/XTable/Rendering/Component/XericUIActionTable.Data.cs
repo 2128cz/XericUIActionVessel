@@ -1,0 +1,194 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+using XericUI.Core.Base;
+using XericUI.XTable.Core;
+
+namespace XericUI.XTable.Rendering.Component
+{
+    /// <summary>
+    /// 表格数据与坐标计算——可见性判定、坐标公式、尺寸重算、四叉树维护。
+    /// </summary>
+    public partial class XericUIActionTable
+    {
+        #region 可见性判定
+
+        /// <summary>判断指定单元格是否与当前可见矩形有重叠（用于裁剪剔除）</summary>
+        private bool IsCellVisible(int row, int col)
+        {
+            // 计入 m_ContentOffset 以匹配单元格在 Content 中的实际渲染位置
+            float cellLeft = GetColLeftX(col) + m_ContentOffset;
+            float cellRight = cellLeft + m_ColWidths[col];
+            float cellTop = GetRowTopY(row) + m_ContentOffset;
+            float cellBottom = cellTop + m_RowHeights[row];
+
+            return cellRight > m_VisibleRect.x && cellLeft < m_VisibleRect.xMax &&
+                   cellBottom > m_VisibleRect.y && cellTop < m_VisibleRect.yMax;
+        }
+
+        #endregion
+
+        #region 坐标公式
+
+        private float GetRowTopY(int row)
+        {
+            float y = 0;
+            for (int i = 0; i < row && i < m_RowHeights.Length; i++)
+                y += m_RowHeights[i];
+            return y;
+        }
+
+        private float GetColLeftX(int col)
+        {
+            float x = 0;
+            for (int i = 0; i < col && i < m_ColWidths.Length; i++)
+                x += m_ColWidths[i];
+            return x;
+        }
+
+        #endregion
+
+        #region Sprite 缓存
+
+        /// <summary>将 Texture2D 转为 Sprite（带缓存），用于 Image 类型单元格渲染</summary>
+        private Sprite GetOrCreateSprite(Texture2D texture)
+        {
+            if (texture == null) return null;
+
+            if (m_SpriteCache == null)
+                m_SpriteCache = new Dictionary<Texture2D, Sprite>();
+
+            if (!m_SpriteCache.TryGetValue(texture, out Sprite sprite))
+            {
+                sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                m_SpriteCache[texture] = sprite;
+            }
+            return sprite;
+        }
+
+        #endregion
+
+        #region 尺寸计算与可见矩形
+
+        private void RecalculateTotalSize()
+        {
+            m_TotalWidth = 0;
+            if (m_ColWidths != null)
+                foreach (float w in m_ColWidths)
+                    m_TotalWidth += w;
+
+            m_TotalHeight = 0;
+            if (m_RowHeights != null)
+                foreach (float h in m_RowHeights)
+                    m_TotalHeight += h;
+
+            m_ContentOffset = GetCellBorderWidth(m_DefaultStyleNamespace) * 0.5f;
+            float pad = m_ContentOffset * 2f;
+
+            if (m_ScrollRect != null && m_ScrollRect.content != null)
+                m_ScrollRect.content.sizeDelta = new Vector2(
+                    m_TotalWidth + pad, m_TotalHeight + pad);
+        }
+
+        private void UpdateVisibleRect()
+        {
+            m_VisibleRect = new Rect(0, 0, m_TotalWidth, m_TotalHeight);
+
+            if (m_ScrollRect == null || m_ScrollRect.viewport == null || m_ScrollRect.content == null)
+                return;
+
+            RectTransform vt = m_ScrollRect.viewport;
+            RectTransform ct = m_ScrollRect.content as RectTransform;
+            if (vt == null || ct == null) return;
+
+            // Content 的 anchor/pivot 在 Awake 中强制设为 (0,1)，anchoredPosition
+            // 直接表示 Content 左上角相对于 Viewport 左上角的偏移。
+            Vector2 ap = ct.anchoredPosition;
+            float visibleLeft = -ap.x;
+            float visibleTop = -ap.y;
+
+            m_VisibleRect = new Rect(visibleLeft, visibleTop, vt.rect.width, vt.rect.height);
+        }
+
+        private void CalcVisibleRange(out int sr, out int er, out int sc, out int ec)
+        {
+            sr = 0;
+            er = 0;
+            sc = 0;
+            ec = 0;
+
+            float accY = 0;
+            for (int r = 0; r < m_RowHeights.Length; r++)
+            {
+                float rowBottom = accY + m_RowHeights[r];
+                if (rowBottom > m_VisibleRect.y && accY < m_VisibleRect.yMax)
+                {
+                    if (er == 0 && sr == 0) sr = r;
+                    er = r + 1;
+                }
+
+                accY = rowBottom;
+                if (accY > m_VisibleRect.yMax) break;
+            }
+
+            float accX = 0;
+            for (int c = 0; c < m_ColWidths.Length; c++)
+            {
+                float colRight = accX + m_ColWidths[c];
+                if (colRight > m_VisibleRect.x && accX < m_VisibleRect.xMax)
+                {
+                    if (ec == 0 && sc == 0) sc = c;
+                    ec = c + 1;
+                }
+
+                accX = colRight;
+                if (accX > m_VisibleRect.xMax) break;
+            }
+
+            if (sr < 0) sr = 0;
+            if (sc < 0) sc = 0;
+        }
+
+        #endregion
+
+        #region 四叉树
+
+        /// <summary>强制重建四叉树（外部调用入口，适合编辑器调试或手动刷新）</summary>
+        public void ForceRebuildQuadtree()
+        {
+            if (m_Quadtree == null)
+                m_Quadtree = new XTableQuadtree();
+            MaintainQuadtree();
+        }
+
+        /// <summary>从当前 XTableData 收集单元格信息并重建四叉树</summary>
+        private void MaintainQuadtree()
+        {
+            if (m_TableData == null || m_RowHeights == null || m_ColWidths == null)
+                return;
+            if (m_Quadtree == null)
+                m_Quadtree = new XTableQuadtree();
+
+            // 收集所有有数据的单元格（跳过被合并覆盖的子单元格）
+            var cells = new List<XTableQuadtreeCell>();
+            for (int r = 0; r < m_RowHeights.Length; r++)
+            {
+                for (int c = 0; c < m_ColWidths.Length; c++)
+                {
+                    if (m_TableData.IsCellMerged(r, c)) continue;
+
+                    var data = m_TableData.GetCell(r, c);
+                    if (data == null) continue;
+
+                    string ns = !string.IsNullOrEmpty(data.StyleNamespace)
+                        ? data.StyleNamespace : m_DefaultStyleNamespace;
+                    cells.Add(new XTableQuadtreeCell { Row = r, Col = c, Namespace = ns });
+                }
+            }
+
+            m_Quadtree.Build(m_TotalWidth, m_TotalHeight, m_RowHeights, m_ColWidths, cells, Config.QuadtreeMaxCellsPerNode);
+        }
+
+        #endregion
+    }
+}

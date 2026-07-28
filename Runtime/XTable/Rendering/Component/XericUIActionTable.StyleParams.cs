@@ -5,8 +5,7 @@ using XericLibrary.Runtime.SuperStyleSheet;
 namespace XericUI.XTable.Rendering.Component
 {
     /// <summary>
-    /// 表格样式参数——统一管理所有样式路径与回退值。
-    /// 修改此处的常量即可全局调整表格外观，无需在各方法中查找硬编码字符串。
+    /// 表格样式参数——统一管理所有样式路径、回退值、样式取值方法与默认命名空间初始化。
     /// </summary>
     public partial class XericUIActionTable
     {
@@ -93,6 +92,70 @@ namespace XericUI.XTable.Rendering.Component
 
         private TMP_FontAsset GetCellFontAsset(string ns) =>
             GetStyleFontAsset(ns, STYLE_CELL_FONT_ASSET);
+
+        #endregion
+
+        #region 底层样式查询方法
+
+        private Color GetStyleColor(string ns, string path, Color fallback)
+        {
+            StyleValue val = StyleManager.GetValue(ns, path);
+            return val != null ? (Color)val : fallback;
+        }
+
+        private int GetStyleInt(string ns, string path, int fallback)
+        {
+            StyleValue val = StyleManager.GetValue(ns, path);
+            return val != null ? (int)val : fallback;
+        }
+
+        private float GetStyleFloat(string ns, string path, float fallback)
+        {
+            StyleValue val = StyleManager.GetValue(ns, path);
+            return val != null ? (float)val : fallback;
+        }
+
+        private TMP_FontAsset GetStyleFontAsset(string ns, string path, TMP_FontAsset fallback = null)
+        {
+            StyleValue val = StyleManager.GetValue(ns, path);
+            if (val == null) return fallback;
+            try { return val.GetValueAs<TMP_FontAsset>(); }
+            catch { return fallback; }
+        }
+
+        #endregion
+
+        #region 默认样式命名空间初始化
+
+        private void EnsureDefaultStyleNamespace()
+        {
+            // 检查命名空间是否已存在，避免 HasStyle → GetValue 对不存在的命名空间报错
+            bool nsExists = StyleManager.GetAvailableNamespaces()?.Contains(m_DefaultStyleNamespace) == true;
+
+            // 命名空间已存在且样式已加载（来自 .xsss），无需添加回退值
+            if (nsExists && StyleManager.HasStyle(m_DefaultStyleNamespace, STYLE_CELL_BG_COLOR))
+                return;
+
+            // 回退默认值匹配 DefaultTableStyles.xsss
+            // AddDynamicStyle 自动创建命名空间（如果尚不存在）
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BG_COLOR, DEFAULT_BG_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_FG_COLOR, DEFAULT_FG_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_TOP_COLOR, DEFAULT_BORDER_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_TOP_WIDTH, DEFAULT_BORDER_WIDTH);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_BOTTOM_COLOR, DEFAULT_BORDER_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_BOTTOM_WIDTH, DEFAULT_BORDER_WIDTH);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_LEFT_COLOR, DEFAULT_BORDER_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_LEFT_WIDTH, DEFAULT_BORDER_WIDTH);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_RIGHT_COLOR, DEFAULT_BORDER_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_BORDER_RIGHT_WIDTH, DEFAULT_BORDER_WIDTH);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_SELECTION_BG_COLOR, DEFAULT_SELECTION_COLOR);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_FONT_SIZE, DEFAULT_FONT_SIZE);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_FONT_ALIGNMENT, DEFAULT_FONT_ALIGNMENT);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_FONT_RICH_TEXT, DEFAULT_FONT_RICH_TEXT);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_DEFAULT_HEIGHT, DEFAULT_CELL_HEIGHT);
+            StyleManager.AddDynamicStyle(m_DefaultStyleNamespace, STYLE_CELL_DEFAULT_WIDTH, DEFAULT_CELL_WIDTH);
+            StyleManager.ForceRefresh();
+        }
 
         #endregion
     }
