@@ -229,11 +229,12 @@ namespace XericUI.XTable.Rendering.Component
                     XTableCellData data = tableData?.GetCell(r, c);
                     string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
                         ? data.StyleNamespace : defaultNs;
+                    int cellId = r * colWidths.Length + c;
 
                     // 选择高亮
                     if (IsInSelectionRange != null && IsInSelectionRange(r, c))
                     {
-                        var selImg = m_Assembler.GetImage("cell_multiselect");
+                        var selImg = m_Assembler.GetImage(cellId, "cell_multiselect");
                         if (selImg != null)
                         {
                             selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
@@ -243,7 +244,7 @@ namespace XericUI.XTable.Rendering.Component
                     }
                     else if (r == selRow && c == selCol)
                     {
-                        var selImg = m_Assembler.GetImage("cell_select");
+                        var selImg = m_Assembler.GetImage(cellId, "cell_select");
                         if (selImg != null)
                         {
                             selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
@@ -253,7 +254,7 @@ namespace XericUI.XTable.Rendering.Component
                     }
 
                     // 网格线
-                    var hLine = m_Assembler.GetImage("cell_hline");
+                    var hLine = m_Assembler.GetImage(cellId, "cell_hline");
                     if (hLine != null)
                     {
                         hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
@@ -261,7 +262,7 @@ namespace XericUI.XTable.Rendering.Component
                         hLine.Image.color = borderColor;
                     }
 
-                    var vLine = m_Assembler.GetImage("cell_vline");
+                    var vLine = m_Assembler.GetImage(cellId, "cell_vline");
                     if (vLine != null)
                     {
                         vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - borderWidth, cellY);
@@ -276,7 +277,7 @@ namespace XericUI.XTable.Rendering.Component
                         case CellContentType.Text:
                             if (!string.IsNullOrEmpty(data.Text))
                             {
-                                var txt = m_Assembler.GetText("cell_text", cellNS);
+                                var txt = m_Assembler.GetText(cellId, "cell_text", cellNS);
                                 if (txt != null)
                                 {
                                     txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
@@ -296,7 +297,7 @@ namespace XericUI.XTable.Rendering.Component
                             if (data.Image != null)
                             {
                                 Sprite sprite = GetOrCreateSprite(data.Image);
-                                var img = m_Assembler.GetImage("cell_image", cellNS);
+                                var img = m_Assembler.GetImage(cellId, "cell_image", cellNS);
                                 if (img != null)
                                 {
                                     img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
@@ -308,7 +309,7 @@ namespace XericUI.XTable.Rendering.Component
                         case CellContentType.Prefab:
                             if (data.Prefab != null && PrefabPool != null)
                             {
-                                GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
+                                GameObject instance = PrefabPool.Acquire(data.Prefab, cellId);
                                 if (instance != null)
                                 {
                                     RectTransform prt = instance.GetComponent<RectTransform>();
@@ -357,10 +358,11 @@ namespace XericUI.XTable.Rendering.Component
                     XTableCellData data = tableData?.GetCell(r, c);
                     string cellNS = (data != null && !string.IsNullOrEmpty(data.StyleNamespace))
                         ? data.StyleNamespace : defaultNs;
+                    int cellId = r * colWidths.Length + c;
 
                     if (IsInSelectionRange != null && IsInSelectionRange(r, c))
                     {
-                        var selImg = m_Assembler.GetImage("cell_multiselect");
+                        var selImg = m_Assembler.GetImage(cellId, "cell_multiselect");
                         if (selImg != null)
                         {
                             selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
@@ -370,7 +372,7 @@ namespace XericUI.XTable.Rendering.Component
                     }
                     else if (r == selRow && c == selCol)
                     {
-                        var selImg = m_Assembler.GetImage("cell_select");
+                        var selImg = m_Assembler.GetImage(cellId, "cell_select");
                         if (selImg != null)
                         {
                             selImg.Rect.anchoredPosition = new Vector2(cellX, cellY);
@@ -379,7 +381,7 @@ namespace XericUI.XTable.Rendering.Component
                         }
                     }
 
-                    var hLine = m_Assembler.GetImage("cell_hline");
+                    var hLine = m_Assembler.GetImage(cellId, "cell_hline");
                     if (hLine != null)
                     {
                         hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
@@ -387,7 +389,7 @@ namespace XericUI.XTable.Rendering.Component
                         hLine.Image.color = Config.RuntimeBorderColor;
                     }
 
-                    var vLine = m_Assembler.GetImage("cell_vline");
+                    var vLine = m_Assembler.GetImage(cellId, "cell_vline");
                     if (vLine != null)
                     {
                         vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - Config.RuntimeBorderWidth, cellY);
@@ -402,7 +404,7 @@ namespace XericUI.XTable.Rendering.Component
                         case CellContentType.Text:
                             if (!string.IsNullOrEmpty(data.Text))
                             {
-                                var txt = m_Assembler.GetText("cell_text", cellNS);
+                                var txt = m_Assembler.GetText(cellId, "cell_text", cellNS);
                                 if (txt != null)
                                 {
                                     txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
@@ -415,7 +417,7 @@ namespace XericUI.XTable.Rendering.Component
                             if (data.Image != null)
                             {
                                 Sprite sprite = GetOrCreateSprite(data.Image);
-                                var img = m_Assembler.GetImage("cell_image", cellNS);
+                                var img = m_Assembler.GetImage(cellId, "cell_image", cellNS);
                                 if (img != null)
                                 {
                                     img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
@@ -427,7 +429,7 @@ namespace XericUI.XTable.Rendering.Component
                         case CellContentType.Prefab:
                             if (data.Prefab != null && PrefabPool != null)
                             {
-                                GameObject instance = PrefabPool.Acquire(data.Prefab, r, c);
+                                GameObject instance = PrefabPool.Acquire(data.Prefab, cellId);
                                 if (instance != null)
                                 {
                                     RectTransform prt = instance.GetComponent<RectTransform>();

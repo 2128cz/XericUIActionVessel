@@ -154,14 +154,15 @@ namespace XericUI.XTable.Rendering.Component
                     cellH += m_RowHeights[row + i];
             }
 
+            int cellId = row * m_ColWidths.Length + col;
             var objs = new CellTrackedObjs();
 
             // ── 选择高亮 ──
-            ApplySelectionHighlight(row, col, cellX, cellY, cellW, cellH, cellNS, editorMode, ref objs);
+            ApplySelectionHighlight(cellId, row, col, cellX, cellY, cellW, cellH, cellNS, editorMode, ref objs);
 
             // ── 网格线（仅完整刷新时）──
             if (withGridLines)
-                ApplyGridLines(cellX, cellY, cellW, cellH, cellNS, editorMode, ref objs);
+                ApplyGridLines(cellId, cellX, cellY, cellW, cellH, cellNS, editorMode, ref objs);
 
             // ── 单元格内容 ──
             if (data != null)
@@ -169,13 +170,13 @@ namespace XericUI.XTable.Rendering.Component
                 switch (data.ContentType)
                 {
                     case CellContentType.Text:
-                        RenderCellText(data, cellX, cellY, cellW, cellH, cellNS, editorMode, ref objs);
+                        RenderCellText(cellId, data, cellX, cellY, cellW, cellH, cellNS, editorMode, ref objs);
                         break;
                     case CellContentType.Image:
-                        RenderCellImage(data, cellX, cellY, cellW, cellH, cellNS, ref objs);
+                        RenderCellImage(cellId, data, cellX, cellY, cellW, cellH, cellNS, ref objs);
                         break;
                     case CellContentType.Prefab:
-                        RenderCellPrefab(data, row, col, cellX, cellY, cellW, cellH);
+                        RenderCellPrefab(cellId, data, row, col, cellX, cellY, cellW, cellH);
                         break;
                 }
             }
@@ -184,7 +185,7 @@ namespace XericUI.XTable.Rendering.Component
             m_LastRenderedCells.Add((row, col));
         }
 
-        private void ApplySelectionHighlight(int row, int col,
+        private void ApplySelectionHighlight(int cellId, int row, int col,
             float cellX, float cellY, float cellW, float cellH,
             string cellNS, bool editorMode, ref CellTrackedObjs objs)
         {
@@ -194,7 +195,7 @@ namespace XericUI.XTable.Rendering.Component
             if (!inRange && !isFocused) return;
 
             string key = inRange ? "cell_multiselect" : "cell_select";
-            var img = m_Assembler.GetImage(key, cellNS);
+            var img = m_Assembler.GetImage(cellId, key, cellNS);
             if (img == null) return;
             img.Rect.anchoredPosition = new Vector2(cellX, cellY);
             img.Rect.sizeDelta = new Vector2(cellW, cellH);
@@ -222,7 +223,7 @@ namespace XericUI.XTable.Rendering.Component
             objs.SelectBg = img;
         }
 
-        private void ApplyGridLines(float cellX, float cellY, float cellW, float cellH,
+        private void ApplyGridLines(int cellId, float cellX, float cellY, float cellW, float cellH,
             string cellNS, bool editorMode, ref CellTrackedObjs objs)
         {
             Color borderColor;
@@ -240,7 +241,7 @@ namespace XericUI.XTable.Rendering.Component
             }
 
             // 水平网格线（底部）
-            var hLine = m_Assembler.GetImage("cell_hline", cellNS);
+            var hLine = m_Assembler.GetImage(cellId, "cell_hline", cellNS);
             if (hLine != null)
             {
                 hLine.Rect.anchoredPosition = new Vector2(cellX, cellY - cellH);
@@ -250,7 +251,7 @@ namespace XericUI.XTable.Rendering.Component
             }
 
             // 垂直网格线（右侧）
-            var vLine = m_Assembler.GetImage("cell_vline", cellNS);
+            var vLine = m_Assembler.GetImage(cellId, "cell_vline", cellNS);
             if (vLine != null)
             {
                 vLine.Rect.anchoredPosition = new Vector2(cellX + cellW - borderWidth, cellY);
@@ -260,13 +261,13 @@ namespace XericUI.XTable.Rendering.Component
             }
         }
 
-        private void RenderCellText(XTableCellData data,
+        private void RenderCellText(int cellId, XTableCellData data,
             float cellX, float cellY, float cellW, float cellH,
             string cellNS, bool editorMode, ref CellTrackedObjs objs)
         {
             if (string.IsNullOrEmpty(data.Text)) return;
 
-            var txt = m_Assembler.GetText("cell_text", cellNS);
+            var txt = m_Assembler.GetText(cellId, "cell_text", cellNS);
             if (txt == null) return;
             txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
             txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
@@ -283,14 +284,14 @@ namespace XericUI.XTable.Rendering.Component
             objs.CellText = txt;
         }
 
-        private void RenderCellImage(XTableCellData data,
+        private void RenderCellImage(int cellId, XTableCellData data,
             float cellX, float cellY, float cellW, float cellH,
             string cellNS, ref CellTrackedObjs objs)
         {
             if (data.Image == null) return;
 
             Sprite sprite = GetOrCreateSprite(data.Image);
-            var img = m_Assembler.GetImage("cell_image", cellNS);
+            var img = m_Assembler.GetImage(cellId, "cell_image", cellNS);
             if (img == null) return;
             img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
             img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
@@ -299,12 +300,12 @@ namespace XericUI.XTable.Rendering.Component
             objs.CellImage = img;
         }
 
-        private void RenderCellPrefab(XTableCellData data, int row, int col,
+        private void RenderCellPrefab(int cellId, XTableCellData data, int row, int col,
             float cellX, float cellY, float cellW, float cellH)
         {
             if (data.Prefab == null) return;
 
-            GameObject instance = m_PrefabPool.Acquire(data.Prefab, row, col);
+            GameObject instance = m_PrefabPool.Acquire(data.Prefab, cellId);
             if (instance == null) return;
             RectTransform prt = instance.GetComponent<RectTransform>();
             prt.anchoredPosition = new Vector2(cellX, cellY);
@@ -442,7 +443,7 @@ namespace XericUI.XTable.Rendering.Component
                     ReleaseTrackedCell(cell.Item1, cell.Item2);
             }
 
-            // 3. 回收不再可见的预制体
+            // 3. 回收不再可见的预制体（仅从映射表移除，预制体保留在计数器槽位中复用）
             if (m_ActivePrefabMap != null && m_ActivePrefabMap.Count > 0)
             {
                 m_ReusableCellList.Clear();
@@ -452,9 +453,7 @@ namespace XericUI.XTable.Rendering.Component
 
                 foreach (var key in m_ReusableCellList)
                 {
-                    var cellData = TableData.GetCell(key.Item1, key.Item2);
-                    cellData?.OnPrefabRelease?.Invoke(m_ActivePrefabMap[key]);
-                    m_PrefabPool.Release(m_ActivePrefabMap[key]);
+                    // 不调用 OnPrefabRelease 和 Release——预制体保留在槽位中
                     m_ActivePrefabMap.Remove(key);
                 }
             }
