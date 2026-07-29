@@ -80,6 +80,17 @@ namespace XericUI.XTable.Core
 			NotifyChanged();
 		}
 
+		/// <summary>一次性设置选区端点；仅在值变化时通知。</summary>
+		public void SetEndpoints(int startRow, int startCol, int endRow, int endCol)
+		{
+			if (StartRow == startRow && StartCol == startCol && EndRow == endRow && EndCol == endCol) return;
+			StartRow = startRow;
+			StartCol = startCol;
+			EndRow = endRow;
+			EndCol = endCol;
+			NotifyChanged();
+		}
+
 		/// <summary>
 		/// 扩展多选范围到目标格（保持原有锚点）
 		/// </summary>

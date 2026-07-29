@@ -400,6 +400,47 @@ namespace XericUI.XTable.Core
 			return block.GetMergeRedirect(localRow, localCol) != null;
 		}
 
+		/// <summary>获取任意合并区域单元格所属的完整合并矩形。</summary>
+		public bool TryGetMergeRect(int row, int col, out int sourceRow, out int sourceCol,
+			out int rowSpan, out int colSpan)
+		{
+			sourceRow = row;
+			sourceCol = col;
+			rowSpan = 1;
+			colSpan = 1;
+			XTableCoordinateUtility.CellToBlockCoordinate(row, col, BlockSizeX, BlockSizeY,
+				out int blockRow, out int blockCol, out int localRow, out int localCol);
+			ulong blockIndex = XTableBlockMapping.BlockCoordToZIndex(blockRow, blockCol);
+			if (!BlockMap.TryGetValue(blockIndex, out XTableBlock block)) return false;
+
+			XTableMergeDescriptor descriptor = block.GetMergeRedirect(localRow, localCol);
+			if (descriptor == null)
+			{
+				foreach (var pair in BlockMap)
+				{
+					foreach (var candidate in pair.Value.MergeDescriptors)
+					{
+						ulong sourceBlock = candidate.IsCrossBlock ? candidate.SourceBlockIndex : pair.Key;
+						if (sourceBlock == blockIndex && candidate.SourceLocalRow == localRow && candidate.SourceLocalCol == localCol)
+						{
+							descriptor = candidate;
+							break;
+						}
+					}
+					if (descriptor != null) break;
+				}
+			}
+			if (descriptor == null) return false;
+
+			ulong sourceIndex = descriptor.IsCrossBlock ? descriptor.SourceBlockIndex : blockIndex;
+			XTableBlockMapping.ZIndexToBlockCoord(sourceIndex, out int sourceBlockRow, out int sourceBlockCol);
+			sourceRow = sourceBlockRow * BlockSizeY + descriptor.SourceLocalRow;
+			sourceCol = sourceBlockCol * BlockSizeX + descriptor.SourceLocalCol;
+			rowSpan = descriptor.MergeRowSpan;
+			colSpan = descriptor.MergeColSpan;
+			return true;
+		}
+
 		/// <summary>判断指定单元格是否为合并源（锚点），并返回合并跨度</summary>
 		public bool IsMergeSource(int row, int col, out int rowSpan, out int colSpan)
 		{
@@ -445,6 +486,16 @@ namespace XericUI.XTable.Core
 		#region 边框范围
 
 		public IReadOnlyList<XTableBorderRange> BorderRanges => m_BorderRanges;
+
+		/// <summary>对矩形四条外边写入显式样式范围；空样式恢复隐式默认值。</summary>
+		public void SetBorderRect(int rowStart, int rowEnd, int colStart, int colEnd, string ns)
+		{
+			if (rowStart >= rowEnd || colStart >= colEnd) return;
+			SetBorderRange(XTableBorderAxis.Horizontal, rowStart, colStart, colEnd - colStart, ns);
+			SetBorderRange(XTableBorderAxis.Horizontal, rowEnd, colStart, colEnd - colStart, ns);
+			SetBorderRange(XTableBorderAxis.Vertical, colStart, rowStart, rowEnd - rowStart, ns);
+			SetBorderRange(XTableBorderAxis.Vertical, colEnd, rowStart, rowEnd - rowStart, ns);
+		}
 
 		public string GetBorderRightNs(int row, int col) =>
 			row < 0 || col < 0 ? GetOuterBorderNs(row, col) : GetBorderNamespace(XTableBorderAxis.Vertical, col + 1, row);

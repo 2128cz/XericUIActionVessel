@@ -545,13 +545,6 @@ namespace XericUIEditor.XTable
                 int minC = Mathf.Min(table.SelectStartCol, table.SelectEndCol);
                 int maxC = Mathf.Max(table.SelectStartCol, table.SelectEndCol);
 
-                // 扩展多选区域以包含合并源的全部跨度
-                if (table.IsMergeSource(minR, minC, out int msRS, out int msCS))
-                {
-                    maxR = Mathf.Max(maxR, minR + msRS - 1);
-                    maxC = Mathf.Max(maxC, minC + msCS - 1);
-                }
-
                 minR = Mathf.Clamp(minR, 0, rh.Length - 1);
                 maxR = Mathf.Clamp(maxR, 0, rh.Length - 1);
                 minC = Mathf.Clamp(minC, 0, cw.Length - 1);

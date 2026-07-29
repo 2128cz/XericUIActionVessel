@@ -198,15 +198,22 @@ namespace XericUI.XTable.Rendering.Component
         private bool IsMergedInteriorBoundary(XTableBorderAxis axis, int fixedIndex, int index)
         {
             if (m_TableData == null) return false;
+            int rowA, colA, rowB, colB;
             if (axis == XTableBorderAxis.Horizontal)
             {
                 if (fixedIndex <= 0 || fixedIndex >= m_RowHeights.Length) return false;
-                return m_TableData.IsCellMerged(fixedIndex - 1, index)
-                    || m_TableData.IsCellMerged(fixedIndex, index);
+                rowA = fixedIndex - 1; colA = index;
+                rowB = fixedIndex; colB = index;
             }
-            if (fixedIndex <= 0 || fixedIndex >= m_ColWidths.Length) return false;
-            return m_TableData.IsCellMerged(index, fixedIndex - 1)
-                || m_TableData.IsCellMerged(index, fixedIndex);
+            else
+            {
+                if (fixedIndex <= 0 || fixedIndex >= m_ColWidths.Length) return false;
+                rowA = index; colA = fixedIndex - 1;
+                rowB = index; colB = fixedIndex;
+            }
+            return m_TableData.TryGetMergeRect(rowA, colA, out int sourceRowA, out int sourceColA, out _, out _)
+                && m_TableData.TryGetMergeRect(rowB, colB, out int sourceRowB, out int sourceColB, out _, out _)
+                && sourceRowA == sourceRowB && sourceColA == sourceColB;
         }
     }
 }

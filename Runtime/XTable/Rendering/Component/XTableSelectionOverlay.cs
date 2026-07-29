@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using UnityEngine.Networking;
 using XericLibrary.Runtime.MacroLibrary;
 
 namespace XericUI.XTable.Rendering.Component
@@ -17,9 +18,23 @@ namespace XericUI.XTable.Rendering.Component
         private int m_ColEnd;
         private bool m_Dragging;
 
+        #region debug-point selection-overlay-config
+        private void DebugReport(string point, string details)
+        {
+            if (!Application.isPlaying) return;
+            string body = $"{{\"sessionId\":\"selection-playmode-input\",\"point\":\"{point}\",\"details\":\"{details}\"}}";
+            var request = new UnityWebRequest("http://127.0.0.1:7777/event", "POST");
+            request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(body));
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SendWebRequest();
+        }
+        #endregion
+
         public void Configure(XericUIActionTable table, int rowStart, int rowEnd, int colStart, int colEnd)
         {
             m_Table = table;
+            DebugReport("overlay-config", $"region={rowStart},{rowEnd},{colStart},{colEnd};active={gameObject.activeInHierarchy}");
             m_RowStart = rowStart;
             m_RowEnd = rowEnd;
             m_ColStart = colStart;
@@ -63,9 +78,14 @@ namespace XericUI.XTable.Rendering.Component
             m_Fill.gameObject.SetActive(true);
         }
 
+        #region debug-point selection-overlay-input
         public void OnPointerDown(PointerEventData eventData)
         {
-            if (m_Table == null || !m_Table.TryGetCellFromScreenPoint(transform.RectTransform(), eventData.position, eventData.pressEventCamera, true, out int row, out int col))
+            int row = -1;
+            int col = -1;
+            bool hit = m_Table != null && m_Table.TryGetCellFromScreenPoint(transform.RectTransform(), eventData.position, eventData.pressEventCamera, true, out row, out col);
+            DebugReport("pointer-down", $"hit={hit};position={eventData.position};rect={transform.RectTransform().rect}");
+            if (!hit)
                 return;
             m_Dragging = true;
             m_Table.BeginSelection(row, col);
@@ -86,6 +106,7 @@ namespace XericUI.XTable.Rendering.Component
         }
 
         public void OnEndDrag(PointerEventData eventData) => EndDrag();
+        #endregion
 
         private void OnDisable() => EndDrag();
         private void OnDestroy() => EndDrag();

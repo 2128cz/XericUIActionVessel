@@ -64,57 +64,46 @@ namespace XericUI.XTable.Rendering.Component
             return data;
         }
 
-        /// <summary>设置单元格的样式命名空间，同时写入边框缓存（谁最后设置归谁）</summary>
+        /// <summary>设置单元格或合并矩形的样式，并覆写其四条外边范围。</summary>
         public XTableCellData SetCellStyle(int row, int col, string styleNamespace, string stylePath)
         {
-            var data = TableData.GetOrCreateCell(row, col);
-            if (data.CellStyle == null)
-                data.CellStyle = new XericLibrary.Runtime.SuperStyleSheet.StyleMember();
-            data.CellStyle.CurrentNamespace = styleNamespace ?? "";
-            data.CellStyle.StylePath = stylePath ?? "";
+            ResolveStyleRect(row, col, out int rowStart, out int rowEnd, out int colStart, out int colEnd);
+            XTableCellData result = null;
+            for (int r = rowStart; r < rowEnd; r++)
+            for (int c = colStart; c < colEnd; c++)
+            {
+                var data = TableData.GetOrCreateCell(r, c);
+                data.CellStyle ??= new XericLibrary.Runtime.SuperStyleSheet.StyleMember();
+                data.CellStyle.CurrentNamespace = styleNamespace ?? "";
+                data.CellStyle.StylePath = stylePath ?? "";
+                data.StyleNamespace = styleNamespace ?? "";
+                result ??= data;
+            }
+            TableData.SetBorderRect(rowStart, rowEnd, colStart, colEnd, styleNamespace);
             MarkDirty(TableDirtyType.StyleChanged);
-            return data;
+            return result;
         }
 
         /// <summary>设置单元格的样式命名空间（兼容旧版，等同于 StyleNamespace 字段）</summary>
         public void SetCellStyleNamespace(int row, int col, string styleNamespace)
         {
-            if (TableData.IsMergeSource(row, col, out int rowSpan, out int colSpan))
-            {
-                for (int r = row; r < row + rowSpan && r < m_RowHeights.Length; r++)
-                for (int c = col; c < col + colSpan && c < m_ColWidths.Length; c++)
-                    TableData.GetOrCreateCell(r, c).StyleNamespace = styleNamespace ?? string.Empty;
-
-                ApplyCellStyleBorders(row, col, rowSpan, colSpan, styleNamespace);
-            }
-            else
-            {
-                ApplyCellStyleToCell(row, col, styleNamespace);
-            }
-
+            ResolveStyleRect(row, col, out int rowStart, out int rowEnd, out int colStart, out int colEnd);
+            for (int r = rowStart; r < rowEnd; r++)
+            for (int c = colStart; c < colEnd; c++)
+                TableData.GetOrCreateCell(r, c).StyleNamespace = styleNamespace ?? string.Empty;
+            TableData.SetBorderRect(rowStart, rowEnd, colStart, colEnd, styleNamespace);
             MarkDirty(TableDirtyType.StyleChanged);
         }
 
-        /// <summary>设置单元格样式并写入其可见右侧、底部边框范围。</summary>
-        private void ApplyCellStyleToCell(int row, int col, string ns)
+        private void ResolveStyleRect(int row, int col, out int rowStart, out int rowEnd, out int colStart, out int colEnd)
         {
-            var data = TableData.GetOrCreateCell(row, col);
-            data.StyleNamespace = ns ?? string.Empty;
-
-            int rowSpan = 1;
-            int colSpan = 1;
-            if (TableData.IsMergeSource(row, col, out int mergedRows, out int mergedCols))
+            rowStart = row; colStart = col; rowEnd = row + 1; colEnd = col + 1;
+            if (TableData.TryGetMergeRect(row, col, out int sourceRow, out int sourceCol, out int rowSpan, out int colSpan))
             {
-                rowSpan = mergedRows;
-                colSpan = mergedCols;
+                rowStart = sourceRow; colStart = sourceCol;
+                rowEnd = Mathf.Min(sourceRow + rowSpan, m_RowHeights.Length);
+                colEnd = Mathf.Min(sourceCol + colSpan, m_ColWidths.Length);
             }
-            ApplyCellStyleBorders(row, col, rowSpan, colSpan, ns);
-        }
-
-        private void ApplyCellStyleBorders(int row, int col, int rowSpan, int colSpan, string ns)
-        {
-            TableData.SetBorderRange(XTableBorderAxis.Vertical, col + colSpan, row, rowSpan, ns);
-            TableData.SetBorderRange(XTableBorderAxis.Horizontal, row + rowSpan, col, colSpan, ns);
         }
 
         /// <summary>清除文本内容</summary>
@@ -151,9 +140,16 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>清除单元格样式覆盖</summary>
         public void ClearCellStyle(int row, int col)
         {
-            var data = TableData.GetCell(row, col);
-            if (data == null) return;
-            data.CellStyle = null;
+            ResolveStyleRect(row, col, out int rowStart, out int rowEnd, out int colStart, out int colEnd);
+            for (int r = rowStart; r < rowEnd; r++)
+            for (int c = colStart; c < colEnd; c++)
+            {
+                var data = TableData.GetCell(r, c);
+                if (data == null) continue;
+                data.CellStyle = null;
+                data.StyleNamespace = string.Empty;
+            }
+            TableData.SetBorderRect(rowStart, rowEnd, colStart, colEnd, null);
             MarkDirty(TableDirtyType.StyleChanged);
         }
 
@@ -360,15 +356,13 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>单选一个单元格</summary>
         public void SelectCell(int row, int col)
         {
-            SelectionHandle.Select(row, col);
-            MarkDirty(TableDirtyType.SelectionChanged);
+            NormalizeAndSelect(row, col, row, col);
         }
 
         /// <summary>多选一个范围</summary>
         public void SelectCell(int startRow, int startCol, int endRow, int endCol)
         {
-            SelectionHandle.Select(startRow, startCol, endRow, endCol);
-            MarkDirty(TableDirtyType.SelectionChanged);
+            NormalizeAndSelect(startRow, startCol, endRow, endCol);
         }
 
         /// <summary>清除选择</summary>
