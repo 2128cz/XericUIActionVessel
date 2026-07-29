@@ -1,14 +1,12 @@
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
 
 namespace XericUI.XTable.Rendering.Component
 {
-    /// <summary>单个渲染层的固定框选输入与视觉覆盖层。</summary>
+    /// <summary>单个渲染层的固定选区视觉覆盖层。</summary>
     [RequireComponent(typeof(RectTransform), typeof(Image))]
-    public sealed class XTableSelectionOverlay : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler, IEndDragHandler
+    public sealed class XTableSelectionOverlay : MonoBehaviour
     {
         private XericUIActionTable m_Table;
         private Image m_Fill;
@@ -16,15 +14,6 @@ namespace XericUI.XTable.Rendering.Component
         private int m_RowEnd;
         private int m_ColStart;
         private int m_ColEnd;
-        private bool m_Dragging;
-
-        #region debug-point selection-overlay-config
-        private void DebugReport(string point, string details)
-        {
-            if (Application.isPlaying)
-                Debug.Log($"[XTableSelection] {point} object={name}; {details}", this);
-        }
-        #endregion
 
         public void Configure(XericUIActionTable table, int rowStart, int rowEnd, int colStart, int colEnd)
         {
@@ -42,7 +31,6 @@ namespace XericUI.XTable.Rendering.Component
             rt.sizeDelta = region.size;
             EnsureVisuals();
             RefreshVisual();
-            DebugReport("overlay-config", $"region={m_RowStart},{m_RowEnd},{m_ColStart},{m_ColEnd};rect={rt.rect};position={rt.anchoredPosition};parent={transform.parent?.name};sibling={transform.GetSiblingIndex()}");
         }
 
         public void RefreshVisual()
@@ -73,88 +61,33 @@ namespace XericUI.XTable.Rendering.Component
             m_Fill.gameObject.SetActive(true);
         }
 
-        #region debug-point selection-overlay-input
-        public void OnPointerDown(PointerEventData eventData)
-        {
-            int row = -1;
-            int col = -1;
-            bool hit = TryGetCellFromOverlayPoint(eventData.position, eventData.pressEventCamera, out row, out col);
-            DebugReport("pointer-down", $"hit={hit};row={row};col={col};position={eventData.position};rect={transform.RectTransform().rect};dragHandler={eventData.pointerDrag?.name};pressHandler={eventData.pointerPress?.name}");
-            if (!hit)
-                return;
-            m_Dragging = true;
-            m_Table.BeginSelection(row, col);
-            eventData.Use();
-        }
-
-        public void OnDrag(PointerEventData eventData)
-        {
-            if (!m_Dragging || m_Table == null)
-            {
-                DebugReport("drag-ignored", $"dragging={m_Dragging};table={m_Table != null};dragHandler={eventData.pointerDrag?.name}");
-                return;
-            }
-            bool hit = TryGetCellFromOverlayPoint(eventData.position, eventData.pressEventCamera, out int row, out int col);
-            DebugReport("drag", $"hit={hit};row={row};col={col};position={eventData.position};dragHandler={eventData.pointerDrag?.name}");
-            if (hit)
-                m_Table.UpdateSelectionDragToCell(row, col);
-            eventData.Use();
-        }
-
-        public void OnPointerUp(PointerEventData eventData)
-        {
-            EndDrag();
-            eventData.Use();
-        }
-
-        public void OnEndDrag(PointerEventData eventData) => EndDrag();
-        #endregion
-
-        private void Update()
-        {
-            if (!Application.isPlaying || !Input.GetMouseButtonDown(0) || EventSystem.current == null) return;
-            var data = new PointerEventData(EventSystem.current) { position = Input.mousePosition };
-            var results = new List<RaycastResult>();
-            EventSystem.current.RaycastAll(data, results);
-            string hits = string.Empty;
-            for (int i = 0; i < results.Count && i < 5; i++)
-                hits += $"{i}:{results[i].gameObject.name}/{results[i].module.GetType().Name} ";
-            DebugReport("raycast", $"mouse={Input.mousePosition};hits={hits}");
-        }
-
-        private void OnDisable() => EndDrag();
-        private void OnDestroy() => EndDrag();
-
-        private void EndDrag()
-        {
-            if (!m_Dragging) return;
-            m_Dragging = false;
-            m_Table?.EndSelection();
-        }
-
-        private bool TryGetCellFromOverlayPoint(Vector2 screenPoint, Camera eventCamera, out int row, out int col)
-        {
-            row = col = -1;
-            if (m_Table == null || !RectTransformUtility.ScreenPointToLocalPointInRectangle(transform.RectTransform(), screenPoint, eventCamera, out Vector2 local))
-                return false;
-            Rect region = m_Table.GetTableRect(m_RowStart, m_RowEnd, m_ColStart, m_ColEnd);
-            return m_Table.TryGetCellFromTablePoint(new Vector2(region.x + local.x, region.y - local.y), true, out row, out col);
-        }
-
         private void EnsureVisuals()
         {
             var input = GetComponent<Image>();
             input.color = Color.clear;
-            input.raycastTarget = true;
+            input.raycastTarget = false;
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                Transform child = transform.GetChild(i);
+                if (child.name != "_SelectionRect") continue;
+                Image image = child.GetComponent<Image>();
+                if (m_Fill == null && image != null)
+                {
+                    m_Fill = image;
+                    m_Fill.raycastTarget = false;
+                    var outline = child.GetComponent<Outline>();
+                    if (outline != null) Destroy(outline);
+                    continue;
+                }
+                if (Application.isPlaying) Destroy(child.gameObject);
+                else DestroyImmediate(child.gameObject);
+            }
             if (m_Fill != null) return;
-            var go = new GameObject("_SelectionRect", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Outline));
+            var go = new GameObject("_SelectionRect", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             go.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
             go.transform.SetParent(transform, false);
             m_Fill = go.GetComponent<Image>();
             m_Fill.raycastTarget = false;
-            var outline = go.GetComponent<Outline>();
-            outline.effectColor = new Color(0.2f, 0.55f, 1f, 1f);
-            outline.effectDistance = new Vector2(1f, -1f);
             var rt = m_Fill.rectTransform;
             rt.anchorMin = new Vector2(0, 1);
             rt.anchorMax = new Vector2(0, 1);

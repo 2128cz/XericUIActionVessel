@@ -405,7 +405,7 @@ namespace XericUI.XTable.Rendering.Component
             if (m_BackgroundRenderer != null) return;
 
             var backgroundGo = new GameObject("_TableBackground",
-                typeof(RectTransform), typeof(CanvasRenderer), typeof(XTableBackgroundRenderer));
+                typeof(RectTransform), typeof(CanvasRenderer), typeof(XTableBackgroundRenderer), typeof(XTableSelectionInput));
             backgroundGo.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
             backgroundGo.transform.SetParent(ContentTransform, false);
             backgroundGo.transform.SetAsFirstSibling();
@@ -418,7 +418,8 @@ namespace XericUI.XTable.Rendering.Component
             backgroundRt.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
 
             m_BackgroundRenderer = backgroundGo.GetComponent<XTableBackgroundRenderer>();
-            m_BackgroundRenderer.raycastTarget = false;
+            m_BackgroundRenderer.raycastTarget = true;
+            backgroundGo.GetComponent<XTableSelectionInput>().Configure(this);
             UpdateBackground();
         }
 

@@ -27,6 +27,7 @@ namespace XericUI.XTable.Rendering.Component
         public Dictionary<(int, int), GameObject> ActivePrefabMap;
         public float CellPadding;
         public XTableConfig Config;
+        public XericUIActionTable SelectionTable;
 
         public int StartRow;
         public int StartCol;
@@ -62,12 +63,13 @@ namespace XericUI.XTable.Rendering.Component
         {
             if (m_BackgroundGo == null)
             {
-                m_BackgroundGo = new GameObject("_TableBackground", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                m_BackgroundGo = new GameObject("_TableBackground", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(XTableSelectionInput));
                 m_BackgroundGo.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
                 m_BackgroundGo.transform.SetParent(m_Parent, false);
                 m_BackgroundGo.transform.SetAsFirstSibling();
                 var image = m_BackgroundGo.GetComponent<Image>();
-                image.raycastTarget = false;
+                image.raycastTarget = true;
+                m_BackgroundGo.GetComponent<XTableSelectionInput>().Configure(SelectionTable);
                 image.color = GetStyleColor?.Invoke(styleNamespace, XericUIActionTable.STYLE_CELL_BG_COLOR,
                     XericUIActionTable.BG_COLOR_FALLBACK) ?? XericUIActionTable.BG_COLOR_FALLBACK;
             }

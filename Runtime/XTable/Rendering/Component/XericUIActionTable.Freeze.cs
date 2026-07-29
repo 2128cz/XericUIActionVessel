@@ -56,6 +56,7 @@ namespace XericUI.XTable.Rendering.Component
                 PrefabPool = m_PrefabPool,
                 CellPadding = CellPadding,
                 Config = Config,
+                SelectionTable = this,
                 GetStyleColor = (ns, path, fallback) => GetStyleColor(ns, path, fallback),
                 GetStyleInt = (ns, path, fallback) => GetStyleInt(ns, path, fallback),
                 GetStyleFontAsset = (ns, path) => GetStyleFontAsset(ns, path),
