@@ -104,8 +104,8 @@ namespace XericUI.XTable.Rendering.Component
             // Content 的 anchor/pivot 在 Awake 中强制设为 (0,1)，anchoredPosition
             // 直接表示 Content 左上角相对于 Viewport 左上角的偏移。
             Vector2 ap = ct.anchoredPosition;
-            float visibleLeft = -ap.x;
-            float visibleTop = -ap.y;
+            float visibleLeft = ap.x;
+            float visibleTop = ap.y;
 
             m_VisibleRect = new Rect(visibleLeft, visibleTop, vt.rect.width, vt.rect.height);
         }
