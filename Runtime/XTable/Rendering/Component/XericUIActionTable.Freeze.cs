@@ -1,117 +1,164 @@
-using System;
 using UnityEngine;
-using UnityEngine.UI;
-using XericUI.XTable.Core;
 using XericUI.XTable.Rendering.Elements;
-using XericLibrary.Runtime.SuperStyleSheet;
 
 namespace XericUI.XTable.Rendering.Component
 {
     public partial class XericUIActionTable
     {
-        #region Viewport 冻结渲染
+        private static readonly Vector2 FrozenAnchor = new(0f, 1f);
 
-        /// <summary>创建或重新创建 Viewport 层冻结渲染器</summary>
         private void CreateViewportRenderer()
         {
             if (m_ScrollRect == null || m_ScrollRect.viewport == null) return;
-            if (m_FreezeRowCount <= 0 && m_FreezeColCount <= 0) return;
-
-            // 清理旧渲染器
-            m_ViewportRenderer?.DestroyAll();
-
-            Transform viewportT = m_ScrollRect.viewport;
-            m_ViewportRenderer = new TableRenderer(viewportT, m_DefaultStyleNamespace, OnPoolStyleChanged);
-
-            // 配置委托
-            m_ViewportRenderer.GetStyleColor = (ns, path, fb) => GetStyleColor(ns, path, fb);
-            m_ViewportRenderer.GetStyleFloat = (ns, path, fb) => GetStyleFloat(ns, path, fb);
-            m_ViewportRenderer.GetStyleInt = (ns, path, fb) => GetStyleInt(ns, path, fb);
-            m_ViewportRenderer.GetStyleFontAsset = (ns, path) => GetStyleFontAsset(ns, path);
-            m_ViewportRenderer.GetRowHeights = () => m_RowHeights;
-            m_ViewportRenderer.GetColWidths = () => m_ColWidths;
-            m_ViewportRenderer.GetTableData = () => m_TableData;
-            m_ViewportRenderer.GetDefaultStyleNamespace = () => m_DefaultStyleNamespace;
-            m_ViewportRenderer.IsInSelectionRange = (r, c) => IsInSelectionRange(r, c);
-            m_ViewportRenderer.GetSelectedRow = () => SelectionHandle.StartRow;
-            m_ViewportRenderer.GetSelectedCol = () => SelectionHandle.StartCol;
-
-            // 仅渲染冻结范围
-            m_ViewportRenderer.StartRow = 0;
-            m_ViewportRenderer.EndRow = m_FreezeRowCount;
-            m_ViewportRenderer.StartCol = 0;
-            m_ViewportRenderer.EndCol = m_FreezeColCount;
-
-            // 共享预制体对象池
-            m_ViewportRenderer.PrefabPool = m_PrefabPool;
-            m_ViewportRenderer.ActivePrefabMap = m_ActivePrefabMap;
-            m_ViewportRenderer.CellPadding = Config.CellHorizontalPadding;
-            m_ViewportRenderer.Config = Config;
+            CreateFrozenContainers();
+            CreateFrozenRenderers();
         }
 
-        /// <summary>渲染 Viewport 层冻结单元格，随滚动偏移调整位置</summary>
-        private void RenderFrozenCells()
+        private void CreateFrozenContainers()
         {
-            if (m_FreezeRowCount <= 0 && m_FreezeColCount <= 0)
+            Transform viewport = m_ScrollRect.viewport;
+            m_FrozenColumnsContainer = CreateFrozenContainer(viewport, "_FrozenColumns");
+            m_FrozenRowsContainer = CreateFrozenContainer(viewport, "_FrozenRows");
+            m_FrozenCornerContainer = CreateFrozenContainer(viewport, "_FrozenCorner");
+        }
+
+        private static RectTransform CreateFrozenContainer(Transform parent, string name)
+        {
+            var existing = parent.Find(name) as RectTransform;
+            if (existing != null) return existing;
+            var go = new GameObject(name, typeof(RectTransform));
+            go.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = FrozenAnchor;
+            rt.anchorMax = FrozenAnchor;
+            rt.pivot = FrozenAnchor;
+            return rt;
+        }
+
+        private void CreateFrozenRenderers()
+        {
+            if (m_FrozenColumnsContainer == null) return;
+            m_FrozenColumnRenderer?.DestroyAll();
+            m_FrozenRowRenderer?.DestroyAll();
+            m_FrozenCornerRenderer?.DestroyAll();
+            DestroyFrozenBorderRenderers();
+            m_FrozenColumnRenderer = CreateFrozenRenderer(m_FrozenColumnsContainer);
+            m_FrozenRowRenderer = CreateFrozenRenderer(m_FrozenRowsContainer);
+            m_FrozenCornerRenderer = CreateFrozenRenderer(m_FrozenCornerContainer);
+        }
+
+        private TableRenderer CreateFrozenRenderer(Transform parent)
+        {
+            var renderer = new TableRenderer(parent)
             {
-                // 无冻结需求时清理渲染器
-                if (m_ViewportRenderer != null)
-                {
-                    m_ViewportRenderer.DestroyAll();
-                    m_ViewportRenderer = null;
-                }
+                Assembler = m_Assembler,
+                PrefabPool = m_PrefabPool,
+                CellPadding = CellPadding,
+                Config = Config,
+                GetStyleColor = (ns, path, fallback) => GetStyleColor(ns, path, fallback),
+                GetStyleInt = (ns, path, fallback) => GetStyleInt(ns, path, fallback),
+                GetStyleFontAsset = (ns, path) => GetStyleFontAsset(ns, path),
+                GetRowHeights = () => m_RowHeights,
+                GetColWidths = () => m_ColWidths,
+                GetTableData = () => m_TableData,
+                GetDefaultStyleNamespace = () => m_DefaultStyleNamespace,
+                IsInSelectionRange = (r, c) => IsInSelectionRange(r, c),
+                GetSelectedRow = () => SelectionHandle.StartRow,
+                GetSelectedCol = () => SelectionHandle.StartCol,
+            };
+            return renderer;
+        }
+
+        private void DestroyFrozenRenderers()
+        {
+            m_FrozenColumnRenderer?.DestroyAll();
+            m_FrozenRowRenderer?.DestroyAll();
+            m_FrozenCornerRenderer?.DestroyAll();
+            DestroyFrozenBorderRenderers();
+            m_FrozenColumnRenderer = null;
+            m_FrozenRowRenderer = null;
+            m_FrozenCornerRenderer = null;
+            DestroyFrozenContainer(ref m_FrozenColumnsContainer);
+            DestroyFrozenContainer(ref m_FrozenRowsContainer);
+            DestroyFrozenContainer(ref m_FrozenCornerContainer);
+        }
+
+        private static void DestroyFrozenContainer(ref RectTransform container)
+        {
+            if (container == null) return;
+            if (Application.isPlaying) Object.Destroy(container.gameObject);
+            else Object.DestroyImmediate(container.gameObject);
+            container = null;
+        }
+
+        private void ReleaseFrozenCells()
+        {
+            m_FrozenColumnRenderer?.ReleaseAll();
+            m_FrozenRowRenderer?.ReleaseAll();
+            m_FrozenCornerRenderer?.ReleaseAll();
+        }
+
+        private void RenderFrozenCells(bool fullRefresh = true)
+        {
+            int rows = m_RowHeights?.Length ?? 0;
+            int cols = m_ColWidths?.Length ?? 0;
+            int freezeRows = Mathf.Clamp(m_FreezeRowCount, 0, rows);
+            int freezeCols = Mathf.Clamp(m_FreezeColCount, 0, cols);
+            if (freezeRows == 0 && freezeCols == 0)
+            {
+                DestroyFrozenRenderers();
                 return;
             }
 
-            // 检测冻结范围变更，重建渲染器
-            if (m_ViewportRenderer == null ||
-                m_ViewportRenderer.EndRow != m_FreezeRowCount ||
-                m_ViewportRenderer.EndCol != m_FreezeColCount)
-                CreateViewportRenderer();
-
-            // 计算冻结区域尺寸
-            float freezeW = 0, freezeH = 0;
-            for (int c = 0; c < m_FreezeColCount && c < m_ColWidths.Length; c++)
-                freezeW += m_ColWidths[c];
-            for (int r = 0; r < m_FreezeRowCount && r < m_RowHeights.Length; r++)
-                freezeH += m_RowHeights[r];
-
-            // 创建/更新背景
-            m_ViewportRenderer.CreateBackground(freezeW, freezeH, m_DefaultStyleNamespace);
-
-            // 获取滚动偏移
-            Vector2 scrollOffset = Vector2.zero;
-            if (m_ScrollRect != null && m_ScrollRect.content != null)
-            {
-                scrollOffset.x = Mathf.Max(0, -m_ScrollRect.content.anchoredPosition.x);
-                scrollOffset.y = Mathf.Max(0, -m_ScrollRect.content.anchoredPosition.y);
-            }
-
-            // 调整背景位置（随滚动偏移移动，保持在视口可见范围内）
-            if (m_ViewportRenderer.BackgroundGo != null)
-            {
-                var bgRt = m_ViewportRenderer.BackgroundGo.GetComponent<RectTransform>();
-                bgRt.anchoredPosition = new Vector2(scrollOffset.x, -scrollOffset.y);
-            }
-
-            // 回收并重新渲染冻结单元格
-            m_ViewportRenderer.ReturnAll();
-            m_ViewportRenderer.RenderCells(
-                0, m_FreezeRowCount,
-                0, m_FreezeColCount,
-                !Application.isPlaying);
-
-            // 冻结单元格需要跟随滚动偏移（相对于 Viewport 定位）
-            if (m_ViewportRenderer.Assembler != null)
-            {
-                // 调整所有活跃的池对象的 anchoredPosition 以抵消滚动
-                // 这通过重新定位背景实现，单元格相对于背景 (0,0) 定位，所以随背景一起移动
-            }
-
-            // 背景始终可见
-            m_ViewportRenderer.BackgroundGo?.SetActive(true);
+            if (m_FrozenColumnRenderer == null) CreateViewportRenderer();
+            if (m_FrozenColumnRenderer == null) return;
+            CreateFrozenBackgrounds(freezeRows, freezeCols);
+            SyncFrozenContainers();
+            CalcVisibleRange(out int visibleStartRow, out int visibleEndRow, out int visibleStartCol, out int visibleEndCol);
+#if UNITY_EDITOR
+            bool editorMode = !Application.isPlaying;
+#else
+            bool editorMode = false;
+#endif
+            // 固定顺序：Content 已先完成，然后冻结列、冻结行、左上交叉区。
+            if (freezeCols > 0)
+                m_FrozenColumnRenderer.Render(Mathf.Max(freezeRows, visibleStartRow), visibleEndRow,
+                    0, freezeCols, editorMode, fullRefresh);
+            if (freezeRows > 0)
+                m_FrozenRowRenderer.Render(0, freezeRows, Mathf.Max(freezeCols, visibleStartCol), visibleEndCol,
+                    editorMode, fullRefresh);
+            if (freezeRows > 0 && freezeCols > 0)
+                m_FrozenCornerRenderer.Render(0, freezeRows, 0, freezeCols, editorMode, fullRefresh);
         }
 
-        #endregion
+        private void CreateFrozenBackgrounds(int freezeRows, int freezeCols)
+        {
+            float freezeWidth = GetColLeftX(freezeCols);
+            float freezeHeight = GetRowTopY(freezeRows);
+            if (freezeCols > 0)
+                m_FrozenColumnRenderer.CreateBackground(freezeWidth, m_TotalHeight, m_DefaultStyleNamespace);
+            if (freezeRows > 0)
+                m_FrozenRowRenderer.CreateBackground(m_TotalWidth - freezeWidth, freezeHeight,
+                    m_DefaultStyleNamespace, new Vector2(freezeWidth, 0f));
+            if (freezeRows > 0 && freezeCols > 0)
+                m_FrozenCornerRenderer.CreateBackground(freezeWidth, freezeHeight, m_DefaultStyleNamespace);
+        }
+
+        private void SyncFrozenContainers()
+        {
+            if (m_ScrollRect == null || m_ScrollRect.content == null) return;
+            Vector2 contentPosition = m_ScrollRect.content.anchoredPosition;
+            SyncFrozenContainer(m_FrozenColumnsContainer, new Vector2(0f, contentPosition.y));
+            SyncFrozenContainer(m_FrozenRowsContainer, new Vector2(contentPosition.x, 0f));
+            SyncFrozenContainer(m_FrozenCornerContainer, Vector2.zero);
+        }
+
+        private void SyncFrozenContainer(RectTransform container, Vector2 position)
+        {
+            if (container == null) return;
+            container.anchoredPosition = position;
+            container.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+        }
     }
 }

@@ -75,15 +75,20 @@ namespace XericUI.XTable.Rendering.Elements
 		/// 为指定 cellId 获取预制体实例。
 		/// 若该 cellId 已有绑定的实例，直接返回；否则创建新实例（需未达上限）。
 		/// </summary>
-		public GameObject Acquire(GameObject prefab, int cellId)
+		public GameObject Acquire(GameObject prefab, int cellId, Transform parent = null)
 		{
 			if (prefab == null) return null;
 
 			var pool = GetOrCreatePool(prefab);
+			Transform targetParent = parent ?? m_Parent;
 
-			// 已绑定 → 直接复用
+			// 已绑定 → 直接复用并迁移到当前渲染区域。
 			if (pool.Slots.TryGetValue(cellId, out var existing))
+			{
+				if (targetParent != null && existing.transform.parent != targetParent)
+					existing.transform.SetParent(targetParent, false);
 				return existing;
+			}
 
 			// 创建新实例
 			if (m_TotalCreated >= MAX_PREFAB_ITEMS)
@@ -92,7 +97,7 @@ namespace XericUI.XTable.Rendering.Elements
 				return null;
 			}
 
-			var instance = Object.Instantiate(prefab, m_Parent);
+			var instance = Object.Instantiate(prefab, targetParent);
 			instance.hideFlags = POOL_FLAGS;
 			instance.name = $"_prefab_{cellId}";
 			m_TotalCreated++;
@@ -142,17 +147,9 @@ namespace XericUI.XTable.Rendering.Elements
 			KillObject(instance);
 		}
 
-		/// <summary>将所有活跃槽位清空并销毁对象</summary>
+		/// <summary>结束当前渲染周期。实例保留在全局槽位中，以便跨区域复用。</summary>
 		public void ReturnAll()
 		{
-			foreach (var kv in m_Pools)
-			{
-				var pool = kv.Value;
-				foreach (var instance in pool.Slots.Values)
-					KillObject(instance);
-				pool.Slots.Clear();
-			}
-			m_TotalCreated = 0;
 		}
 
 		/// <summary>获取当前所有活跃实例（用于外部遍历回调）</summary>

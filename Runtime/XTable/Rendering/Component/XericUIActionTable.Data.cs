@@ -28,6 +28,16 @@ namespace XericUI.XTable.Rendering.Component
 
         #endregion
 
+        #region 渲染分区
+
+        private bool IsNormalRegionCell(int row, int col)
+        {
+            return row >= Mathf.Clamp(m_FreezeRowCount, 0, m_RowHeights?.Length ?? 0)
+                && col >= Mathf.Clamp(m_FreezeColCount, 0, m_ColWidths?.Length ?? 0);
+        }
+
+        #endregion
+
         #region 坐标公式
 
         private float GetRowTopY(int row)
@@ -104,10 +114,7 @@ namespace XericUI.XTable.Rendering.Component
             // Content 的 anchor/pivot 在 Awake 中强制设为 (0,1)，anchoredPosition
             // 直接表示 Content 左上角相对于 Viewport 左上角的偏移。
             Vector2 ap = ct.anchoredPosition;
-            float visibleLeft = ap.x;
-            float visibleTop = ap.y;
-
-            m_VisibleRect = new Rect(visibleLeft, visibleTop, vt.rect.width, vt.rect.height);
+            m_VisibleRect = new Rect(ap.x, ap.y, vt.rect.width, vt.rect.height);
         }
 
         private void CalcVisibleRange(out int sr, out int er, out int sc, out int ec)

@@ -60,8 +60,13 @@ namespace XericUI.XTable.Rendering.Component
         [System.NonSerialized] private CellAssembler m_Assembler;
         [System.NonSerialized] private XTableDirtyFlag m_DirtyFlag;
 
-        /// <summary>Viewport 层渲染器——用于绘制冻结行列单元格</summary>
-        [System.NonSerialized] private TableRenderer m_ViewportRenderer;
+        /// <summary>Viewport 下的冻结列、冻结行与左上交叉区渲染器。</summary>
+        [System.NonSerialized] private TableRenderer m_FrozenColumnRenderer;
+        [System.NonSerialized] private TableRenderer m_FrozenRowRenderer;
+        [System.NonSerialized] private TableRenderer m_FrozenCornerRenderer;
+        [System.NonSerialized] private RectTransform m_FrozenColumnsContainer;
+        [System.NonSerialized] private RectTransform m_FrozenRowsContainer;
+        [System.NonSerialized] private RectTransform m_FrozenCornerContainer;
 
         [System.NonSerialized] private XTableSelectionHandle m_SelectionHandle;
 
@@ -82,8 +87,11 @@ namespace XericUI.XTable.Rendering.Component
         [System.NonSerialized] private readonly HashSet<string> m_ActiveStyleNamespaces = new();
         [System.NonSerialized] private bool m_StyleNamespaceDirty = true;
 
-        /// <summary>边框线段渲染器——使用 UILineRendererV2 的坐标线段绘制</summary>
+        /// <summary>各渲染区域的边框线段渲染器。</summary>
         [System.NonSerialized] private UILineRendererV2 m_BorderRenderer;
+        [System.NonSerialized] private UILineRendererV2 m_FrozenColumnBorderRenderer;
+        [System.NonSerialized] private UILineRendererV2 m_FrozenRowBorderRenderer;
+        [System.NonSerialized] private UILineRendererV2 m_FrozenCornerBorderRenderer;
 
         private float m_TotalWidth;
         private float m_TotalHeight;
@@ -309,9 +317,7 @@ namespace XericUI.XTable.Rendering.Component
             DestroyBorderRenderer();
             DestroyBackgroundRenderer();
 
-            // 销毁 Viewport 冻结渲染器
-            m_ViewportRenderer?.DestroyAll();
-            m_ViewportRenderer = null;
+            DestroyFrozenRenderers();
 
             base.OnDestroy();
         }

@@ -7,8 +7,8 @@ namespace XericUI.XTable.Rendering.Elements
 {
 	/// <summary>
 	/// 基于计数器的槽位对象池（泛型）。
-	/// 每个 cellId 映射到固定索引的 SlotCounter，槽位在计数器间通过 FrozenSlots 流转复用。
-	/// 避免 Queue 模式下对象与位置解耦导致的堆叠问题，同时不触发 SetActive/SetParent 等生命周期事件。
+	/// 每个 cellId 映射到固定索引的 SlotCounter，释放槽位保留在原计数器内复用。
+	/// 避免跨计数器拆分碰撞组导致的对象位置冲突。
 	/// </summary>
 	/// <typeparam name="T">池对象类型</typeparam>
 	public class SlotCounterPool<T> where T : class
@@ -37,9 +37,6 @@ namespace XericUI.XTable.Rendering.Elements
 
 		private SlotCounter[] m_Counters = new SlotCounter[POOL_SIZE];
 
-		/// <summary>冻结槽位列表——全局可偷取的休眠槽位（末尾偷取，避免 Canvas 重建）</summary>
-		private List<Slot> m_FrozenSlots = new List<Slot>();
-
 		/// <summary>已创建对象总数（不含预制体 Instantiate）</summary>
 		private int m_CreatedCount;
 
@@ -64,7 +61,7 @@ namespace XericUI.XTable.Rendering.Elements
 
 		/// <summary>
 		/// 为指定 cellId 获取一个池对象。
-		/// 优先复用本计数器内的空闲槽位，其次从 FrozenSlots 偷取，最后创建新对象。
+		/// 优先复用本计数器内的空闲槽位，最后创建新对象。
 		/// </summary>
 		public T Acquire(int cellId)
 		{
@@ -88,18 +85,7 @@ namespace XericUI.XTable.Rendering.Elements
 				}
 			}
 
-			// 2. 从 FrozenSlots 末尾偷取
-			if (m_FrozenSlots.Count > 0)
-			{
-				int lastIdx = m_FrozenSlots.Count - 1;
-				var stolen = m_FrozenSlots[lastIdx];
-				m_FrozenSlots.RemoveAt(lastIdx);
-				stolen.CellId = cellId;
-				counter.Slots.Add(stolen);
-				return stolen.PooledObject;
-			}
-
-			// 3. 创建新对象
+			// 2. 创建新对象。槽位不能跨计数器流转，避免破坏碰撞单元格的稳定关系。
 			if (m_CreatedCount < POOL_SIZE)
 			{
 				var obj = m_Factory();
@@ -115,7 +101,7 @@ namespace XericUI.XTable.Rendering.Elements
 		}
 
 		/// <summary>
-		/// 释放指定 cellId 占用的槽位，将其移入 FrozenSlots 供其他计数器复用。
+		/// 释放指定 cellId 占用的槽位，并保留在原计数器中供相同碰撞组复用。
 		/// </summary>
 		public void Release(int cellId)
 		{
@@ -129,10 +115,7 @@ namespace XericUI.XTable.Rendering.Elements
 			{
 				if (counter.Slots[i].CellId == cellId)
 				{
-					var slot = counter.Slots[i];
-					counter.Slots.RemoveAt(i);
-					slot.CellId = -1;
-					m_FrozenSlots.Add(slot);
+					counter.Slots[i].CellId = -1;
 					return;
 				}
 			}
@@ -156,10 +139,7 @@ namespace XericUI.XTable.Rendering.Elements
 				{
 					if (ReferenceEquals(counter.Slots[i].PooledObject, pooledObject))
 					{
-						var slot = counter.Slots[i];
-						counter.Slots.RemoveAt(i);
-						slot.CellId = -1;
-						m_FrozenSlots.Add(slot);
+						counter.Slots[i].CellId = -1;
 						return true;
 					}
 				}
@@ -167,26 +147,20 @@ namespace XericUI.XTable.Rendering.Elements
 			return false;
 		}
 
-		/// <summary>将所有活跃槽位移入 FrozenSlots</summary>
+		/// <summary>释放所有活跃槽位，但保留其所属计数器。</summary>
 		public void ReturnAll()
 		{
 			for (int ci = 0; ci < POOL_SIZE; ci++)
 			{
 				var counter = m_Counters[ci];
 				if (counter == null) continue;
-
-				for (int i = counter.Slots.Count - 1; i >= 0; i--)
-				{
-					var slot = counter.Slots[i];
-					counter.Slots.RemoveAt(i);
-					slot.CellId = -1;
-					m_FrozenSlots.Add(slot);
-				}
+				for (int i = 0; i < counter.Slots.Count; i++)
+					counter.Slots[i].CellId = -1;
 			}
 		}
 
 		/// <summary>
-		/// 彻底销毁所有池对象（包括计数器内活跃槽位和 FrozenSlots 中的冻结槽位）。
+		/// 彻底销毁所有池对象。
 		/// </summary>
 		public void DestroyAll(Action<T> destroyFunc)
 		{
@@ -201,10 +175,6 @@ namespace XericUI.XTable.Rendering.Elements
 					destroyFunc(slot.PooledObject);
 				counter.Slots.Clear();
 			}
-
-			foreach (var slot in m_FrozenSlots)
-				destroyFunc(slot.PooledObject);
-			m_FrozenSlots.Clear();
 
 			m_CreatedCount = 0;
 		}

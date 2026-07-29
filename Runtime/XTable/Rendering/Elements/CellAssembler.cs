@@ -96,11 +96,14 @@ namespace XericUI.XTable.Rendering.Elements
 		#region 池操作
 
 		/// <summary>为指定 cellId 获取一个池化 Image</summary>
-		public PooledImage GetImage(int cellId, string name = "cell_img", string styleNamespace = null)
+		public PooledImage GetImage(int cellId, string name = "cell_img", string styleNamespace = null,
+			Transform parent = null)
 		{
 			var item = m_ImagePool.Acquire(cellId);
 			if (item == null) return null;
 
+			if (parent != null && item.Root.transform.parent != parent)
+				item.Root.transform.SetParent(parent, false);
 			item.CellId = cellId;
 			item.Root.name = name;
 			ResetImageDefaults(item);
@@ -109,11 +112,14 @@ namespace XericUI.XTable.Rendering.Elements
 		}
 
 		/// <summary>为指定 cellId 获取一个池化 TMP_Text</summary>
-		public PooledText GetText(int cellId, string name = "cell_text", string styleNamespace = null)
+		public PooledText GetText(int cellId, string name = "cell_text", string styleNamespace = null,
+			Transform parent = null)
 		{
 			var item = m_TextPool.Acquire(cellId);
 			if (item == null) return null;
 
+			if (parent != null && item.Root.transform.parent != parent)
+				item.Root.transform.SetParent(parent, false);
 			item.CellId = cellId;
 			item.Root.name = name;
 			ResetTextDefaults(item);
@@ -155,7 +161,7 @@ namespace XericUI.XTable.Rendering.Elements
 		{
 			if (item == null) return;
 			item.Style?.Unbind();
-			m_ImagePool.Release(item.CellId);
+			m_ImagePool.ReleaseByObject(item);
 		}
 
 		/// <summary>归还单个 Text 池对象（通过 CellId 定位槽位并移入 FrozenSlots）</summary>
@@ -163,7 +169,7 @@ namespace XericUI.XTable.Rendering.Elements
 		{
 			if (item == null) return;
 			item.Style?.Unbind();
-			m_TextPool.Release(item.CellId);
+			m_TextPool.ReleaseByObject(item);
 		}
 
 		#endregion

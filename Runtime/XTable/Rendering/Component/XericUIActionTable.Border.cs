@@ -77,16 +77,27 @@ namespace XericUI.XTable.Rendering.Component
 
             int rows = m_RowHeights.Length;
             int cols = m_ColWidths.Length;
-            for (int boundary = 0; boundary <= rows; boundary++)
-                SubmitHorizontalBoundary(renderer, boundary, cols);
-            for (int boundary = 0; boundary <= cols; boundary++)
-                SubmitVerticalBoundary(renderer, boundary, rows);
+            int freezeRows = Mathf.Clamp(m_FreezeRowCount, 0, rows);
+            int freezeCols = Mathf.Clamp(m_FreezeColCount, 0, cols);
+            SubmitBorders(renderer, freezeRows, rows, freezeCols, cols);
+            RebuildFrozenBorders(freezeRows, freezeCols, rows, cols);
         }
 
-        private void SubmitHorizontalBoundary(UILineRendererV2 renderer, int boundary, int cols)
+        private void SubmitBorders(UILineRendererV2 renderer, int rowStart, int rowEnd, int colStart, int colEnd)
         {
-            int start = 0;
-            while (start < cols)
+            if (renderer == null || rowStart >= rowEnd || colStart >= colEnd) return;
+            renderer.ClearAll();
+            renderer.rectTransform.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+            for (int boundary = rowStart; boundary <= rowEnd; boundary++)
+                SubmitHorizontalBoundary(renderer, boundary, colStart, colEnd);
+            for (int boundary = colStart; boundary <= colEnd; boundary++)
+                SubmitVerticalBoundary(renderer, boundary, rowStart, rowEnd);
+        }
+
+        private void SubmitHorizontalBoundary(UILineRendererV2 renderer, int boundary, int colStart, int colEnd)
+        {
+            int start = colStart;
+            while (start < colEnd)
             {
                 if (IsMergedInteriorBoundary(XTableBorderAxis.Horizontal, boundary, start))
                 {
@@ -95,7 +106,7 @@ namespace XericUI.XTable.Rendering.Component
                 }
                 string ns = ResolveBorderNamespace(XTableBorderAxis.Horizontal, boundary, start);
                 int end = start + 1;
-                while (end < cols && !IsMergedInteriorBoundary(XTableBorderAxis.Horizontal, boundary, end)
+                while (end < colEnd && !IsMergedInteriorBoundary(XTableBorderAxis.Horizontal, boundary, end)
                     && ResolveBorderNamespace(XTableBorderAxis.Horizontal, boundary, end) == ns)
                     end++;
 
@@ -106,10 +117,10 @@ namespace XericUI.XTable.Rendering.Component
             }
         }
 
-        private void SubmitVerticalBoundary(UILineRendererV2 renderer, int boundary, int rows)
+        private void SubmitVerticalBoundary(UILineRendererV2 renderer, int boundary, int rowStart, int rowEnd)
         {
-            int start = 0;
-            while (start < rows)
+            int start = rowStart;
+            while (start < rowEnd)
             {
                 if (IsMergedInteriorBoundary(XTableBorderAxis.Vertical, boundary, start))
                 {
@@ -118,7 +129,7 @@ namespace XericUI.XTable.Rendering.Component
                 }
                 string ns = ResolveBorderNamespace(XTableBorderAxis.Vertical, boundary, start);
                 int end = start + 1;
-                while (end < rows && !IsMergedInteriorBoundary(XTableBorderAxis.Vertical, boundary, end)
+                while (end < rowEnd && !IsMergedInteriorBoundary(XTableBorderAxis.Vertical, boundary, end)
                     && ResolveBorderNamespace(XTableBorderAxis.Vertical, boundary, end) == ns)
                     end++;
 
@@ -127,6 +138,55 @@ namespace XericUI.XTable.Rendering.Component
                     GetCellBorderColor(ns), GetCellBorderWidth(ns), UVMode.ByDistance);
                 start = end;
             }
+        }
+
+        private void RebuildFrozenBorders(int freezeRows, int freezeCols, int rows, int cols)
+        {
+            if (freezeRows == 0 && freezeCols == 0)
+            {
+                DestroyFrozenBorderRenderers();
+                return;
+            }
+            if (freezeCols > 0 && freezeRows < rows)
+                SubmitBorders(GetOrCreateFrozenBorderRenderer(m_FrozenColumnsContainer, ref m_FrozenColumnBorderRenderer, "_FrozenColumnBorders"),
+                    freezeRows, rows, 0, freezeCols);
+            if (freezeRows > 0 && freezeCols < cols)
+                SubmitBorders(GetOrCreateFrozenBorderRenderer(m_FrozenRowsContainer, ref m_FrozenRowBorderRenderer, "_FrozenRowBorders"),
+                    0, freezeRows, freezeCols, cols);
+            if (freezeRows > 0 && freezeCols > 0)
+                SubmitBorders(GetOrCreateFrozenBorderRenderer(m_FrozenCornerContainer, ref m_FrozenCornerBorderRenderer, "_FrozenCornerBorders"),
+                    0, freezeRows, 0, freezeCols);
+        }
+
+        private static UILineRendererV2 GetOrCreateFrozenBorderRenderer(Transform parent,
+            ref UILineRendererV2 renderer, string name)
+        {
+            if (renderer != null) return renderer;
+            if (parent == null) return null;
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(UILineRendererV2));
+            go.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0, 1);
+            rt.anchorMax = new Vector2(0, 1);
+            rt.pivot = new Vector2(0, 1);
+            renderer = go.GetComponent<UILineRendererV2>();
+            return renderer;
+        }
+
+        private void DestroyFrozenBorderRenderers()
+        {
+            DestroyFrozenBorderRenderer(ref m_FrozenColumnBorderRenderer);
+            DestroyFrozenBorderRenderer(ref m_FrozenRowBorderRenderer);
+            DestroyFrozenBorderRenderer(ref m_FrozenCornerBorderRenderer);
+        }
+
+        private static void DestroyFrozenBorderRenderer(ref UILineRendererV2 renderer)
+        {
+            if (renderer == null) return;
+            if (Application.isPlaying) Destroy(renderer.gameObject);
+            else DestroyImmediate(renderer.gameObject);
+            renderer = null;
         }
 
         private string ResolveBorderNamespace(XTableBorderAxis axis, int fixedIndex, int index)

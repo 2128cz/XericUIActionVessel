@@ -78,6 +78,7 @@ namespace XericUI.XTable.Rendering.Component
                     foreach (var cell in q.Cells)
                     {
                         if (!TableData.IsCellMerged(cell.Item1, cell.Item2)
+                            && IsNormalRegionCell(cell.Item1, cell.Item2)
                             && IsCellVisible(cell.Item1, cell.Item2))
                             result.Add(cell);
                     }
@@ -89,7 +90,7 @@ namespace XericUI.XTable.Rendering.Component
                 for (int r = sr; r < er; r++)
                 for (int c = sc; c < ec; c++)
                 {
-                    if (!TableData.IsCellMerged(r, c) && IsCellVisible(r, c))
+                    if (!TableData.IsCellMerged(r, c) && IsNormalRegionCell(r, c) && IsCellVisible(r, c))
                         result.Add((r, c));
                 }
             }
@@ -103,7 +104,7 @@ namespace XericUI.XTable.Rendering.Component
             for (int r = sr; r < er; r++)
             for (int c = sc; c < ec; c++)
             {
-                if (!TableData.IsCellMerged(r, c) && IsCellVisible(r, c))
+                if (!TableData.IsCellMerged(r, c) && IsNormalRegionCell(r, c) && IsCellVisible(r, c))
                     result.Add((r, c));
             }
         }
@@ -312,6 +313,7 @@ namespace XericUI.XTable.Rendering.Component
             }
             m_PrefabPool?.ReturnAll();
             ReleaseAllTrackedCells();
+            ReleaseFrozenCells();
 
             // 清理孤立子对象
             CleanOrphanChildren();
@@ -327,9 +329,9 @@ namespace XericUI.XTable.Rendering.Component
             foreach (var (r, c) in m_LastRenderedCells)
                 RenderCellContent(r, c, ns, editorMode);
 
-            // 边框 + 冻结
+            // 主 Content 已先渲染，冻结区随后复用其释放的对象；边框按区域最后提交。
+            RenderFrozenCells(true);
             RebuildBorders();
-            RenderFrozenCells();
 
             m_DirtyFlag.Clear();
             OnTableRefreshed?.Invoke();
@@ -409,6 +411,9 @@ namespace XericUI.XTable.Rendering.Component
                 if (selectionChanged || !m_LastRenderedCells.Contains(cell))
                     RenderCellContent(cell.Item1, cell.Item2, ns, editorMode);
             }
+
+            // 冻结列、冻结行与左上角在 Content 后更新，并复用同一全局对象池。
+            RenderFrozenCells(false);
 
             // 5. 交换：将 newVisible 作为下一帧的比较基准
             (m_LastRenderedCells, newVisible) = (newVisible, m_LastRenderedCells);
