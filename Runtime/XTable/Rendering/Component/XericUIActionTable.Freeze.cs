@@ -177,8 +177,9 @@ namespace XericUI.XTable.Rendering.Component
                 go.transform.SetParent(parent, false);
                 overlay = go.GetComponent<XTableSelectionOverlay>();
             }
-            overlay.transform.SetAsLastSibling();
+            // Overlay 必须处于当前区域最上层，才能先于边框和其他 Graphic 接收 PointerDown/Drag。
             overlay.Configure(this, rowStart, rowEnd, colStart, colEnd);
+            overlay.transform.SetAsLastSibling();
             return overlay;
         }
 

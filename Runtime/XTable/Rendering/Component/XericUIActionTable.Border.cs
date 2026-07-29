@@ -24,7 +24,10 @@ namespace XericUI.XTable.Rendering.Component
         private UILineRendererV2 GetOrCreateBorderRenderer()
         {
             if (m_BorderRenderer != null)
+            {
+                m_BorderRenderer.raycastTarget = false;
                 return m_BorderRenderer;
+            }
 
             Transform contentT = ContentTransform;
             // 查找已有对象
@@ -49,6 +52,7 @@ namespace XericUI.XTable.Rendering.Component
             rt.sizeDelta = new Vector2(m_TotalWidth + pad, m_TotalHeight + pad);
 
             m_BorderRenderer = go.GetComponent<UILineRendererV2>();
+            m_BorderRenderer.raycastTarget = false;
             return m_BorderRenderer;
         }
 
@@ -161,7 +165,11 @@ namespace XericUI.XTable.Rendering.Component
         private static UILineRendererV2 GetOrCreateFrozenBorderRenderer(Transform parent,
             ref UILineRendererV2 renderer, string name)
         {
-            if (renderer != null) return renderer;
+            if (renderer != null)
+            {
+                renderer.raycastTarget = false;
+                return renderer;
+            }
             if (parent == null) return null;
             var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(UILineRendererV2));
             go.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
@@ -171,6 +179,7 @@ namespace XericUI.XTable.Rendering.Component
             rt.anchorMax = new Vector2(0, 1);
             rt.pivot = new Vector2(0, 1);
             renderer = go.GetComponent<UILineRendererV2>();
+            renderer.raycastTarget = false;
             return renderer;
         }
 

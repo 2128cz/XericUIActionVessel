@@ -1,7 +1,7 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using UnityEngine.Networking;
 using XericLibrary.Runtime.MacroLibrary;
 
 namespace XericUI.XTable.Rendering.Component
@@ -21,20 +21,14 @@ namespace XericUI.XTable.Rendering.Component
         #region debug-point selection-overlay-config
         private void DebugReport(string point, string details)
         {
-            if (!Application.isPlaying) return;
-            string body = $"{{\"sessionId\":\"selection-playmode-input\",\"point\":\"{point}\",\"details\":\"{details}\"}}";
-            var request = new UnityWebRequest("http://127.0.0.1:7777/event", "POST");
-            request.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(body));
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-            request.SendWebRequest();
+            if (Application.isPlaying)
+                Debug.Log($"[XTableSelection] {point} object={name}; {details}", this);
         }
         #endregion
 
         public void Configure(XericUIActionTable table, int rowStart, int rowEnd, int colStart, int colEnd)
         {
             m_Table = table;
-            DebugReport("overlay-config", $"region={rowStart},{rowEnd},{colStart},{colEnd};active={gameObject.activeInHierarchy}");
             m_RowStart = rowStart;
             m_RowEnd = rowEnd;
             m_ColStart = colStart;
@@ -48,6 +42,7 @@ namespace XericUI.XTable.Rendering.Component
             rt.sizeDelta = region.size;
             EnsureVisuals();
             RefreshVisual();
+            DebugReport("overlay-config", $"region={m_RowStart},{m_RowEnd},{m_ColStart},{m_ColEnd};rect={rt.rect};position={rt.anchoredPosition};parent={transform.parent?.name};sibling={transform.GetSiblingIndex()}");
         }
 
         public void RefreshVisual()
@@ -83,8 +78,8 @@ namespace XericUI.XTable.Rendering.Component
         {
             int row = -1;
             int col = -1;
-            bool hit = m_Table != null && m_Table.TryGetCellFromScreenPoint(transform.RectTransform(), eventData.position, eventData.pressEventCamera, true, out row, out col);
-            DebugReport("pointer-down", $"hit={hit};position={eventData.position};rect={transform.RectTransform().rect}");
+            bool hit = TryGetCellFromOverlayPoint(eventData.position, eventData.pressEventCamera, out row, out col);
+            DebugReport("pointer-down", $"hit={hit};row={row};col={col};position={eventData.position};rect={transform.RectTransform().rect};dragHandler={eventData.pointerDrag?.name};pressHandler={eventData.pointerPress?.name}");
             if (!hit)
                 return;
             m_Dragging = true;
@@ -94,8 +89,15 @@ namespace XericUI.XTable.Rendering.Component
 
         public void OnDrag(PointerEventData eventData)
         {
-            if (!m_Dragging || m_Table == null) return;
-            m_Table.UpdateSelectionDrag(transform.RectTransform(), eventData.position, eventData.pressEventCamera);
+            if (!m_Dragging || m_Table == null)
+            {
+                DebugReport("drag-ignored", $"dragging={m_Dragging};table={m_Table != null};dragHandler={eventData.pointerDrag?.name}");
+                return;
+            }
+            bool hit = TryGetCellFromOverlayPoint(eventData.position, eventData.pressEventCamera, out int row, out int col);
+            DebugReport("drag", $"hit={hit};row={row};col={col};position={eventData.position};dragHandler={eventData.pointerDrag?.name}");
+            if (hit)
+                m_Table.UpdateSelectionDragToCell(row, col);
             eventData.Use();
         }
 
@@ -108,6 +110,18 @@ namespace XericUI.XTable.Rendering.Component
         public void OnEndDrag(PointerEventData eventData) => EndDrag();
         #endregion
 
+        private void Update()
+        {
+            if (!Application.isPlaying || !Input.GetMouseButtonDown(0) || EventSystem.current == null) return;
+            var data = new PointerEventData(EventSystem.current) { position = Input.mousePosition };
+            var results = new List<RaycastResult>();
+            EventSystem.current.RaycastAll(data, results);
+            string hits = string.Empty;
+            for (int i = 0; i < results.Count && i < 5; i++)
+                hits += $"{i}:{results[i].gameObject.name}/{results[i].module.GetType().Name} ";
+            DebugReport("raycast", $"mouse={Input.mousePosition};hits={hits}");
+        }
+
         private void OnDisable() => EndDrag();
         private void OnDestroy() => EndDrag();
 
@@ -116,6 +130,15 @@ namespace XericUI.XTable.Rendering.Component
             if (!m_Dragging) return;
             m_Dragging = false;
             m_Table?.EndSelection();
+        }
+
+        private bool TryGetCellFromOverlayPoint(Vector2 screenPoint, Camera eventCamera, out int row, out int col)
+        {
+            row = col = -1;
+            if (m_Table == null || !RectTransformUtility.ScreenPointToLocalPointInRectangle(transform.RectTransform(), screenPoint, eventCamera, out Vector2 local))
+                return false;
+            Rect region = m_Table.GetTableRect(m_RowStart, m_RowEnd, m_ColStart, m_ColEnd);
+            return m_Table.TryGetCellFromTablePoint(new Vector2(region.x + local.x, region.y - local.y), true, out row, out col);
         }
 
         private void EnsureVisuals()

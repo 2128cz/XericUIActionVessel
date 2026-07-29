@@ -21,7 +21,13 @@ namespace XericUI.XTable.Rendering.Component
             m_LastSelectionPointer = screenPoint;
             m_SelectionPointerCamera = eventCamera;
             if (TryGetCellFromScreenPoint(source, screenPoint, eventCamera, true, out int row, out int col))
-                SetNormalizedSelection(SelectionHandle.StartRow, SelectionHandle.StartCol, row, col);
+                UpdateSelectionDragToCell(row, col);
+        }
+
+        internal void UpdateSelectionDragToCell(int row, int col)
+        {
+            if (!m_SelectionDragActive) return;
+            SetNormalizedSelection(SelectionHandle.StartRow, SelectionHandle.StartCol, row, col);
         }
 
         internal void NormalizeAndSelect(int startRow, int startCol, int endRow, int endCol) =>
