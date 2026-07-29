@@ -416,6 +416,7 @@ namespace XericUI.XTable.Rendering.Component
         private void OnHandleSelectionChanged(XTableSelectionHandle handle)
         {
             MarkDirty(TableDirtyType.SelectionChanged);
+            RefreshSelectionOverlays();
         }
 
         /// <summary>裁剪选区到当前行列尺寸范围内</summary>

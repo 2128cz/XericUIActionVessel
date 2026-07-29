@@ -29,7 +29,6 @@ namespace XericUI.XTable.Rendering.Component
         {
             public CellAssembler.PooledText CellText;
             public CellAssembler.PooledImage CellImage;
-            public CellAssembler.PooledImage SelectBg;
         }
 
         #endregion
@@ -42,7 +41,6 @@ namespace XericUI.XTable.Rendering.Component
             if (!m_CellTracked.TryGetValue(key, out var objs)) return;
             m_Assembler?.ReleaseText(objs.CellText);
             m_Assembler?.ReleaseImage(objs.CellImage);
-            m_Assembler?.ReleaseImage(objs.SelectBg);
             m_CellTracked.Remove(key);
         }
 
@@ -53,7 +51,6 @@ namespace XericUI.XTable.Rendering.Component
                 var objs = kv.Value;
                 m_Assembler?.ReleaseText(objs.CellText);
                 m_Assembler?.ReleaseImage(objs.CellImage);
-                m_Assembler?.ReleaseImage(objs.SelectBg);
             }
             m_CellTracked.Clear();
             m_LastRenderedCells.Clear();
@@ -150,9 +147,6 @@ namespace XericUI.XTable.Rendering.Component
             int cellId = row * m_ColWidths.Length + col;
             var objs = new CellTrackedObjs();
 
-            // ── 选择高亮 ──
-            ApplySelectionHighlight(cellId, row, col, cellX, cellY, cellW, cellH, cellNS, editorMode, ref objs);
-
             // ── 单元格内容 ──
             if (data != null)
             {
@@ -172,44 +166,6 @@ namespace XericUI.XTable.Rendering.Component
 
             m_CellTracked[(row, col)] = objs;
             m_LastRenderedCells.Add((row, col));
-        }
-
-        private void ApplySelectionHighlight(int cellId, int row, int col,
-            float cellX, float cellY, float cellW, float cellH,
-            string cellNS, bool editorMode, ref CellTrackedObjs objs)
-        {
-            bool inRange = IsInSelectionRange(row, col);
-            bool isFocused = row == SelectionHandle.StartRow && col == SelectionHandle.StartCol;
-
-            if (!inRange && !isFocused) return;
-
-            string key = inRange ? "cell_multiselect" : "cell_select";
-            var img = m_Assembler.GetImage(cellId, key, cellNS);
-            if (img == null) return;
-            img.Rect.anchoredPosition = new Vector2(cellX, cellY);
-            img.Rect.sizeDelta = new Vector2(cellW, cellH);
-
-            if (editorMode)
-            {
-                Color selColor = GetCellSelectionBgColor(cellNS);
-                if (inRange)
-                    img.Image.color = isFocused
-                        ? new Color(selColor.r + Config.FocusRAdd, selColor.g + Config.FocusGAdd,
-                            selColor.b + Config.FocusBAdd, selColor.a * Config.FocusAlphaMul)
-                        : new Color(selColor.r, selColor.g, selColor.b,
-                            selColor.a * Config.MultiSelectAlphaFactor);
-                else
-                    img.Image.color = selColor;
-            }
-            else
-            {
-                if (inRange)
-                    img.Image.color = isFocused ? Config.RuntimeFocusColor : Config.RuntimeMultiSelectColor;
-                else
-                    img.Image.color = Config.RuntimeSelectionColor;
-            }
-
-            objs.SelectBg = img;
         }
 
         private void RenderCellText(int cellId, XTableCellData data,
@@ -368,27 +324,19 @@ namespace XericUI.XTable.Rendering.Component
 #endif
             string ns = m_DefaultStyleNamespace;
 
-            // 选区变更时：所有单元格的选择高亮需要重绘，但预制体不受影响
-            bool selectionChanged = m_DirtyFlag.Has(TableDirtyType.SelectionChanged);
-            if (selectionChanged)
-            {
-                ReleaseAllTrackedCells();
-            }
+            // 选区由固定 Overlay 绘制，选择变化无需回收或重绘单元格内容。
 
             // 1. 计算新一帧的可见单元格（滚动路径用简单范围遍历，避免四叉树/分配开销）
             var newVisible = new HashSet<(int, int)>();
             ComputeVisibleCellsScrollInto(newVisible);
 
             // 2. 回收不再可见的追踪对象
-            if (!selectionChanged)
-            {
-                m_ReusableCellList.Clear();
-                foreach (var cell in m_LastRenderedCells)
-                    if (!newVisible.Contains(cell))
-                        m_ReusableCellList.Add(cell);
-                foreach (var cell in m_ReusableCellList)
-                    ReleaseTrackedCell(cell.Item1, cell.Item2);
-            }
+            m_ReusableCellList.Clear();
+            foreach (var cell in m_LastRenderedCells)
+                if (!newVisible.Contains(cell))
+                    m_ReusableCellList.Add(cell);
+            foreach (var cell in m_ReusableCellList)
+                ReleaseTrackedCell(cell.Item1, cell.Item2);
 
             // 3. 回收不再可见的预制体（仅从映射表移除，预制体保留在计数器槽位中复用）
             if (m_ActivePrefabMap != null && m_ActivePrefabMap.Count > 0)
@@ -408,7 +356,7 @@ namespace XericUI.XTable.Rendering.Component
             // 4. 渲染单元格：选区变更时全量重渲所有可见单元格，否则仅新进入的
             foreach (var cell in newVisible)
             {
-                if (selectionChanged || !m_LastRenderedCells.Contains(cell))
+                if (!m_LastRenderedCells.Contains(cell))
                     RenderCellContent(cell.Item1, cell.Item2, ns, editorMode);
             }
 

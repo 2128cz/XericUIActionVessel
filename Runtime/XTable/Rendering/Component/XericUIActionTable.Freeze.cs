@@ -63,9 +63,6 @@ namespace XericUI.XTable.Rendering.Component
                 GetColWidths = () => m_ColWidths,
                 GetTableData = () => m_TableData,
                 GetDefaultStyleNamespace = () => m_DefaultStyleNamespace,
-                IsInSelectionRange = (r, c) => IsInSelectionRange(r, c),
-                GetSelectedRow = () => SelectionHandle.StartRow,
-                GetSelectedCol = () => SelectionHandle.StartCol,
             };
             return renderer;
         }
@@ -79,9 +76,20 @@ namespace XericUI.XTable.Rendering.Component
             m_FrozenColumnRenderer = null;
             m_FrozenRowRenderer = null;
             m_FrozenCornerRenderer = null;
+            DestroySelectionOverlay(ref m_FrozenColumnSelectionOverlay);
+            DestroySelectionOverlay(ref m_FrozenRowSelectionOverlay);
+            DestroySelectionOverlay(ref m_FrozenCornerSelectionOverlay);
             DestroyFrozenContainer(ref m_FrozenColumnsContainer);
             DestroyFrozenContainer(ref m_FrozenRowsContainer);
             DestroyFrozenContainer(ref m_FrozenCornerContainer);
+        }
+
+        private static void DestroySelectionOverlay(ref XTableSelectionOverlay overlay)
+        {
+            if (overlay == null) return;
+            if (Application.isPlaying) Object.Destroy(overlay.gameObject);
+            else Object.DestroyImmediate(overlay.gameObject);
+            overlay = null;
         }
 
         private static void DestroyFrozenContainer(ref RectTransform container)
@@ -108,11 +116,14 @@ namespace XericUI.XTable.Rendering.Component
             if (freezeRows == 0 && freezeCols == 0)
             {
                 DestroyFrozenRenderers();
+                if (m_RowHeights != null && m_ColWidths != null)
+                    CreateOrUpdateSelectionOverlays(0, 0);
                 return;
             }
 
             if (m_FrozenColumnRenderer == null) CreateViewportRenderer();
             if (m_FrozenColumnRenderer == null) return;
+            CreateOrUpdateSelectionOverlays(freezeRows, freezeCols);
             CreateFrozenBackgrounds(freezeRows, freezeCols);
             SyncFrozenContainers();
             CalcVisibleRange(out int visibleStartRow, out int visibleEndRow, out int visibleStartCol, out int visibleEndCol);
@@ -143,6 +154,40 @@ namespace XericUI.XTable.Rendering.Component
                     m_DefaultStyleNamespace, new Vector2(freezeWidth, 0f));
             if (freezeRows > 0 && freezeCols > 0)
                 m_FrozenCornerRenderer.CreateBackground(freezeWidth, freezeHeight, m_DefaultStyleNamespace);
+        }
+
+        private void CreateOrUpdateSelectionOverlays(int freezeRows, int freezeCols)
+        {
+            int rows = m_RowHeights.Length;
+            int cols = m_ColWidths.Length;
+            m_NormalSelectionOverlay = CreateOrUpdateSelectionOverlay(ContentTransform, m_NormalSelectionOverlay, freezeRows, rows, freezeCols, cols, "_NormalSelectionOverlay");
+            m_FrozenColumnSelectionOverlay = CreateOrUpdateSelectionOverlay(m_FrozenColumnsContainer, m_FrozenColumnSelectionOverlay, freezeRows, rows, 0, freezeCols, "_FrozenColumnSelectionOverlay");
+            m_FrozenRowSelectionOverlay = CreateOrUpdateSelectionOverlay(m_FrozenRowsContainer, m_FrozenRowSelectionOverlay, 0, freezeRows, freezeCols, cols, "_FrozenRowSelectionOverlay");
+            m_FrozenCornerSelectionOverlay = CreateOrUpdateSelectionOverlay(m_FrozenCornerContainer, m_FrozenCornerSelectionOverlay, 0, freezeRows, 0, freezeCols, "_FrozenCornerSelectionOverlay");
+        }
+
+        private XTableSelectionOverlay CreateOrUpdateSelectionOverlay(Transform parent, XTableSelectionOverlay overlay,
+            int rowStart, int rowEnd, int colStart, int colEnd, string name)
+        {
+            if (parent == null) return overlay;
+            if (overlay == null)
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image), typeof(XTableSelectionOverlay));
+                go.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
+                go.transform.SetParent(parent, false);
+                overlay = go.GetComponent<XTableSelectionOverlay>();
+            }
+            overlay.transform.SetAsLastSibling();
+            overlay.Configure(this, rowStart, rowEnd, colStart, colEnd);
+            return overlay;
+        }
+
+        private void RefreshSelectionOverlays()
+        {
+            m_NormalSelectionOverlay?.RefreshVisual();
+            m_FrozenColumnSelectionOverlay?.RefreshVisual();
+            m_FrozenRowSelectionOverlay?.RefreshVisual();
+            m_FrozenCornerSelectionOverlay?.RefreshVisual();
         }
 
         private void SyncFrozenContainers()

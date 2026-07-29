@@ -23,7 +23,7 @@ namespace XericUI.XTable.Rendering.Component
     /// </summary>
     [ExecuteAlways]
     [AddComponentMenu("Xeric UI Vessel/Table/Xeric UI Action Table", 60)]
-    public partial class XericUIActionTable : XericUIBehaviour, IPointerClickHandler
+    public partial class XericUIActionTable : XericUIBehaviour
     {
         #region 序列化字段
 
@@ -53,6 +53,14 @@ namespace XericUI.XTable.Rendering.Component
         [Tooltip("在 Hierarchy 中显示动态生成的子对象（仅编辑器，不保存到场景）")]
         private bool m_ChildrenVisible;
 
+        [SerializeField] private bool m_EnableSelectionAutoScroll = true;
+        [SerializeField, Min(1f), Tooltip("框选自动滚动的 Content 边缘阈值（像素）")]
+        private float m_SelectionAutoScrollEdgeThreshold = 32f;
+        [SerializeField, Min(1f), Tooltip("框选自动滚动的最大速度（像素/秒）")]
+        private float m_SelectionAutoScrollMaxSpeed = 600f;
+        [SerializeField, Min(1f), Tooltip("框选自动滚动的边缘加速度指数")]
+        private float m_SelectionAutoScrollAcceleration = 1.5f;
+
         #endregion
 
         #region 私有字段
@@ -69,6 +77,13 @@ namespace XericUI.XTable.Rendering.Component
         [System.NonSerialized] private RectTransform m_FrozenCornerContainer;
 
         [System.NonSerialized] private XTableSelectionHandle m_SelectionHandle;
+        [System.NonSerialized] private XTableSelectionOverlay m_NormalSelectionOverlay;
+        [System.NonSerialized] private XTableSelectionOverlay m_FrozenColumnSelectionOverlay;
+        [System.NonSerialized] private XTableSelectionOverlay m_FrozenRowSelectionOverlay;
+        [System.NonSerialized] private XTableSelectionOverlay m_FrozenCornerSelectionOverlay;
+        [System.NonSerialized] private bool m_SelectionDragActive;
+        [System.NonSerialized] private Vector2 m_LastSelectionPointer;
+        [System.NonSerialized] private Camera m_SelectionPointerCamera;
 
         [System.NonSerialized] private XTableBackgroundRenderer m_BackgroundRenderer;
 
@@ -146,7 +161,10 @@ namespace XericUI.XTable.Rendering.Component
             get
             {
                 if (m_SelectionHandle == null)
+                {
                     m_SelectionHandle = new XTableSelectionHandle();
+                    m_SelectionHandle.OnSelectionChanged += OnHandleSelectionChanged;
+                }
                 return m_SelectionHandle;
             }
         }
@@ -318,6 +336,7 @@ namespace XericUI.XTable.Rendering.Component
             DestroyBackgroundRenderer();
 
             DestroyFrozenRenderers();
+            DestroySelectionOverlay(ref m_NormalSelectionOverlay);
 
             base.OnDestroy();
         }
@@ -327,6 +346,7 @@ namespace XericUI.XTable.Rendering.Component
 
         private void Update()
         {
+            UpdateSelectionAutoScroll();
             if (m_IsRebuilding || !m_DirtyFlag.IsDirty) return;
 
             var flags = m_DirtyFlag.Flags;
@@ -400,54 +420,5 @@ namespace XericUI.XTable.Rendering.Component
 
         #endregion
 
-        #region IPointerClickHandler
-
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            // 直接用 ContentTransform 做坐标转换：单元格是 Content 的子对象，
-            // 其 anchoredPosition 就在 Content 局部空间中，无需手工换算 scroll 偏移。
-            RectTransform contentRt = ContentTransform as RectTransform;
-            if (contentRt == null) return;
-
-            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                contentRt, eventData.position, eventData.pressEventCamera, out Vector2 localPoint))
-                return;
-
-            // 转换为左上角坐标系（Content 的 anchor/pivot 都是 (0,1)）
-            float tableX = localPoint.x - contentRt.rect.xMin - m_ContentOffset;
-            float tableY = contentRt.rect.yMax - localPoint.y - m_ContentOffset;
-
-            int col = -1;
-            float ax = 0;
-            for (int c = 0; c < m_ColWidths.Length; c++)
-            {
-                if (tableX >= ax && tableX < ax + m_ColWidths[c])
-                {
-                    col = c;
-                    break;
-                }
-                ax += m_ColWidths[c];
-            }
-
-            int row = -1;
-            float ay = 0;
-            for (int r = 0; r < m_RowHeights.Length; r++)
-            {
-                if (tableY >= ay && tableY < ay + m_RowHeights[r])
-                {
-                    row = r;
-                    break;
-                }
-                ay += m_RowHeights[r];
-            }
-
-            if (row >= 0 && col >= 0)
-            {
-                SelectCell(row, col);
-                OnCellSelected?.Invoke(row, col);
-            }
-        }
-
-        #endregion
     }
 }

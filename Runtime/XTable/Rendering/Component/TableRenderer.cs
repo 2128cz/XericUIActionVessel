@@ -14,7 +14,6 @@ namespace XericUI.XTable.Rendering.Component
         {
             public CellAssembler.PooledText Text;
             public CellAssembler.PooledImage Image;
-            public CellAssembler.PooledImage Selection;
         }
 
         private readonly Transform m_Parent;
@@ -41,9 +40,6 @@ namespace XericUI.XTable.Rendering.Component
         public System.Func<float[]> GetColWidths;
         public System.Func<XTableData> GetTableData;
         public System.Func<string> GetDefaultStyleNamespace;
-        public System.Func<int, int, bool> IsInSelectionRange;
-        public System.Func<int> GetSelectedRow;
-        public System.Func<int> GetSelectedCol;
 
         public Transform Parent => m_Parent;
         public GameObject BackgroundGo => m_BackgroundGo;
@@ -144,7 +140,6 @@ namespace XericUI.XTable.Rendering.Component
         {
             Assembler.ReleaseText(tracked.Text);
             Assembler.ReleaseImage(tracked.Image);
-            Assembler.ReleaseImage(tracked.Selection);
         }
 
         private void RenderCell(int row, int col, float[] rows, float[] cols, bool editorMode)
@@ -165,22 +160,6 @@ namespace XericUI.XTable.Rendering.Component
 
             int cellId = row * cols.Length + col;
             var tracked = new Tracked();
-            bool selected = IsInSelectionRange?.Invoke(row, col) == true ||
-                (row == GetSelectedRow?.Invoke() && col == GetSelectedCol?.Invoke());
-            if (selected)
-            {
-                var selection = Assembler.GetImage(cellId, "cell_selection", ns, m_Parent);
-                if (selection != null)
-                {
-                    selection.Rect.anchoredPosition = new Vector2(x, y);
-                    selection.Rect.sizeDelta = new Vector2(width, height);
-                    selection.Image.color = editorMode
-                        ? GetStyleColor(ns, XericUIActionTable.STYLE_CELL_SELECTION_BG_COLOR, XericUIActionTable.SELECTION_COLOR_FALLBACK)
-                        : Config.RuntimeSelectionColor;
-                    tracked.Selection = selection;
-                }
-            }
-
             var cell = data?.GetCell(row, col);
             if (cell != null)
             {
