@@ -39,7 +39,7 @@ namespace XericUI.XTable.Rendering.Component
                 return;
             }
 
-            if (m_IsRebuilding || !m_DirtyFlag.IsDirty) return;
+            if (m_IsRebuilding || IsCheckingUpdate || !m_DirtyFlag.IsDirty) return;
 
             var flags = m_DirtyFlag.Flags;
             if ((flags & ~(TableDirtyType.ScrollChanged | TableDirtyType.SelectionChanged)) == 0)

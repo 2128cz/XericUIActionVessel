@@ -194,6 +194,7 @@ namespace XericUI.XTable.Rendering.Component
             System.Array.Copy(m_RowHeights, newArr, m_RowHeights.Length);
             newArr[newLen - 1] = height;
             m_RowHeights = newArr;
+            RecordStructuralChange(false);
             MarkDirty(TableDirtyType.LayoutChanged);
 #if UNITY_EDITOR
             UnityEditor.EditorUtility.SetDirty(this);
@@ -212,6 +213,7 @@ namespace XericUI.XTable.Rendering.Component
             System.Array.Copy(m_ColWidths, newArr, m_ColWidths.Length);
             newArr[newLen - 1] = width;
             m_ColWidths = newArr;
+            RecordStructuralChange(false);
             MarkDirty(TableDirtyType.LayoutChanged);
 #if UNITY_EDITOR
             UnityEditor.EditorUtility.SetDirty(this);
@@ -256,6 +258,8 @@ namespace XericUI.XTable.Rendering.Component
             UnityEditor.Undo.RecordObject(this, "Remove Table Row");
 #endif
             int colCount = m_ColWidths.Length;
+            CaptureActivePrefabReleaseCallbacks();
+            RecordStructuralChange(true);
 
             // 先解除涉及该行的合并
             for (int c = 0; c < colCount; c++)
@@ -303,6 +307,8 @@ namespace XericUI.XTable.Rendering.Component
             UnityEditor.Undo.RecordObject(this, "Remove Table Column");
 #endif
             int rowCount = m_RowHeights.Length;
+            CaptureActivePrefabReleaseCallbacks();
+            RecordStructuralChange(true);
 
             // 先解除涉及该列的合并
             for (int r = 0; r < rowCount; r++)
@@ -410,7 +416,8 @@ namespace XericUI.XTable.Rendering.Component
         private void OnHandleSelectionChanged(XTableSelectionHandle handle)
         {
             MarkDirty(TableDirtyType.SelectionChanged);
-            RefreshSelectionOverlays();
+            if (!IsCheckingUpdate)
+                RefreshSelectionOverlays();
         }
 
         /// <summary>裁剪选区到当前行列尺寸范围内</summary>
@@ -562,6 +569,7 @@ namespace XericUI.XTable.Rendering.Component
         /// </summary>
         public void ClearTable()
         {
+            ThrowIfCheckingUpdate(nameof(ClearTable));
             m_IsRebuilding = true;
             try
             {
@@ -624,6 +632,8 @@ namespace XericUI.XTable.Rendering.Component
         public void ApplyClipboardData(XTableClipboardData data)
         {
             if (data == null) return;
+            CaptureActivePrefabReleaseCallbacks();
+            RecordStructuralChange(true);
 
             // 确保数据层存在
             if (m_TableData == null)
@@ -640,9 +650,8 @@ namespace XericUI.XTable.Rendering.Component
             // 写回单元格文本与合并信息
             data.PopulateToTable(this);
 
-            MarkDirty(TableDirtyType.DataChanged);
             RecalculateTotalSize();
-            RefreshView();
+            RequestRefresh(TableDirtyType.DataChanged | TableDirtyType.LayoutChanged, true);
             SetChildrenVisible(m_ChildrenVisible);
         }
     }

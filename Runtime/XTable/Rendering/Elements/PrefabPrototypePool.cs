@@ -147,6 +147,22 @@ namespace XericUI.XTable.Rendering.Elements
 			KillObject(instance);
 		}
 
+		/// <summary>销毁所有按 cellId 绑定的实例，并在销毁前通知调用方。</summary>
+		public void ReleaseAll(System.Action<GameObject> beforeRelease = null)
+		{
+			foreach (var pool in m_Pools.Values)
+			{
+				foreach (var instance in pool.Slots.Values)
+				{
+					beforeRelease?.Invoke(instance);
+					KillObject(instance);
+				}
+				pool.Slots.Clear();
+			}
+			m_Pools.Clear();
+			m_TotalCreated = 0;
+		}
+
 		/// <summary>结束当前渲染周期。实例保留在全局槽位中，以便跨区域复用。</summary>
 		public void ReturnAll()
 		{

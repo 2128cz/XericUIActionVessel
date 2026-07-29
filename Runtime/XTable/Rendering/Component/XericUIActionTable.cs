@@ -347,7 +347,7 @@ namespace XericUI.XTable.Rendering.Component
         private void Update()
         {
             UpdateSelectionAutoScroll();
-            if (m_IsRebuilding || !m_DirtyFlag.IsDirty) return;
+            if (m_IsRebuilding || IsCheckingUpdate || !m_DirtyFlag.IsDirty) return;
 
             var flags = m_DirtyFlag.Flags;
             // 仅滚动或选区变更 → 轻刷新（不重建边框/背景/预制体全回收）
@@ -386,6 +386,16 @@ namespace XericUI.XTable.Rendering.Component
 
         public void MarkDirty(TableDirtyType type)
         {
+            if (IsCheckingUpdate)
+            {
+                m_UpdateContextStack.Peek().DirtyFlags |= type;
+                return;
+            }
+            ApplyDirty(type);
+        }
+
+        private void ApplyDirty(TableDirtyType type)
+        {
             m_DirtyFlag.Mark(type);
 
             // 数据、布局或样式改变只使四叉树失效；仅多样式背景需要时再构建。
@@ -402,6 +412,7 @@ namespace XericUI.XTable.Rendering.Component
 
         private void OnScrollValueChanged(Vector2 _)
         {
+            if (IsCheckingUpdate) return;
             // 防重入：RefreshViewLight 中操作 content 可能触发 ScrollRect 再次回调
             if (m_IsRefreshingFromScroll) return;
             m_IsRefreshingFromScroll = true;

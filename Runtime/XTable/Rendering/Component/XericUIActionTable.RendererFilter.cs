@@ -225,6 +225,37 @@ namespace XericUI.XTable.Rendering.Component
 
         #region 完整刷新
 
+        private void CommitStructuralRenderCleanup(bool invalidatePrefabBindings,
+            Dictionary<GameObject, System.Action<GameObject>> prefabReleaseCallbacks)
+        {
+            ReleaseAllTrackedCells();
+            ReleaseFrozenCells();
+            m_LastRenderedCells.Clear();
+
+            if (m_ActivePrefabMap != null)
+            {
+                foreach (var pair in m_ActivePrefabMap)
+                {
+                    if (prefabReleaseCallbacks != null && prefabReleaseCallbacks.ContainsKey(pair.Value)) continue;
+                    var data = TableData.GetCell(pair.Key.Item1, pair.Key.Item2);
+                    if (data?.OnPrefabRelease != null && prefabReleaseCallbacks != null
+                        && !prefabReleaseCallbacks.ContainsKey(pair.Value))
+                        prefabReleaseCallbacks.Add(pair.Value, data.OnPrefabRelease);
+                }
+                m_ActivePrefabMap.Clear();
+            }
+
+            if (invalidatePrefabBindings)
+                m_PrefabPool?.ReleaseAll(instance =>
+                {
+                    if (prefabReleaseCallbacks != null && prefabReleaseCallbacks.TryGetValue(instance, out var callback))
+                        callback(instance);
+                });
+
+            m_QuadtreeDirty = true;
+            m_StyleNamespaceDirty = true;
+        }
+
         public void RefreshView()
         {
             if (m_Assembler == null)
@@ -300,6 +331,7 @@ namespace XericUI.XTable.Rendering.Component
 
         private void RefreshViewLight()
         {
+            TableDirtyType refreshedFlags = m_DirtyFlag.Flags;
             if (m_Assembler == null)
             {
                 if (rectTransform != null)

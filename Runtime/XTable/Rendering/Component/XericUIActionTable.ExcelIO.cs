@@ -262,9 +262,10 @@ namespace XericUI.XTable.Rendering.Component
             }
 
             // 标记脏并刷新
-            MarkDirty(TableDirtyType.DataChanged | TableDirtyType.LayoutChanged);
+            CaptureActivePrefabReleaseCallbacks();
+            RecordStructuralChange(true);
             RecalculateTotalSize();
-            RefreshView();
+            RequestRefresh(TableDirtyType.DataChanged | TableDirtyType.LayoutChanged, true);
         }
 
         #endregion
