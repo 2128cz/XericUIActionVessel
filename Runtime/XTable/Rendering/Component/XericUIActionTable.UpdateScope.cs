@@ -44,11 +44,14 @@ namespace XericUI.XTable.Rendering.Component
             public readonly XTableCellData CellData;
             public readonly Texture2D Texture;
             public readonly GameObject Prefab;
+            public readonly Action<GameObject> OnPrefabAcquire;
+            public readonly Action<GameObject> OnPrefabRelease;
 
             public UpdateCommand(UpdateCommandType type, int row = 0, int col = 0,
                 int intValue1 = 0, int intValue2 = 0, float floatValue = 0f,
                 string stringValue1 = null, string stringValue2 = null,
-                XTableCellData cellData = null, Texture2D texture = null, GameObject prefab = null)
+                XTableCellData cellData = null, Texture2D texture = null, GameObject prefab = null,
+                Action<GameObject> onPrefabAcquire = null, Action<GameObject> onPrefabRelease = null)
             {
                 Type = type;
                 Row = row;
@@ -61,6 +64,8 @@ namespace XericUI.XTable.Rendering.Component
                 CellData = cellData;
                 Texture = texture;
                 Prefab = prefab;
+                OnPrefabAcquire = onPrefabAcquire;
+                OnPrefabRelease = onPrefabRelease;
             }
         }
 
@@ -110,7 +115,12 @@ namespace XericUI.XTable.Rendering.Component
 
         private bool IsCheckingUpdate => m_UpdateContextStack.Count > 0;
 
-        /// <summary>开始一个可嵌套的命令缓冲作用域。可变 API 在最外层 Dispose 时按调用顺序执行。</summary>
+        /// <summary>
+        /// 开始可嵌套的批量更新作用域。
+        /// 功能：在最外层 Dispose 时按调用顺序执行全部可变 API、回收旧渲染对象并刷新一次。
+        /// 行为：不使用本方法时，API 会立即修改表格并沿用普通脏标记刷新；作用域内读取的是提交前状态。
+        /// 建议：连续增删行列、批量写入数据或样式时使用 <c>using (table.CheckUpdate()) { ... }</c>。
+        /// </summary>
         public UpdateScope CheckUpdate()
         {
             UpdateContext context = m_UpdateContextPool.Count > 0 ? m_UpdateContextPool.Pop() : new UpdateContext();
@@ -176,7 +186,8 @@ namespace XericUI.XTable.Rendering.Component
                     case UpdateCommandType.SetCellData: SetCellDataImmediate(command.Row, command.Col, command.CellData); break;
                     case UpdateCommandType.SetCellText: SetCellTextImmediate(command.Row, command.Col, command.StringValue1); break;
                     case UpdateCommandType.SetCellImage: SetCellImageImmediate(command.Row, command.Col, command.Texture); break;
-                    case UpdateCommandType.SetCellPrefab: SetCellPrefabImmediate(command.Row, command.Col, command.Prefab); break;
+                    case UpdateCommandType.SetCellPrefab: SetCellPrefabImmediate(command.Row, command.Col, command.Prefab,
+                        command.OnPrefabAcquire, command.OnPrefabRelease); break;
                     case UpdateCommandType.ClearCellText: ClearCellTextImmediate(command.Row, command.Col); break;
                     case UpdateCommandType.ClearCellImage: ClearCellImageImmediate(command.Row, command.Col); break;
                     case UpdateCommandType.ClearCellPrefab: ClearCellPrefabImmediate(command.Row, command.Col); break;

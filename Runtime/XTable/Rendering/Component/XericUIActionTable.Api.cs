@@ -17,7 +17,11 @@ namespace XericUI.XTable.Rendering.Component
 {
     public partial class XericUIActionTable
     {
-        /// <summary>设置冻结行列数并重建视图</summary>
+        /// <summary>
+        /// 设置冻结行列数。
+        /// 行为：普通调用立即重建冻结视图；CheckUpdate 内延后到提交时执行。
+        /// 建议：与行列结构调整一起修改时放入同一 CheckUpdate。
+        /// </summary>
         public void SetFreezeCount(int rows, int cols)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetFreezeCount, rows, cols))) return;
@@ -34,6 +38,11 @@ namespace XericUI.XTable.Rendering.Component
                 RefreshView();
         }
 
+        /// <summary>
+        /// 替换单元格完整数据。
+        /// 行为：普通调用立即替换；CheckUpdate 内记录引用并在提交时写入。
+        /// 建议：批量设置时确保传入的数据对象在 Scope 结束前仍有效，且不要在 Scope 内依赖其已写入表格。
+        /// </summary>
         public void SetCellData(int row, int col, XTableCellData data)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellData, row, col, cellData: data))) return;
@@ -46,7 +55,11 @@ namespace XericUI.XTable.Rendering.Component
             MarkDirty(TableDirtyType.DataChanged);
         }
 
-        /// <summary>设置文本内容（ContentType 自动设为 Text）</summary>
+        /// <summary>
+        /// 设置文本内容，并将类型设为 Text。
+        /// 行为：普通调用立即创建或更新并返回单元格；CheckUpdate 内仅入队，返回 <c>null</c>。
+        /// 建议：Scope 内不要通过返回值继续配置单元格；需完整配置时使用 SetCellData。
+        /// </summary>
         public XTableCellData SetCellText(int row, int col, string text)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellText, row, col, stringValue1: text))) return null;
@@ -62,7 +75,11 @@ namespace XericUI.XTable.Rendering.Component
             return data;
         }
 
-        /// <summary>设置图片纹理（ContentType 自动设为 Image）</summary>
+        /// <summary>
+        /// 设置图片纹理，并将类型设为 Image。
+        /// 行为：普通调用立即创建或更新；CheckUpdate 内仅入队，返回 <c>null</c>。
+        /// 建议：连续设置多格图片时使用 CheckUpdate，避免每格分别刷新。
+        /// </summary>
         public XTableCellData SetCellImage(int row, int col, Texture2D image)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellImage, row, col, texture: image))) return null;
@@ -78,24 +95,46 @@ namespace XericUI.XTable.Rendering.Component
             return data;
         }
 
-        /// <summary>设置预制体（ContentType 自动设为 Prefab）</summary>
-        /// <remarks>注意是设置预制体而不是实例，设置后订阅单元格预制体生成事件 OnPrefabAcquire 处理获取事件</remarks>
+        /// <summary>
+        /// 设置预制体，并将类型设为 Prefab。
+        /// 行为：普通调用立即创建或更新；CheckUpdate 内仅入队，返回 <c>null</c>。
+        /// 建议：需要生命周期委托时使用带 onPrefabAcquire/onPrefabRelease 参数的重载。
+        /// </summary>
         public XTableCellData SetCellPrefab(int row, int col, GameObject prefab)
+            => SetCellPrefab(row, col, prefab, null, null);
+
+        /// <summary>
+        /// 设置预制体及其获取、归还事件。
+        /// 功能：在实例显示前调用 onPrefabAcquire，归还待命池前调用 onPrefabRelease。
+        /// 行为：CheckUpdate 内委托随命令提交，首次创建单元格也安全；返回值仍为 <c>null</c>。
+        /// 建议：在批量填充 Prefab 时优先使用此重载，不要依赖 SetCellPrefab 的返回数据设置委托。
+        /// </summary>
+        public XTableCellData SetCellPrefab(int row, int col, GameObject prefab,
+            Action<GameObject> onPrefabAcquire, Action<GameObject> onPrefabRelease)
         {
-            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellPrefab, row, col, prefab: prefab))) return null;
-            return SetCellPrefabImmediate(row, col, prefab);
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellPrefab, row, col, prefab: prefab,
+                    onPrefabAcquire: onPrefabAcquire, onPrefabRelease: onPrefabRelease)))
+                return null;
+            return SetCellPrefabImmediate(row, col, prefab, onPrefabAcquire, onPrefabRelease);
         }
 
-        private XTableCellData SetCellPrefabImmediate(int row, int col, GameObject prefab)
+        private XTableCellData SetCellPrefabImmediate(int row, int col, GameObject prefab,
+            Action<GameObject> onPrefabAcquire = null, Action<GameObject> onPrefabRelease = null)
         {
             var data = TableData.GetOrCreateCell(row, col);
             data.Prefab = prefab;
             data.ContentType = CellContentType.Prefab;
+            data.OnPrefabAcquire = onPrefabAcquire;
+            data.OnPrefabRelease = onPrefabRelease;
             MarkDirty(TableDirtyType.DataChanged);
             return data;
         }
 
-        /// <summary>设置单元格或合并矩形的样式，并覆写其四条外边范围。</summary>
+        /// <summary>
+        /// 设置单元格或合并矩形的样式，并覆写四条外边范围。
+        /// 行为：普通调用立即应用；CheckUpdate 内延后执行且返回 <c>null</c>。
+        /// 建议：批量样式修改应使用 CheckUpdate；Scope 内不要依赖返回的样式单元格。
+        /// </summary>
         public XTableCellData SetCellStyle(int row, int col, string styleNamespace, string stylePath)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellStyle, row, col, stringValue1: styleNamespace, stringValue2: stylePath))) return null;
@@ -121,7 +160,11 @@ namespace XericUI.XTable.Rendering.Component
             return result;
         }
 
-        /// <summary>设置单元格的样式命名空间（兼容旧版，等同于 StyleNamespace 字段）</summary>
+        /// <summary>
+        /// 设置单元格的样式命名空间（兼容旧版）。
+        /// 行为：普通调用立即写入；CheckUpdate 内仅记录，提交后统一刷新样式。
+        /// 建议：同一批数据填充后的样式设置应放入同一 Scope。
+        /// </summary>
         public void SetCellStyleNamespace(int row, int col, string styleNamespace)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellStyleNamespace, row, col, stringValue1: styleNamespace))) return;
@@ -149,7 +192,11 @@ namespace XericUI.XTable.Rendering.Component
             }
         }
 
-        /// <summary>清除文本内容</summary>
+        /// <summary>
+        /// 清除文本内容。
+        /// 行为：普通调用立即清空；CheckUpdate 内延后到提交时清空。
+        /// 建议：与同批写入或删除操作放入同一 Scope，保持命令顺序。
+        /// </summary>
         public void ClearCellText(int row, int col)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.ClearCellText, row, col))) return;
@@ -166,7 +213,11 @@ namespace XericUI.XTable.Rendering.Component
             MarkDirty(TableDirtyType.DataChanged);
         }
 
-        /// <summary>清除图片纹理</summary>
+        /// <summary>
+        /// 清除图片纹理。
+        /// 行为：普通调用立即清空；CheckUpdate 内延后到提交时清空。
+        /// 建议：连续清理图片时使用 CheckUpdate，避免重复刷新。
+        /// </summary>
         public void ClearCellImage(int row, int col)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.ClearCellImage, row, col))) return;
@@ -181,7 +232,11 @@ namespace XericUI.XTable.Rendering.Component
             MarkDirty(TableDirtyType.DataChanged);
         }
 
-        /// <summary>清除预制体及委托</summary>
+        /// <summary>
+        /// 清除预制体及其生命周期委托。
+        /// 行为：提交或即时刷新时，旧实例会触发 release 后归还待命池。
+        /// 建议：批量移除 Prefab 时使用 CheckUpdate，以一次性回收旧实例。
+        /// </summary>
         public void ClearCellPrefab(int row, int col)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.ClearCellPrefab, row, col))) return;
@@ -198,7 +253,11 @@ namespace XericUI.XTable.Rendering.Component
             MarkDirty(TableDirtyType.DataChanged);
         }
 
-        /// <summary>清除单元格样式覆盖</summary>
+        /// <summary>
+        /// 清除单元格或合并矩形的样式覆盖及外边范围。
+        /// 行为：普通调用立即恢复默认样式；CheckUpdate 内在提交时统一恢复。
+        /// 建议：批量重置样式时使用 CheckUpdate。
+        /// </summary>
         public void ClearCellStyle(int row, int col)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.ClearCellStyle, row, col))) return;
@@ -220,6 +279,11 @@ namespace XericUI.XTable.Rendering.Component
             MarkDirty(TableDirtyType.StyleChanged);
         }
 
+        /// <summary>
+        /// 获取或创建单元格数据。
+        /// 行为：会立即创建数据；CheckUpdate 内禁止调用，避免绕过命令缓冲。
+        /// 建议：Scope 内需要完整数据时先构造 XTableCellData，再调用 SetCellData。
+        /// </summary>
         public XTableCellData GetCellData(int row, int col)
         {
             ThrowIfCheckingUpdate(nameof(GetCellData));
@@ -233,6 +297,11 @@ namespace XericUI.XTable.Rendering.Component
             return data != null ? data.GetEffectiveStyleNamespace(m_DefaultStyleNamespace) : m_DefaultStyleNamespace;
         }
 
+        /// <summary>
+        /// 合并从起点开始的矩形单元格。
+        /// 行为：普通调用立即改变合并关系；CheckUpdate 内保持命令顺序，提交后再合并。
+        /// 建议：与行列删除混用时必须放入同一 Scope，索引按调用顺序解释。
+        /// </summary>
         public void MergeCells(int startRow, int startCol, int rowSpan, int colSpan)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.MergeCells, startRow, startCol, rowSpan, colSpan))) return;
@@ -245,6 +314,11 @@ namespace XericUI.XTable.Rendering.Component
             MarkDirty(TableDirtyType.DataChanged);
         }
 
+        /// <summary>
+        /// 取消起点所属的合并区域。
+        /// 行为：普通调用立即取消；CheckUpdate 内在提交时按前序命令后的坐标执行。
+        /// 建议：批量调整合并关系时使用 CheckUpdate。
+        /// </summary>
         public void UnmergeCells(int startRow, int startCol)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.UnmergeCells, startRow, startCol))) return;
@@ -264,7 +338,11 @@ namespace XericUI.XTable.Rendering.Component
         public bool IsMergeSource(int row, int col, out int rowSpan, out int colSpan)
             => TableData.IsMergeSource(row, col, out rowSpan, out colSpan);
 
-        /// <summary>在末尾追加一行，默认行高来自 Config</summary>
+        /// <summary>
+        /// 在末尾追加一行，默认行高来自 Config。
+        /// 行为：普通调用立即扩展行数组；CheckUpdate 内记录追加，结束时只重建一次。
+        /// 建议：循环追加或随后填充新行时使用 CheckUpdate。
+        /// </summary>
         public void AddRow(float height = -1f)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.AddRow, floatValue: height))) return;
@@ -288,7 +366,11 @@ namespace XericUI.XTable.Rendering.Component
 #endif
         }
 
-        /// <summary>在末尾追加一列，默认列宽来自 Config</summary>
+        /// <summary>
+        /// 在末尾追加一列，默认列宽来自 Config。
+        /// 行为：普通调用立即扩展列数组；CheckUpdate 内记录追加，结束时只重建一次。
+        /// 建议：循环追加或随后填充新列时使用 CheckUpdate。
+        /// </summary>
         public void AddColumn(float width = -1f)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.AddColumn, floatValue: width))) return;
@@ -312,7 +394,11 @@ namespace XericUI.XTable.Rendering.Component
 #endif
         }
 
-        /// <summary>设置指定行的高度</summary>
+        /// <summary>
+        /// 设置指定行的高度。
+        /// 行为：普通调用立即更新布局；CheckUpdate 内延后，最终按命令顺序应用。
+        /// 建议：批量调整行高时使用 CheckUpdate。
+        /// </summary>
         public void SetRowHeight(int row, float height)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetRowHeight, row, floatValue: height))) return;
@@ -333,7 +419,11 @@ namespace XericUI.XTable.Rendering.Component
 #endif
         }
 
-        /// <summary>设置指定列的宽度</summary>
+        /// <summary>
+        /// 设置指定列的宽度。
+        /// 行为：普通调用立即更新布局；CheckUpdate 内延后，最终按命令顺序应用。
+        /// 建议：批量调整列宽时使用 CheckUpdate。
+        /// </summary>
         public void SetColWidth(int col, float width)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetColWidth, col: col, floatValue: width))) return;
@@ -354,7 +444,11 @@ namespace XericUI.XTable.Rendering.Component
 #endif
         }
 
-        /// <summary>删除指定行，单元格数据上移</summary>
+        /// <summary>
+        /// 删除指定行，并将下方单元格数据上移。
+        /// 行为：普通调用立即变更并走普通刷新；CheckUpdate 内仅记录，提交后回收旧渲染槽位并按最终状态重建。
+        /// 建议：循环删除、删除后追加或混合结构操作时必须使用 CheckUpdate；重复索引按前一条删除后的行号解释。
+        /// </summary>
         public void RemoveRow(int row)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.RemoveRow, row))) return;
@@ -407,7 +501,11 @@ namespace XericUI.XTable.Rendering.Component
 #endif
         }
 
-        /// <summary>删除指定列，单元格数据左移</summary>
+        /// <summary>
+        /// 删除指定列，并将右侧单元格数据左移。
+        /// 行为：普通调用立即变更并走普通刷新；CheckUpdate 内仅记录，提交后回收旧渲染槽位并按最终状态重建。
+        /// 建议：循环删除、删除后追加或混合结构操作时必须使用 CheckUpdate；重复索引按前一条删除后的列号解释。
+        /// </summary>
         public void RemoveColumn(int col)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.RemoveColumn, col: col))) return;
@@ -540,7 +638,11 @@ namespace XericUI.XTable.Rendering.Component
             SelectionHandle.ClampTo(maxR, maxC);
         }
 
-        /// <summary>完全重建表格——销毁所有动态生成的对象并重新初始化</summary>
+        /// <summary>
+        /// 完全重建表格，销毁动态对象并创建默认示例数据。
+        /// 行为：立即销毁池与渲染器；CheckUpdate 内禁止调用。
+        /// 建议：仅用于初始化或故障恢复，不要与批量业务更新混用。
+        /// </summary>
         [ContextMenu("Xeric UI/完全重建表格")]
         public void FullRebuild()
         {
@@ -580,7 +682,11 @@ namespace XericUI.XTable.Rendering.Component
             }
         }
 
-        /// <summary>重新生成表格但保留已有文本数据——先保存，重建后再回填</summary>
+        /// <summary>
+        /// 重新生成表格并回填已有文本数据。
+        /// 行为：立即销毁并重建池与渲染器；CheckUpdate 内禁止调用。
+        /// 建议：需要保留完整单元格数据、样式或 Prefab 时不要使用本方法。
+        /// </summary>
         public void FullRebuildPreservingData()
         {
             ThrowIfCheckingUpdate(nameof(FullRebuildPreservingData));
@@ -649,8 +755,9 @@ namespace XericUI.XTable.Rendering.Component
         }
 
         /// <summary>
-        /// 清空所有数据（单元格文本、合并信息），但保留行列排布和样式。
-        /// 等价于"清空内容但不改变表格结构"。
+        /// 清空单元格数据与合并信息，但保留行列排布和样式。
+        /// 行为：立即清空并刷新；CheckUpdate 内禁止调用，因为它会替换整块数据状态。
+        /// 建议：需要与其他操作合并时，逐项使用 ClearCell 系列 API。
         /// </summary>
         public void ClearData()
         {
@@ -680,7 +787,9 @@ namespace XericUI.XTable.Rendering.Component
         }
 
         /// <summary>
-        /// 清空表格所有内容——数据、行列、样式，等同 <see cref="FullRebuild"/> 但不创建默认示例数据。
+        /// 清空表格所有内容，但不创建默认示例数据。
+        /// 行为：立即销毁池与渲染器；CheckUpdate 内禁止调用。
+        /// 建议：仅用于整体重置，不应与批量增删或写入操作混用。
         /// </summary>
         public void ClearTable()
         {
@@ -729,7 +838,11 @@ namespace XericUI.XTable.Rendering.Component
             }
         }
 
-        /// <summary>仅强制刷新样式，不重建数据结构</summary>
+        /// <summary>
+        /// 强制刷新样式，不重建数据结构。
+        /// 行为：普通调用立即刷新；CheckUpdate 内合并到最终刷新。
+        /// 建议：批量修改样式数据后调用，通常无需单独调用多次。
+        /// </summary>
         public void ForceStyleRefresh()
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.ForceStyleRefresh))) return;
@@ -750,7 +863,11 @@ namespace XericUI.XTable.Rendering.Component
             return XTableClipboardData.FromTable(this);
         }
 
-        /// <summary>将剪贴板数据应用到表格——覆盖尺寸、命名空间、单元格文本、合并信息并刷新</summary>
+        /// <summary>
+        /// 应用剪贴板数据，覆盖尺寸、命名空间、文本与合并信息并刷新。
+        /// 行为：会整体替换多个状态；CheckUpdate 内禁止调用。
+        /// 建议：先结束当前 CheckUpdate，再单独应用剪贴板数据。
+        /// </summary>
         public void ApplyClipboardData(XTableClipboardData data)
         {
             ThrowIfCheckingUpdate(nameof(ApplyClipboardData));
