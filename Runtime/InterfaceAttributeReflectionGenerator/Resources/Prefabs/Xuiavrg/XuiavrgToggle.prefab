@@ -32,6 +32,7 @@ RectTransform:
   m_Children:
   - {fileID: 3524651152937454603}
   m_Father: {fileID: 2025950033364925101}
+  m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
@@ -85,7 +86,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2025950033364925101}
-  - component: {fileID: 5074116469056607803}
   m_Layer: 0
   m_Name: Toggle
   m_TagString: Untagged
@@ -107,81 +107,13 @@ RectTransform:
   m_Children:
   - {fileID: 1215921993072618354}
   m_Father: {fileID: 788574964665247507}
+  m_RootOrder: 1
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 1, y: 0.5}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 20}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &5074116469056607803
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6709117802249311198}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c20b871bced43a34a89dd5a7cf05c90b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_Navigation:
-    m_Mode: 3
-    m_WrapAround: 0
-    m_SelectOnUp: {fileID: 0}
-    m_SelectOnDown: {fileID: 0}
-    m_SelectOnLeft: {fileID: 0}
-    m_SelectOnRight: {fileID: 0}
-  m_Transition: 1
-  m_Colors:
-    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
-    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
-    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
-    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
-    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
-    m_ColorMultiplier: 1
-    m_FadeDuration: 0.1
-  m_SpriteState:
-    m_HighlightedSprite: {fileID: 0}
-    m_PressedSprite: {fileID: 0}
-    m_SelectedSprite: {fileID: 0}
-    m_DisabledSprite: {fileID: 0}
-  m_AnimationTriggers:
-    m_NormalTrigger: Normal
-    m_HighlightedTrigger: Highlighted
-    m_PressedTrigger: Pressed
-    m_SelectedTrigger: Selected
-    m_DisabledTrigger: Disabled
-  m_Interactable: 1
-  m_TargetGraphic: {fileID: 8111707064042930627}
-  toggleTransition: 1
-  graphic: {fileID: 6187350055200481011}
-  m_Group: {fileID: 0}
-  onValueChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_IsOn: 0
-  m_text: {fileID: 0}
-  m_enableTextColorTransition: 1
-  m_textTransitionColorMode:
-    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
-    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
-    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
-    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
-    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
-    m_ColorMultiplier: 1
-    m_FadeDuration: 0.1
-  m_isonStatusColor: {r: 1, g: 1, b: 1, a: 1}
-  m_enableTextContextTransition: 0
-  m_textTransitionContextMode:
-    m_NormalTrigger: toggle_normal
-    m_HighlightedTrigger: toggle_highlight
-    m_PressedTrigger: toggle_pressed
-    m_SelectedTrigger: toggle_selected
-    m_DisabledTrigger: toggle_disabled
-  m_isonStatusTextContext: toggle_ison
-  _entryTag: 8
-  _tagIndex: 0
 --- !u!1 &8328042880981269257
 GameObject:
   m_ObjectHideFlags: 0
@@ -191,6 +123,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 788574964665247507}
+  - component: {fileID: 8748571727707011929}
   - component: {fileID: 9038151750341269558}
   m_Layer: 0
   m_Name: XuiavrgToggle
@@ -214,12 +147,32 @@ RectTransform:
   - {fileID: 7037449427122705884}
   - {fileID: 2025950033364925101}
   m_Father: {fileID: 0}
+  m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &8748571727707011929
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8328042880981269257}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 00fd149c9a8dacd478a5adcad14a11f2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _entryTag: 0
+  _tagIndex: 0
+  _bindingSlots: []
+  _fieldLabelText: {fileID: 5393251546151539462}
+  _unitText: {fileID: 0}
+  _unitTransform: {fileID: 0}
+  _toggle: {fileID: 9038151750341269558}
 --- !u!114 &9038151750341269558
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -260,14 +213,14 @@ MonoBehaviour:
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
   m_Interactable: 1
-  m_TargetGraphic: {fileID: 0}
+  m_TargetGraphic: {fileID: 8111707064042930627}
   toggleTransition: 1
-  graphic: {fileID: 0}
+  graphic: {fileID: 6187350055200481011}
   m_Group: {fileID: 0}
   onValueChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_IsOn: 1
+  m_IsOn: 0
 --- !u!1 &8492042272878644695
 GameObject:
   m_ObjectHideFlags: 0
@@ -299,6 +252,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1215921993072618354}
+  m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
@@ -354,7 +308,6 @@ GameObject:
   - component: {fileID: 7037449427122705884}
   - component: {fileID: 7570825280211975555}
   - component: {fileID: 5393251546151539462}
-  - component: {fileID: 1010421790400393701}
   m_Layer: 0
   m_Name: Label
   m_TagString: Untagged
@@ -375,6 +328,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 788574964665247507}
+  m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0.5, y: 1}
@@ -478,18 +432,3 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
---- !u!114 &1010421790400393701
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9222057327835492180}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cd08262713d01a24bb929ead3cc680ab, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _targetText: {fileID: 5393251546151539462}
-  _entryTag: 1
-  _tagIndex: 0
