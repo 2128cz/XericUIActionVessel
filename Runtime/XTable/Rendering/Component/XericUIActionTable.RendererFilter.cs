@@ -19,11 +19,12 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>可复用列表，避免每帧分配 GC</summary>
         [NonSerialized] private List<(int, int)> m_ReusableCellList = new(capacity: 128);
+
         [NonSerialized] private List<QuadrantResult> m_ReusableQuadrants = new(capacity: 32);
 
         /// <summary>控制滚动时是否使用四叉树（大表格推荐）</summary>
         private bool UseQuadtreeForScroll => m_Quadtree != null && m_Quadtree.IsBuilt
-            && m_RowHeights.Length * m_ColWidths.Length > 2000;
+                                                                && m_RowHeights.Length * m_ColWidths.Length > 2000;
 
         private struct CellTrackedObjs
         {
@@ -52,6 +53,7 @@ namespace XericUI.XTable.Rendering.Component
                 m_Assembler?.ReleaseText(objs.CellText);
                 m_Assembler?.ReleaseImage(objs.CellImage);
             }
+
             m_CellTracked.Clear();
             m_LastRenderedCells.Clear();
         }
@@ -212,13 +214,19 @@ namespace XericUI.XTable.Rendering.Component
         {
             if (data.Prefab == null) return;
 
-            GameObject instance = m_PrefabPool.Acquire(data.Prefab, cellId);
+            var key = (row, col);
+            GameObject instance = null;
+            bool wasActive = m_ActivePrefabMap != null
+                             && m_ActivePrefabMap.TryGetValue(key, out instance);
+            if (!wasActive)
+                instance = m_PrefabPool.Acquire(data.Prefab, cellId);
             if (instance == null) return;
             RectTransform prt = instance.GetComponent<RectTransform>();
             prt.anchoredPosition = new Vector2(cellX, cellY);
             prt.sizeDelta = new Vector2(cellW, cellH);
-            m_ActivePrefabMap[(row, col)] = instance;
-            data.OnPrefabAcquire?.Invoke(instance);
+            m_ActivePrefabMap[key] = instance;
+            if (!wasActive)
+                data.OnPrefabAcquire?.Invoke(instance);
         }
 
         #endregion
@@ -227,6 +235,8 @@ namespace XericUI.XTable.Rendering.Component
 
         private void ReleaseRenderedBindings(Dictionary<GameObject, System.Action<GameObject>> prefabReleaseCallbacks = null)
         {
+            // 结构重建必须解除所有 cellId 映射；不能只依赖当前可见区域的 tracked 集合。
+            m_Assembler?.ReleaseAllBindings();
             ReleaseAllTrackedCells();
             ReleaseFrozenCells();
             m_LastRenderedCells.Clear();
@@ -236,6 +246,12 @@ namespace XericUI.XTable.Rendering.Component
                     callback(instance);
             });
             m_ActivePrefabMap?.Clear();
+        }
+
+        /// <summary>结构删除后的唯一绑定重建入口；普通刷新和滚动不得调用。</summary>
+        private void RebuildRenderBindings(Dictionary<GameObject, System.Action<GameObject>> prefabReleaseCallbacks)
+        {
+            ReleaseRenderedBindings(prefabReleaseCallbacks);
         }
 
         public void RefreshView(bool releaseBindings = true)
@@ -270,9 +286,6 @@ namespace XericUI.XTable.Rendering.Component
             }
 
             UpdateBackground();
-
-            if (releaseBindings)
-                ReleaseRenderedBindings(CaptureActivePrefabReleaseCallbacks());
 
             // 清理孤立子对象
             CleanOrphanChildren();
@@ -334,32 +347,9 @@ namespace XericUI.XTable.Rendering.Component
             var newVisible = new HashSet<(int, int)>();
             ComputeVisibleCellsScrollInto(newVisible);
 
-            // 2. 回收不再可见的追踪对象
-            m_ReusableCellList.Clear();
-            foreach (var cell in m_LastRenderedCells)
-                if (!newVisible.Contains(cell))
-                    m_ReusableCellList.Add(cell);
-            foreach (var cell in m_ReusableCellList)
-                ReleaseTrackedCell(cell.Item1, cell.Item2);
+            // 2. 离屏单元格保持其绑定，供后续重绘直接复用。
 
-            // 3. 回收不再可见的预制体（仅从映射表移除，预制体保留在计数器槽位中复用）
-            if (m_ActivePrefabMap != null && m_ActivePrefabMap.Count > 0)
-            {
-                m_ReusableCellList.Clear();
-                foreach (var kv in m_ActivePrefabMap)
-                    if (!newVisible.Contains(kv.Key))
-                        m_ReusableCellList.Add(kv.Key);
-
-                foreach (var key in m_ReusableCellList)
-                {
-                    GameObject instance = m_ActivePrefabMap[key];
-                    var data = TableData.GetCell(key.Item1, key.Item2);
-                    m_PrefabPool?.Release(instance, data?.OnPrefabRelease);
-                    m_ActivePrefabMap.Remove(key);
-                }
-            }
-
-            // 4. 渲染单元格：选区变更时全量重渲所有可见单元格，否则仅新进入的
+            // 3. 渲染单元格：选区变更时全量重渲所有可见单元格，否则仅新进入的
             foreach (var cell in newVisible)
             {
                 if (!m_LastRenderedCells.Contains(cell))
@@ -411,7 +401,8 @@ namespace XericUI.XTable.Rendering.Component
             if (m_BackgroundRenderer != null) return;
 
             var backgroundGo = new GameObject("_TableBackground",
-                typeof(RectTransform), typeof(CanvasRenderer), typeof(XTableBackgroundRenderer), typeof(XTableSelectionInput));
+                typeof(RectTransform), typeof(CanvasRenderer), typeof(XTableBackgroundRenderer),
+                typeof(XTableSelectionInput));
             backgroundGo.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
             backgroundGo.transform.SetParent(ContentTransform, false);
             backgroundGo.transform.SetAsFirstSibling();
@@ -451,7 +442,8 @@ namespace XericUI.XTable.Rendering.Component
                     {
                         if (string.IsNullOrEmpty(quadrant.Namespace) || quadrant.Namespace == baseNamespace)
                             continue;
-                        rects.Add(new XTableBackgroundRenderer.RectData(quadrant.Region, GetCellBgColor(quadrant.Namespace)));
+                        rects.Add(new XTableBackgroundRenderer.RectData(quadrant.Region,
+                            GetCellBgColor(quadrant.Namespace)));
                     }
                 }
             }

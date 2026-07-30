@@ -452,7 +452,9 @@ namespace XericUI.XTable.Rendering.Component
         public void RemoveRow(int row)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.RemoveRow, row))) return;
+            var prefabCallbacks = CaptureActivePrefabReleaseCallbacks();
             RemoveRowImmediate(row);
+            RebuildRenderBindings(prefabCallbacks);
         }
 
         private void RemoveRowImmediate(int row)
@@ -509,7 +511,9 @@ namespace XericUI.XTable.Rendering.Component
         public void RemoveColumn(int col)
         {
             if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.RemoveColumn, col: col))) return;
+            var prefabCallbacks = CaptureActivePrefabReleaseCallbacks();
             RemoveColumnImmediate(col);
+            RebuildRenderBindings(prefabCallbacks);
         }
 
         private void RemoveColumnImmediate(int col)
@@ -762,26 +766,16 @@ namespace XericUI.XTable.Rendering.Component
         public void ClearData()
         {
             ThrowIfCheckingUpdate(nameof(ClearData));
+            var prefabCallbacks = CaptureActivePrefabReleaseCallbacks();
             if (m_TableData != null)
             {
-                // 清理预制体：先调用 OnPrefabRelease 再清理映射
-                if (m_ActivePrefabMap != null)
-                {
-                    foreach (var kv in m_ActivePrefabMap)
-                    {
-                        var cellData = m_TableData.GetCell(kv.Key.Item1, kv.Key.Item2);
-                        cellData?.OnPrefabRelease?.Invoke(kv.Value);
-                    }
-                    m_ActivePrefabMap.Clear();
-                }
-                m_PrefabPool?.ReturnAll();
-
                 m_TableData.ClearAllMerges();
                 m_TableData.BlockMap.Clear();
                 m_StyleNamespaceDirty = true;
             }
             m_Quadtree?.Clear();
             ClearSelection();
+            RebuildRenderBindings(prefabCallbacks);
             MarkDirty(TableDirtyType.DataChanged);
             RefreshView();
         }

@@ -72,17 +72,20 @@ namespace XericUI.XTable.Rendering.Component
         private sealed class UpdateContext
         {
             public TableDirtyType DirtyFlags;
+            public bool RequiresBindingRebuild;
             public readonly List<UpdateCommand> Commands = new();
 
             public void Reset()
             {
                 DirtyFlags = TableDirtyType.None;
+                RequiresBindingRebuild = false;
                 Commands.Clear();
             }
 
             public void MergeFrom(UpdateContext child)
             {
                 DirtyFlags |= child.DirtyFlags;
+                RequiresBindingRebuild |= child.RequiresBindingRebuild;
                 Commands.AddRange(child.Commands);
             }
         }
@@ -134,7 +137,10 @@ namespace XericUI.XTable.Rendering.Component
         private bool TryEnqueueUpdateCommand(UpdateCommand command)
         {
             if (!IsCheckingUpdate) return false;
-            m_UpdateContextStack.Peek().Commands.Add(command);
+            UpdateContext context = m_UpdateContextStack.Peek();
+            context.Commands.Add(command);
+            context.RequiresBindingRebuild |= command.Type == UpdateCommandType.RemoveRow
+                || command.Type == UpdateCommandType.RemoveColumn;
             return true;
         }
 
@@ -158,12 +164,14 @@ namespace XericUI.XTable.Rendering.Component
             m_UpdateContextStack.Push(context);
             try
             {
-                Dictionary<GameObject, Action<GameObject>> prefabCallbacks = CaptureActivePrefabReleaseCallbacks();
+                Dictionary<GameObject, Action<GameObject>> prefabCallbacks = context.RequiresBindingRebuild
+                    ? CaptureActivePrefabReleaseCallbacks() : null;
                 ExecuteUpdateCommands(context);
                 if (context.DirtyFlags == TableDirtyType.None) return;
 
                 m_UpdateContextStack.Pop();
-                ReleaseRenderedBindings(prefabCallbacks);
+                if (context.RequiresBindingRebuild)
+                    RebuildRenderBindings(prefabCallbacks);
                 ApplyDirty(context.DirtyFlags);
                 RefreshView(false);
                 RefreshSelectionOverlays();

@@ -54,6 +54,7 @@ namespace XericUI.XTable.Rendering.Component
             {
                 Assembler = m_Assembler,
                 PrefabPool = m_PrefabPool,
+                ActivePrefabMap = m_ActivePrefabMap,
                 CellPadding = CellPadding,
                 Config = Config,
                 SelectionTable = this,

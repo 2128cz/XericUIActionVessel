@@ -30,14 +30,14 @@ namespace XericUI.XTable.Rendering.Elements
             Transform targetParent = parent ?? m_Parent;
             if (pool.ActiveSlots.TryGetValue(cellId, out GameObject existing))
             {
-                Prepare(existing, targetParent, cellId);
+                UpdateLayout(existing, targetParent, cellId);
                 return existing;
             }
 
             GameObject instance = pool.Standby.Count > 0 ? pool.Standby.Pop() : Create(prefab, targetParent);
             if (instance == null) return null;
             pool.ActiveSlots[cellId] = instance;
-            Prepare(instance, targetParent, cellId);
+            PrepareNewBinding(instance, targetParent, cellId);
             return instance;
         }
 
@@ -111,7 +111,13 @@ namespace XericUI.XTable.Rendering.Elements
             return instance;
         }
 
-        private static void Prepare(GameObject instance, Transform parent, int cellId)
+        private static void PrepareNewBinding(GameObject instance, Transform parent, int cellId)
+        {
+            UpdateLayout(instance, parent, cellId);
+            instance.SetActive(true);
+        }
+
+        private static void UpdateLayout(GameObject instance, Transform parent, int cellId)
         {
             if (parent != null && instance.transform.parent != parent)
                 instance.transform.SetParent(parent, false);
@@ -120,7 +126,6 @@ namespace XericUI.XTable.Rendering.Elements
             rt.anchorMin = AnchorTopLeft;
             rt.anchorMax = AnchorTopLeft;
             rt.pivot = PivotTopLeft;
-            instance.SetActive(true);
         }
 
         private static void KillObject(GameObject go)

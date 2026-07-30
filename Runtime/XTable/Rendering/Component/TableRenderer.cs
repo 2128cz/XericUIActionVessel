@@ -90,21 +90,12 @@ namespace XericUI.XTable.Rendering.Component
             sc = Mathf.Max(sc, StartCol);
             er = Mathf.Min(er, EndRow > 0 ? EndRow : rows.Length);
             ec = Mathf.Min(ec, EndCol > 0 ? EndCol : cols.Length);
-            if (sr >= er || sc >= ec)
-            {
-                if (fullRefresh) ReleaseAll();
-                return;
-            }
+            if (sr >= er || sc >= ec) return;
 
             var target = new HashSet<(int, int)>();
             for (int r = sr; r < er; r++)
             for (int c = sc; c < ec; c++)
                 target.Add((r, c));
-
-            if (fullRefresh)
-                ReleaseAll();
-            else
-                ReleaseExcept(target);
 
             foreach (var cell in target)
                 if (fullRefresh || !m_Rendered.Contains(cell))
@@ -120,18 +111,6 @@ namespace XericUI.XTable.Rendering.Component
                 ReleaseTracked(pair.Value);
             m_Tracked.Clear();
             m_Rendered.Clear();
-        }
-
-        private void ReleaseExcept(HashSet<(int, int)> target)
-        {
-            var remove = new List<(int, int)>();
-            foreach (var pair in m_Tracked)
-                if (!target.Contains(pair.Key)) remove.Add(pair.Key);
-            foreach (var key in remove)
-            {
-                ReleaseTracked(m_Tracked[key]);
-                m_Tracked.Remove(key);
-            }
         }
 
         private void ReleaseTracked(Tracked tracked)
@@ -191,15 +170,20 @@ namespace XericUI.XTable.Rendering.Component
                 }
                 else if (cell.ContentType == CellContentType.Prefab && cell.Prefab != null && PrefabPool != null)
                 {
-                    var prefab = PrefabPool.Acquire(cell.Prefab, cellId, m_Parent);
+                    var key = (row, col);
+                    GameObject activePrefab = null;
+                    bool wasActive = ActivePrefabMap != null
+                        && ActivePrefabMap.TryGetValue(key, out activePrefab);
+                    var prefab = wasActive ? activePrefab : PrefabPool.Acquire(cell.Prefab, cellId, m_Parent);
                     if (prefab != null)
                     {
                         var rt = prefab.GetComponent<RectTransform>();
                         rt.anchoredPosition = new Vector2(x, y);
                         rt.sizeDelta = new Vector2(width, height);
                         if (ActivePrefabMap != null)
-                            ActivePrefabMap[(row, col)] = prefab;
-                        cell.OnPrefabAcquire?.Invoke(prefab);
+                            ActivePrefabMap[key] = prefab;
+                        if (!wasActive)
+                            cell.OnPrefabAcquire?.Invoke(prefab);
                     }
                 }
             }
