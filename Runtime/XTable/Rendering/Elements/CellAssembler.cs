@@ -105,6 +105,7 @@ namespace XericUI.XTable.Rendering.Elements
 			if (parent != null && item.Root.transform.parent != parent)
 				item.Root.transform.SetParent(parent, false);
 			item.CellId = cellId;
+			item.Root.SetActive(true);
 			item.Root.name = name;
 			ResetImageDefaults(item);
 			BindStyle(item.Style, styleNamespace);
@@ -121,6 +122,7 @@ namespace XericUI.XTable.Rendering.Elements
 			if (parent != null && item.Root.transform.parent != parent)
 				item.Root.transform.SetParent(parent, false);
 			item.CellId = cellId;
+			item.Root.SetActive(true);
 			item.Root.name = name;
 			ResetTextDefaults(item);
 			BindStyle(item.Style, styleNamespace);
@@ -148,28 +150,39 @@ namespace XericUI.XTable.Rendering.Elements
 			OnStyleChangeDetected?.Invoke();
 		}
 
-		/// <summary>归还所有槽位至 FrozenSlots（全量刷新时调用）</summary>
+		/// <summary>归还所有槽位（全量刷新时调用）。被归还对象会隐藏，直到下次 Acquire。</summary>
 		public void ReturnAll()
 		{
-			// Unbind 所有活跃槽位的样式回调
-			m_ImagePool.ReturnAll();
-			m_TextPool.ReturnAll();
+			m_ImagePool.ReturnAll(HideImage);
+			m_TextPool.ReturnAll(HideText);
 		}
 
-		/// <summary>归还单个 Image 池对象（通过 CellId 定位槽位并移入 FrozenSlots）</summary>
+		/// <summary>归还单个 Image 池对象并隐藏。</summary>
 		public void ReleaseImage(PooledImage item)
 		{
 			if (item == null) return;
-			item.Style?.Unbind();
+			HideImage(item);
 			m_ImagePool.ReleaseByObject(item);
 		}
 
-		/// <summary>归还单个 Text 池对象（通过 CellId 定位槽位并移入 FrozenSlots）</summary>
+		/// <summary>归还单个 Text 池对象并隐藏。</summary>
 		public void ReleaseText(PooledText item)
 		{
 			if (item == null) return;
-			item.Style?.Unbind();
+			HideText(item);
 			m_TextPool.ReleaseByObject(item);
+		}
+
+		private static void HideImage(PooledImage item)
+		{
+			item.Style?.Unbind();
+			item.Root.SetActive(false);
+		}
+
+		private static void HideText(PooledText item)
+		{
+			item.Style?.Unbind();
+			item.Root.SetActive(false);
 		}
 
 		#endregion

@@ -120,10 +120,6 @@ namespace XericUI.XTable.Rendering.Component
                 ReleaseTracked(pair.Value);
             m_Tracked.Clear();
             m_Rendered.Clear();
-            if (ActivePrefabMap == null) return;
-            var keys = new List<(int, int)>();
-            foreach (var pair in ActivePrefabMap) keys.Add(pair.Key);
-            foreach (var key in keys) ActivePrefabMap.Remove(key);
         }
 
         private void ReleaseExcept(HashSet<(int, int)> target)

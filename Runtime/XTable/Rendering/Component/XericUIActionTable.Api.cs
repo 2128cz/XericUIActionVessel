@@ -20,14 +20,27 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>设置冻结行列数并重建视图</summary>
         public void SetFreezeCount(int rows, int cols)
         {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetFreezeCount, rows, cols))) return;
+            SetFreezeCountImmediate(rows, cols);
+        }
+
+        private void SetFreezeCountImmediate(int rows, int cols, bool refresh = true)
+        {
             m_FreezeRowCount = Mathf.Max(0, rows);
             m_FreezeColCount = Mathf.Max(0, cols);
             CreateViewportRenderer();
             MarkDirty(TableDirtyType.LayoutChanged);
-            RefreshView();
+            if (refresh && !IsCheckingUpdate)
+                RefreshView();
         }
 
         public void SetCellData(int row, int col, XTableCellData data)
+        {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellData, row, col, cellData: data))) return;
+            SetCellDataImmediate(row, col, data);
+        }
+
+        private void SetCellDataImmediate(int row, int col, XTableCellData data)
         {
             TableData.SetCell(row, col, data);
             MarkDirty(TableDirtyType.DataChanged);
@@ -35,6 +48,12 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>设置文本内容（ContentType 自动设为 Text）</summary>
         public XTableCellData SetCellText(int row, int col, string text)
+        {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellText, row, col, stringValue1: text))) return null;
+            return SetCellTextImmediate(row, col, text);
+        }
+
+        private XTableCellData SetCellTextImmediate(int row, int col, string text)
         {
             var data = TableData.GetOrCreateCell(row, col);
             data.Text = text;
@@ -45,6 +64,12 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>设置图片纹理（ContentType 自动设为 Image）</summary>
         public XTableCellData SetCellImage(int row, int col, Texture2D image)
+        {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellImage, row, col, texture: image))) return null;
+            return SetCellImageImmediate(row, col, image);
+        }
+
+        private XTableCellData SetCellImageImmediate(int row, int col, Texture2D image)
         {
             var data = TableData.GetOrCreateCell(row, col);
             data.Image = image;
@@ -57,6 +82,12 @@ namespace XericUI.XTable.Rendering.Component
         /// <remarks>注意是设置预制体而不是实例，设置后订阅单元格预制体生成事件 OnPrefabAcquire 处理获取事件</remarks>
         public XTableCellData SetCellPrefab(int row, int col, GameObject prefab)
         {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellPrefab, row, col, prefab: prefab))) return null;
+            return SetCellPrefabImmediate(row, col, prefab);
+        }
+
+        private XTableCellData SetCellPrefabImmediate(int row, int col, GameObject prefab)
+        {
             var data = TableData.GetOrCreateCell(row, col);
             data.Prefab = prefab;
             data.ContentType = CellContentType.Prefab;
@@ -66,6 +97,12 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>设置单元格或合并矩形的样式，并覆写其四条外边范围。</summary>
         public XTableCellData SetCellStyle(int row, int col, string styleNamespace, string stylePath)
+        {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellStyle, row, col, stringValue1: styleNamespace, stringValue2: stylePath))) return null;
+            return SetCellStyleImmediate(row, col, styleNamespace, stylePath);
+        }
+
+        private XTableCellData SetCellStyleImmediate(int row, int col, string styleNamespace, string stylePath)
         {
             ResolveStyleRect(row, col, out int rowStart, out int rowEnd, out int colStart, out int colEnd);
             XTableCellData result = null;
@@ -86,6 +123,12 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>设置单元格的样式命名空间（兼容旧版，等同于 StyleNamespace 字段）</summary>
         public void SetCellStyleNamespace(int row, int col, string styleNamespace)
+        {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetCellStyleNamespace, row, col, stringValue1: styleNamespace))) return;
+            SetCellStyleNamespaceImmediate(row, col, styleNamespace);
+        }
+
+        private void SetCellStyleNamespaceImmediate(int row, int col, string styleNamespace)
         {
             ResolveStyleRect(row, col, out int rowStart, out int rowEnd, out int colStart, out int colEnd);
             for (int r = rowStart; r < rowEnd; r++)
@@ -109,6 +152,12 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>清除文本内容</summary>
         public void ClearCellText(int row, int col)
         {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.ClearCellText, row, col))) return;
+            ClearCellTextImmediate(row, col);
+        }
+
+        private void ClearCellTextImmediate(int row, int col)
+        {
             var data = TableData.GetCell(row, col);
             if (data == null) return;
             data.Text = null;
@@ -120,6 +169,12 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>清除图片纹理</summary>
         public void ClearCellImage(int row, int col)
         {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.ClearCellImage, row, col))) return;
+            ClearCellImageImmediate(row, col);
+        }
+
+        private void ClearCellImageImmediate(int row, int col)
+        {
             var data = TableData.GetCell(row, col);
             if (data == null) return;
             data.Image = null;
@@ -128,6 +183,12 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>清除预制体及委托</summary>
         public void ClearCellPrefab(int row, int col)
+        {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.ClearCellPrefab, row, col))) return;
+            ClearCellPrefabImmediate(row, col);
+        }
+
+        private void ClearCellPrefabImmediate(int row, int col)
         {
             var data = TableData.GetCell(row, col);
             if (data == null) return;
@@ -139,6 +200,12 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>清除单元格样式覆盖</summary>
         public void ClearCellStyle(int row, int col)
+        {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.ClearCellStyle, row, col))) return;
+            ClearCellStyleImmediate(row, col);
+        }
+
+        private void ClearCellStyleImmediate(int row, int col)
         {
             ResolveStyleRect(row, col, out int rowStart, out int rowEnd, out int colStart, out int colEnd);
             for (int r = rowStart; r < rowEnd; r++)
@@ -154,7 +221,10 @@ namespace XericUI.XTable.Rendering.Component
         }
 
         public XTableCellData GetCellData(int row, int col)
-            => TableData.GetOrCreateCell(row, col);
+        {
+            ThrowIfCheckingUpdate(nameof(GetCellData));
+            return TableData.GetOrCreateCell(row, col);
+        }
 
         /// <summary>获取单元格的样式命名空间（含回退逻辑）</summary>
         public string GetCellStyleNamespace(int row, int col)
@@ -165,11 +235,23 @@ namespace XericUI.XTable.Rendering.Component
 
         public void MergeCells(int startRow, int startCol, int rowSpan, int colSpan)
         {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.MergeCells, startRow, startCol, rowSpan, colSpan))) return;
+            MergeCellsImmediate(startRow, startCol, rowSpan, colSpan);
+        }
+
+        private void MergeCellsImmediate(int startRow, int startCol, int rowSpan, int colSpan)
+        {
             TableData.MergeCells(startRow, startCol, rowSpan, colSpan);
             MarkDirty(TableDirtyType.DataChanged);
         }
 
         public void UnmergeCells(int startRow, int startCol)
+        {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.UnmergeCells, startRow, startCol))) return;
+            UnmergeCellsImmediate(startRow, startCol);
+        }
+
+        private void UnmergeCellsImmediate(int startRow, int startCol)
         {
             TableData.UnmergeCells(startRow, startCol);
             MarkDirty(TableDirtyType.DataChanged);
@@ -185,6 +267,12 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>在末尾追加一行，默认行高来自 Config</summary>
         public void AddRow(float height = -1f)
         {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.AddRow, floatValue: height))) return;
+            AddRowImmediate(height);
+        }
+
+        private void AddRowImmediate(float height)
+        {
             if (height <= 0) height = Config.DefaultRowHeight;
 #if UNITY_EDITOR
             UnityEditor.Undo.RecordObject(this, "Add Table Row");
@@ -194,7 +282,6 @@ namespace XericUI.XTable.Rendering.Component
             System.Array.Copy(m_RowHeights, newArr, m_RowHeights.Length);
             newArr[newLen - 1] = height;
             m_RowHeights = newArr;
-            RecordStructuralChange(false);
             MarkDirty(TableDirtyType.LayoutChanged);
 #if UNITY_EDITOR
             UnityEditor.EditorUtility.SetDirty(this);
@@ -203,6 +290,12 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>在末尾追加一列，默认列宽来自 Config</summary>
         public void AddColumn(float width = -1f)
+        {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.AddColumn, floatValue: width))) return;
+            AddColumnImmediate(width);
+        }
+
+        private void AddColumnImmediate(float width)
         {
             if (width <= 0) width = Config.DefaultColumnWidth;
 #if UNITY_EDITOR
@@ -213,7 +306,6 @@ namespace XericUI.XTable.Rendering.Component
             System.Array.Copy(m_ColWidths, newArr, m_ColWidths.Length);
             newArr[newLen - 1] = width;
             m_ColWidths = newArr;
-            RecordStructuralChange(false);
             MarkDirty(TableDirtyType.LayoutChanged);
 #if UNITY_EDITOR
             UnityEditor.EditorUtility.SetDirty(this);
@@ -222,6 +314,12 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>设置指定行的高度</summary>
         public void SetRowHeight(int row, float height)
+        {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetRowHeight, row, floatValue: height))) return;
+            SetRowHeightImmediate(row, height);
+        }
+
+        private void SetRowHeightImmediate(int row, float height)
         {
             if (row < 0 || row >= m_RowHeights.Length) return;
             if (height <= 0) return;
@@ -238,6 +336,12 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>设置指定列的宽度</summary>
         public void SetColWidth(int col, float width)
         {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.SetColWidth, col: col, floatValue: width))) return;
+            SetColWidthImmediate(col, width);
+        }
+
+        private void SetColWidthImmediate(int col, float width)
+        {
             if (col < 0 || col >= m_ColWidths.Length) return;
             if (width <= 0) return;
 #if UNITY_EDITOR
@@ -253,14 +357,17 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>删除指定行，单元格数据上移</summary>
         public void RemoveRow(int row)
         {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.RemoveRow, row))) return;
+            RemoveRowImmediate(row);
+        }
+
+        private void RemoveRowImmediate(int row)
+        {
             if (row < 0 || row >= m_RowHeights.Length) return;
 #if UNITY_EDITOR
             UnityEditor.Undo.RecordObject(this, "Remove Table Row");
 #endif
             int colCount = m_ColWidths.Length;
-            CaptureActivePrefabReleaseCallbacks();
-            RecordStructuralChange(true);
-
             // 先解除涉及该行的合并
             for (int c = 0; c < colCount; c++)
                 TableData.UnmergeCells(row, c);
@@ -289,6 +396,7 @@ namespace XericUI.XTable.Rendering.Component
             for (int i = row; i < newLen; i++)
                 newArr[i] = m_RowHeights[i + 1];
             m_RowHeights = newArr;
+            TableData.ClearAllBorderCache();
 
             // 裁剪选区到新尺寸
             ClampSelectionToBounds();
@@ -302,14 +410,17 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>删除指定列，单元格数据左移</summary>
         public void RemoveColumn(int col)
         {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.RemoveColumn, col: col))) return;
+            RemoveColumnImmediate(col);
+        }
+
+        private void RemoveColumnImmediate(int col)
+        {
             if (col < 0 || col >= m_ColWidths.Length) return;
 #if UNITY_EDITOR
             UnityEditor.Undo.RecordObject(this, "Remove Table Column");
 #endif
             int rowCount = m_RowHeights.Length;
-            CaptureActivePrefabReleaseCallbacks();
-            RecordStructuralChange(true);
-
             // 先解除涉及该列的合并
             for (int r = 0; r < rowCount; r++)
                 TableData.UnmergeCells(r, col);
@@ -338,6 +449,7 @@ namespace XericUI.XTable.Rendering.Component
             for (int i = col; i < newLen; i++)
                 newArr[i] = m_ColWidths[i + 1];
             m_ColWidths = newArr;
+            TableData.ClearAllBorderCache();
 
             // 裁剪选区到新尺寸
             ClampSelectionToBounds();
@@ -432,6 +544,7 @@ namespace XericUI.XTable.Rendering.Component
         [ContextMenu("Xeric UI/完全重建表格")]
         public void FullRebuild()
         {
+            ThrowIfCheckingUpdate(nameof(FullRebuild));
             m_IsRebuilding = true;
             try
             {
@@ -470,6 +583,7 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>重新生成表格但保留已有文本数据——先保存，重建后再回填</summary>
         public void FullRebuildPreservingData()
         {
+            ThrowIfCheckingUpdate(nameof(FullRebuildPreservingData));
             m_IsRebuilding = true;
             try
             {
@@ -540,6 +654,7 @@ namespace XericUI.XTable.Rendering.Component
         /// </summary>
         public void ClearData()
         {
+            ThrowIfCheckingUpdate(nameof(ClearData));
             if (m_TableData != null)
             {
                 // 清理预制体：先调用 OnPrefabRelease 再清理映射
@@ -617,9 +732,16 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>仅强制刷新样式，不重建数据结构</summary>
         public void ForceStyleRefresh()
         {
+            if (TryEnqueueUpdateCommand(new UpdateCommand(UpdateCommandType.ForceStyleRefresh))) return;
+            ForceStyleRefreshImmediate();
+        }
+
+        private void ForceStyleRefreshImmediate()
+        {
             StyleManager.ForceRefresh();
             MarkDirty(TableDirtyType.StyleChanged);
-            RefreshView();
+            if (!IsCheckingUpdate)
+                RefreshView();
         }
 
         /// <summary>构建剪贴板数据对象（尺寸 + 单元格文本 + 合并信息）</summary>
@@ -631,10 +753,8 @@ namespace XericUI.XTable.Rendering.Component
         /// <summary>将剪贴板数据应用到表格——覆盖尺寸、命名空间、单元格文本、合并信息并刷新</summary>
         public void ApplyClipboardData(XTableClipboardData data)
         {
+            ThrowIfCheckingUpdate(nameof(ApplyClipboardData));
             if (data == null) return;
-            CaptureActivePrefabReleaseCallbacks();
-            RecordStructuralChange(true);
-
             // 确保数据层存在
             if (m_TableData == null)
                 m_TableData = new XTableData();

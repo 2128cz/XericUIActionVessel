@@ -268,7 +268,49 @@ namespace XericUI.Core.Base
                 rt.anchoredPosition = anchorLocalPos + pivotOffset;
             }
         }
+        
+        /// <summary>
+        /// 根据目标单元格与父级画布的可用空间定位弹窗。
+        /// 默认以左上角对齐单元格左下角；下方空间不足时改用底部锚点显示在单元格上方，
+        /// 右侧空间不足时改为从右侧向左展开。
+        /// </summary>
+        public void AutoSnapAlignedToRect(RectTransform cellRect)
+        {
+            var rt = transform as RectTransform;
+            if (rt == null || cellRect == null) return;
 
+            var parentRT = rt.parent as RectTransform;
+            if (parentRT == null) return;
+
+            Canvas.ForceUpdateCanvases();
+
+            var cellCorners = new Vector3[4];
+            cellRect.GetWorldCorners(cellCorners);
+            for (int i = 0; i < cellCorners.Length; i++)
+                cellCorners[i] = parentRT.InverseTransformPoint(cellCorners[i]);
+
+            var popupWidth = parentRT.InverseTransformVector(
+                rt.TransformVector(Vector3.right * rt.rect.width)).magnitude;
+            var popupHeight = parentRT.InverseTransformVector(
+                rt.TransformVector(Vector3.up * rt.rect.height)).magnitude;
+            var parentRect = parentRT.rect;
+
+            var leftSpace = cellCorners[2].x - parentRect.xMin;
+            var rightSpace = parentRect.xMax - cellCorners[0].x;
+            var placeRight = rightSpace >= popupWidth || rightSpace >= leftSpace;
+
+            var bottomSpace = cellCorners[0].y - parentRect.yMin;
+            var topSpace = parentRect.yMax - cellCorners[1].y;
+            var placeBelow = bottomSpace >= popupHeight || bottomSpace >= topSpace;
+
+            rt.pivot = new Vector2(placeRight ? 0f : 1f, placeBelow ? 1f : 0f);
+            var target = new Vector3(
+                placeRight ? cellCorners[0].x : cellCorners[2].x,
+                placeBelow ? cellCorners[0].y : cellCorners[1].y,
+                0f);
+            rt.position = parentRT.TransformPoint(target);
+        }
+        
         #endregion
 
         #region 显影

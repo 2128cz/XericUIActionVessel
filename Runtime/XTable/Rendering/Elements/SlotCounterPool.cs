@@ -147,15 +147,20 @@ namespace XericUI.XTable.Rendering.Elements
 			return false;
 		}
 
-		/// <summary>释放所有活跃槽位，但保留其所属计数器。</summary>
-		public void ReturnAll()
+		/// <summary>释放所有活跃槽位；回调在槽位变为空闲前执行。</summary>
+		public void ReturnAll(Action<T> beforeRelease = null)
 		{
 			for (int ci = 0; ci < POOL_SIZE; ci++)
 			{
 				var counter = m_Counters[ci];
 				if (counter == null) continue;
 				for (int i = 0; i < counter.Slots.Count; i++)
-					counter.Slots[i].CellId = -1;
+				{
+					var slot = counter.Slots[i];
+					if (slot.CellId == -1) continue;
+					beforeRelease?.Invoke(slot.PooledObject);
+					slot.CellId = -1;
+				}
 			}
 		}
 

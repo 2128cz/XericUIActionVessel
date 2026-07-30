@@ -225,39 +225,22 @@ namespace XericUI.XTable.Rendering.Component
 
         #region 完整刷新
 
-        private void CommitStructuralRenderCleanup(bool invalidatePrefabBindings,
-            Dictionary<GameObject, System.Action<GameObject>> prefabReleaseCallbacks)
+        private void ReleaseRenderedBindings(Dictionary<GameObject, System.Action<GameObject>> prefabReleaseCallbacks = null)
         {
             ReleaseAllTrackedCells();
             ReleaseFrozenCells();
             m_LastRenderedCells.Clear();
-
-            if (m_ActivePrefabMap != null)
+            m_PrefabPool?.ReturnAll(instance =>
             {
-                foreach (var pair in m_ActivePrefabMap)
-                {
-                    if (prefabReleaseCallbacks != null && prefabReleaseCallbacks.ContainsKey(pair.Value)) continue;
-                    var data = TableData.GetCell(pair.Key.Item1, pair.Key.Item2);
-                    if (data?.OnPrefabRelease != null && prefabReleaseCallbacks != null
-                        && !prefabReleaseCallbacks.ContainsKey(pair.Value))
-                        prefabReleaseCallbacks.Add(pair.Value, data.OnPrefabRelease);
-                }
-                m_ActivePrefabMap.Clear();
-            }
-
-            if (invalidatePrefabBindings)
-                m_PrefabPool?.ReleaseAll(instance =>
-                {
-                    if (prefabReleaseCallbacks != null && prefabReleaseCallbacks.TryGetValue(instance, out var callback))
-                        callback(instance);
-                });
-
-            m_QuadtreeDirty = true;
-            m_StyleNamespaceDirty = true;
+                if (prefabReleaseCallbacks != null && prefabReleaseCallbacks.TryGetValue(instance, out var callback))
+                    callback(instance);
+            });
+            m_ActivePrefabMap?.Clear();
         }
 
-        public void RefreshView()
+        public void RefreshView(bool releaseBindings = true)
         {
+            TableDirtyType refreshedFlags = m_DirtyFlag.Flags;
             if (m_Assembler == null)
             {
                 if (rectTransform != null)
@@ -288,19 +271,8 @@ namespace XericUI.XTable.Rendering.Component
 
             UpdateBackground();
 
-            // 归还所有追踪对象 + 预制体
-            if (m_ActivePrefabMap != null)
-            {
-                foreach (var kv in m_ActivePrefabMap)
-                {
-                    var cellData = TableData.GetCell(kv.Key.Item1, kv.Key.Item2);
-                    cellData?.OnPrefabRelease?.Invoke(kv.Value);
-                }
-                m_ActivePrefabMap.Clear();
-            }
-            m_PrefabPool?.ReturnAll();
-            ReleaseAllTrackedCells();
-            ReleaseFrozenCells();
+            if (releaseBindings)
+                ReleaseRenderedBindings(CaptureActivePrefabReleaseCallbacks());
 
             // 清理孤立子对象
             CleanOrphanChildren();
@@ -320,7 +292,7 @@ namespace XericUI.XTable.Rendering.Component
             RenderFrozenCells(true);
             RebuildBorders();
 
-            m_DirtyFlag.Clear();
+            m_DirtyFlag.ClearFlags(refreshedFlags);
             OnTableRefreshed?.Invoke();
             SetChildrenVisible(m_ChildrenVisible);
         }
@@ -380,7 +352,9 @@ namespace XericUI.XTable.Rendering.Component
 
                 foreach (var key in m_ReusableCellList)
                 {
-                    // 不调用 OnPrefabRelease 和 Release——预制体保留在槽位中
+                    GameObject instance = m_ActivePrefabMap[key];
+                    var data = TableData.GetCell(key.Item1, key.Item2);
+                    m_PrefabPool?.Release(instance, data?.OnPrefabRelease);
                     m_ActivePrefabMap.Remove(key);
                 }
             }
@@ -398,7 +372,7 @@ namespace XericUI.XTable.Rendering.Component
             // 5. 交换：将 newVisible 作为下一帧的比较基准
             (m_LastRenderedCells, newVisible) = (newVisible, m_LastRenderedCells);
 
-            m_DirtyFlag.ClearFlags(TableDirtyType.ScrollChanged | TableDirtyType.SelectionChanged);
+            m_DirtyFlag.ClearFlags(refreshedFlags & (TableDirtyType.ScrollChanged | TableDirtyType.SelectionChanged));
             OnTableRefreshed?.Invoke();
             SetChildrenVisible(m_ChildrenVisible);
         }

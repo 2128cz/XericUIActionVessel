@@ -24,6 +24,7 @@ namespace XericUI.XTable.Rendering.Component
         /// <param name="sheetIndex">工作表索引（0-based），默认 0 即第一个工作表</param>
         public void LoadFromExcelFile(string filePath, int sheetIndex = 0)
         {
+            ThrowIfCheckingUpdate(nameof(LoadFromExcelFile));
             if (!TryOpenPackage(filePath, out ExcelPackage package)) return;
             using (package)
             {
@@ -46,6 +47,7 @@ namespace XericUI.XTable.Rendering.Component
         /// <param name="sheetName">工作表名称</param>
         public void LoadFromExcelFile(string filePath, string sheetName)
         {
+            ThrowIfCheckingUpdate(nameof(LoadFromExcelFile));
             if (string.IsNullOrEmpty(sheetName))
             {
                 Debug.LogWarning("[XTable] LoadFromExcelFile: 工作表名称为空");
@@ -262,8 +264,6 @@ namespace XericUI.XTable.Rendering.Component
             }
 
             // 标记脏并刷新
-            CaptureActivePrefabReleaseCallbacks();
-            RecordStructuralChange(true);
             RecalculateTotalSize();
             RequestRefresh(TableDirtyType.DataChanged | TableDirtyType.LayoutChanged, true);
         }
