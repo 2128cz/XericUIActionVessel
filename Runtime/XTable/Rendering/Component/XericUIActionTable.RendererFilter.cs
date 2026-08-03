@@ -177,7 +177,7 @@ namespace XericUI.XTable.Rendering.Component
         {
             if (string.IsNullOrEmpty(data.Text)) return;
 
-            var txt = m_Assembler.GetText(cellId, "cell_text", cellNS);
+            var txt = m_Assembler.GetText(cellId, "cell_text", cellNS, ContentTransform);
             if (txt == null) return;
             txt.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
             txt.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);
@@ -201,7 +201,7 @@ namespace XericUI.XTable.Rendering.Component
             if (data.Image == null) return;
 
             Sprite sprite = GetOrCreateSprite(data.Image);
-            var img = m_Assembler.GetImage(cellId, "cell_image", cellNS);
+            var img = m_Assembler.GetImage(cellId, "cell_image", cellNS, ContentTransform);
             if (img == null) return;
             img.Rect.anchoredPosition = new Vector2(cellX + CellPadding, cellY);
             img.Rect.sizeDelta = new Vector2(cellW - CellPadding2, cellH);

@@ -183,9 +183,15 @@ namespace XericUI.XTable.Rendering.Elements
 			if (item != null) m_TextPool.ReleaseCell(item.CellId);
 		}
 
-		private static void SetImageCounterActive(IReadOnlyList<PooledImage> items)
+		private void SetImageCounterActive(IReadOnlyList<PooledImage> items)
 		{
-			for (int i = 0; i < items.Count; i++) items[i].Root.SetActive(true);
+			for (int i = 0; i < items.Count; i++)
+			{
+				// Counter 整体重新借出前清空历史 Slot 的视觉状态；未重新绑定的 Slot
+				// 即使随 Counter 激活，也不会保留冻结区域的旧内容。
+				ResetImageDefaults(items[i]);
+				items[i].Root.SetActive(true);
+			}
 		}
 
 		private static void SetImageCounterInactive(IReadOnlyList<PooledImage> items)
@@ -197,9 +203,15 @@ namespace XericUI.XTable.Rendering.Elements
 			}
 		}
 
-		private static void SetTextCounterActive(IReadOnlyList<PooledText> items)
+		private void SetTextCounterActive(IReadOnlyList<PooledText> items)
 		{
-			for (int i = 0; i < items.Count; i++) items[i].Root.SetActive(true);
+			for (int i = 0; i < items.Count; i++)
+			{
+				// Counter 整体重新借出前清空历史 Slot 的视觉状态；未重新绑定的 Slot
+				// 即使随 Counter 激活，也不会保留冻结区域的旧内容。
+				ResetTextDefaults(items[i]);
+				items[i].Root.SetActive(true);
+			}
 		}
 
 		private static void SetTextCounterInactive(IReadOnlyList<PooledText> items)
