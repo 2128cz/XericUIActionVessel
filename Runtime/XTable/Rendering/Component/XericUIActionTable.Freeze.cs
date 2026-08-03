@@ -61,8 +61,8 @@ namespace XericUI.XTable.Rendering.Component
                 GetStyleColor = (ns, path, fallback) => GetStyleColor(ns, path, fallback),
                 GetStyleInt = (ns, path, fallback) => GetStyleInt(ns, path, fallback),
                 GetStyleFontAsset = (ns, path) => GetStyleFontAsset(ns, path),
-                GetRowHeights = () => m_RowHeights,
-                GetColWidths = () => m_ColWidths,
+                GetRowHeights = () => m_ResolvedRowHeights,
+                GetColWidths = () => m_ResolvedColWidths,
                 GetTableData = () => m_TableData,
                 GetDefaultStyleNamespace = () => m_DefaultStyleNamespace,
             };

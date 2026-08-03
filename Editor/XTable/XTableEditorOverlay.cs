@@ -60,8 +60,8 @@ namespace XericUIEditor.XTable
 		/// <summary>绘制网格线</summary>
 		private static void DrawGridOverlay(XericUIActionTable table, RectTransform rect)
 		{
-			float[] rowHeights = table.RowHeights;
-			float[] colWidths = table.ColWidths;
+			float[] rowHeights = table.ResolvedRowHeights;
+			float[] colWidths = table.ResolvedColWidths;
 			if (rowHeights == null || colWidths == null) return;
 
 			Vector3[] corners = new Vector3[4];
@@ -103,8 +103,8 @@ namespace XericUIEditor.XTable
 			int selCol = table.SelectedCol;
 			if (selRow < 0 || selCol < 0) return;
 
-			float[] rowHeights = table.RowHeights;
-			float[] colWidths = table.ColWidths;
+			float[] rowHeights = table.ResolvedRowHeights;
+			float[] colWidths = table.ResolvedColWidths;
 			if (rowHeights == null || colWidths == null) return;
 
 			// 计算选中单元格的世界位置

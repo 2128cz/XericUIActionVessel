@@ -108,6 +108,10 @@ namespace XericUI.XTable.Rendering.Component
         [System.NonSerialized] private UILineRendererV2 m_FrozenRowBorderRenderer;
         [System.NonSerialized] private UILineRendererV2 m_FrozenCornerBorderRenderer;
 
+        [NonSerialized] private float[] m_ResolvedRowHeights;
+        [NonSerialized] private float[] m_ResolvedColWidths;
+        [NonSerialized] private Vector2 m_LastLayoutBaseSize;
+
         private float m_TotalWidth;
         private float m_TotalHeight;
 
@@ -147,6 +151,8 @@ namespace XericUI.XTable.Rendering.Component
 
         public float[] RowHeights => m_RowHeights;
         public float[] ColWidths => m_ColWidths;
+        public float[] ResolvedRowHeights => m_ResolvedRowHeights;
+        public float[] ResolvedColWidths => m_ResolvedColWidths;
 
         /// <summary>冻结行数</summary>
         public int FreezeRowCount => m_FreezeRowCount;
@@ -278,6 +284,7 @@ namespace XericUI.XTable.Rendering.Component
             m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
             m_PrefabPool = new PrefabPrototypePool(ContentTransform);
             m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
+            UpdateResolvedCellSizes();
             RecalculateTotalSize();
             EnsureDefaultStyleNamespace();
             CreateDefaultSampleData();
@@ -409,6 +416,51 @@ namespace XericUI.XTable.Rendering.Component
         private void OnPoolStyleChanged() => MarkDirty(TableDirtyType.StyleChanged);
 
         [System.NonSerialized] private bool m_IsRefreshingFromScroll;
+
+        private void OnRectTransformDimensionsChange()
+        {
+            Vector2 layoutBaseSize = GetLayoutBaseSize();
+            if (layoutBaseSize != m_LastLayoutBaseSize)
+            {
+                m_LastLayoutBaseSize = layoutBaseSize;
+                MarkDirty(TableDirtyType.LayoutChanged);
+            }
+        }
+
+        private Vector2 GetLayoutBaseSize()
+        {
+            RectTransform baseTransform = m_ScrollRect != null && m_ScrollRect.viewport != null
+                ? m_ScrollRect.viewport
+                : transform.parent as RectTransform;
+            if (baseTransform == null) baseTransform = rectTransform;
+
+            Vector2 size = baseTransform != null ? baseTransform.rect.size : Vector2.zero;
+            Vector2 selfSize = rectTransform != null ? rectTransform.rect.size : Vector2.zero;
+            return new Vector2(size.x > 0f ? size.x : (m_LastLayoutBaseSize.x > 0f ? m_LastLayoutBaseSize.x : selfSize.x),
+                size.y > 0f ? size.y : (m_LastLayoutBaseSize.y > 0f ? m_LastLayoutBaseSize.y : selfSize.y));
+        }
+
+        private void UpdateResolvedCellSizes()
+        {
+            Vector2 baseSize = GetLayoutBaseSize();
+            m_LastLayoutBaseSize = baseSize;
+            if (m_RowHeights == null || m_ColWidths == null)
+            {
+                m_ResolvedRowHeights = null;
+                m_ResolvedColWidths = null;
+                return;
+            }
+
+            if (m_ResolvedRowHeights == null || m_ResolvedRowHeights.Length != m_RowHeights.Length)
+                m_ResolvedRowHeights = new float[m_RowHeights.Length];
+            if (m_ResolvedColWidths == null || m_ResolvedColWidths.Length != m_ColWidths.Length)
+                m_ResolvedColWidths = new float[m_ColWidths.Length];
+
+            for (int i = 0; i < m_RowHeights.Length; i++)
+                m_ResolvedRowHeights[i] = XTableCoordinateUtility.ResolveSize(m_RowHeights[i], baseSize.y);
+            for (int i = 0; i < m_ColWidths.Length; i++)
+                m_ResolvedColWidths[i] = XTableCoordinateUtility.ResolveSize(m_ColWidths[i], baseSize.x);
+        }
 
         private void OnScrollValueChanged(Vector2 _)
         {

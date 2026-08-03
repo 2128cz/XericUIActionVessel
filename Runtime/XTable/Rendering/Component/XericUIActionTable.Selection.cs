@@ -70,12 +70,12 @@ namespace XericUI.XTable.Rendering.Component
         internal bool TryGetCellFromTablePoint(Vector2 point, bool clamp, out int row, out int col)
         {
             row = col = -1;
-            if (m_RowHeights == null || m_ColWidths == null || m_RowHeights.Length == 0 || m_ColWidths.Length == 0) return false;
+            if (m_ResolvedRowHeights == null || m_ResolvedColWidths == null || m_ResolvedRowHeights.Length == 0 || m_ResolvedColWidths.Length == 0) return false;
             if (clamp) { point.x = Mathf.Clamp(point.x, 0, Mathf.Max(0, m_TotalWidth - .001f)); point.y = Mathf.Clamp(point.y, 0, Mathf.Max(0, m_TotalHeight - .001f)); }
             else if (point.x < 0 || point.y < 0 || point.x >= m_TotalWidth || point.y >= m_TotalHeight) return false;
-            float cursor = 0; for (col = 0; col < m_ColWidths.Length && point.x >= (cursor += m_ColWidths[col]); col++) { }
-            cursor = 0; for (row = 0; row < m_RowHeights.Length && point.y >= (cursor += m_RowHeights[row]); row++) { }
-            if (row >= m_RowHeights.Length || col >= m_ColWidths.Length) return false;
+            float cursor = 0; for (col = 0; col < m_ResolvedColWidths.Length && point.x >= (cursor += m_ResolvedColWidths[col]); col++) { }
+            cursor = 0; for (row = 0; row < m_ResolvedRowHeights.Length && point.y >= (cursor += m_ResolvedRowHeights[row]); row++) { }
+            if (row >= m_ResolvedRowHeights.Length || col >= m_ResolvedColWidths.Length) return false;
             if (m_TableData != null && m_TableData.TryGetMergeRect(row, col, out int sr, out int sc, out _, out _)) { row = sr; col = sc; }
             return true;
         }
@@ -93,7 +93,7 @@ namespace XericUI.XTable.Rendering.Component
             float freezeWidth = GetColLeftX(Mathf.Clamp(m_FreezeColCount, 0, m_ColWidths.Length));
             float freezeHeight = GetRowTopY(Mathf.Clamp(m_FreezeRowCount, 0, m_RowHeights.Length));
             if (x < freezeWidth || y < freezeHeight) return;
-            float width = rect.width - freezeWidth, height = rect.height - freezeHeight;
+            float width = Mathf.Max(0f, rect.width - freezeWidth), height = Mathf.Max(0f, rect.height - freezeHeight);
             float threshold = Mathf.Min(m_SelectionAutoScrollEdgeThreshold, Mathf.Min(width, height) * .5f);
             float sx = GetAutoScrollSpeed(x - freezeWidth, width, threshold), sy = GetAutoScrollSpeed(y - freezeHeight, height, threshold);
             if (Mathf.Approximately(sx, 0) && Mathf.Approximately(sy, 0)) return;
@@ -106,6 +106,7 @@ namespace XericUI.XTable.Rendering.Component
 
         private float GetAutoScrollSpeed(float point, float length, float threshold)
         {
+            if (threshold <= 0f) return 0f;
             float direction = point < threshold ? -1f : point > length - threshold ? 1f : 0f;
             if (direction == 0f) return 0f;
             float distance = direction < 0f ? point : length - point;

@@ -75,5 +75,11 @@ namespace XericUI.XTable.Mapping
 			int localCol = col % blockSizeX;
 			return localRow * blockSizeX + localCol;
 		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static float ResolveSize(float rawSize, float axisBaseSize)
+		{
+			return rawSize > 0f && rawSize <= 1f ? rawSize * axisBaseSize : rawSize;
+		}
 	}
 }

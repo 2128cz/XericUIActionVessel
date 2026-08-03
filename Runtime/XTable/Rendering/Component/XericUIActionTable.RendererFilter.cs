@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using XericLibrary.Runtime.MacroLibrary;
 using XericUI.XTable.Core;
 using XericUI.XTable.Rendering.Elements;
 #if UNITY_EDITOR
@@ -134,16 +135,16 @@ namespace XericUI.XTable.Rendering.Component
 
             float cellX = GetCellContentX(col);
             float cellY = GetCellContentY(row);
-            float cellW = m_ColWidths[col];
-            float cellH = m_RowHeights[row];
+            float cellW = m_ResolvedColWidths[col];
+            float cellH = m_ResolvedRowHeights[row];
 
             // 合并源：扩展尺寸
             if (TableData.IsMergeSource(row, col, out int mergeRS, out int mergeCS))
             {
-                for (int i = 1; i < mergeCS && col + i < m_ColWidths.Length; i++)
-                    cellW += m_ColWidths[col + i];
-                for (int i = 1; i < mergeRS && row + i < m_RowHeights.Length; i++)
-                    cellH += m_RowHeights[row + i];
+                for (int i = 1; i < mergeCS && col + i < m_ResolvedColWidths.Length; i++)
+                    cellW += m_ResolvedColWidths[col + i];
+                for (int i = 1; i < mergeRS && row + i < m_ResolvedRowHeights.Length; i++)
+                    cellH += m_ResolvedRowHeights[row + i];
             }
 
             int cellId = row * m_ColWidths.Length + col;
@@ -267,6 +268,7 @@ namespace XericUI.XTable.Rendering.Component
             if (m_RowHeights == null || m_ColWidths == null) return;
             if (m_RowHeights.Length == 0 || m_ColWidths.Length == 0) return;
 
+            UpdateResolvedCellSizes();
             CreateBackground();
 
 #if UNITY_EDITOR

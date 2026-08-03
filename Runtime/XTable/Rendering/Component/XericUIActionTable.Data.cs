@@ -18,9 +18,9 @@ namespace XericUI.XTable.Rendering.Component
         {
             // 计入 m_ContentOffset 以匹配单元格在 Content 中的实际渲染位置
             float cellLeft = GetColLeftX(col) + m_ContentOffset;
-            float cellRight = cellLeft + m_ColWidths[col];
+            float cellRight = cellLeft + m_ResolvedColWidths[col];
             float cellTop = GetRowTopY(row) + m_ContentOffset;
-            float cellBottom = cellTop + m_RowHeights[row];
+            float cellBottom = cellTop + m_ResolvedRowHeights[row];
 
             return cellRight > m_VisibleRect.x && cellLeft < m_VisibleRect.xMax &&
                    cellBottom > m_VisibleRect.y && cellTop < m_VisibleRect.yMax;
@@ -43,16 +43,16 @@ namespace XericUI.XTable.Rendering.Component
         private float GetRowTopY(int row)
         {
             float y = 0;
-            for (int i = 0; i < row && i < m_RowHeights.Length; i++)
-                y += m_RowHeights[i];
+            for (int i = 0; i < row && i < m_ResolvedRowHeights.Length; i++)
+                y += m_ResolvedRowHeights[i];
             return y;
         }
 
         private float GetColLeftX(int col)
         {
             float x = 0;
-            for (int i = 0; i < col && i < m_ColWidths.Length; i++)
-                x += m_ColWidths[i];
+            for (int i = 0; i < col && i < m_ResolvedColWidths.Length; i++)
+                x += m_ResolvedColWidths[i];
             return x;
         }
 
@@ -83,13 +83,13 @@ namespace XericUI.XTable.Rendering.Component
         private void RecalculateTotalSize()
         {
             m_TotalWidth = 0;
-            if (m_ColWidths != null)
-                foreach (float w in m_ColWidths)
+            if (m_ResolvedColWidths != null)
+                foreach (float w in m_ResolvedColWidths)
                     m_TotalWidth += w;
 
             m_TotalHeight = 0;
-            if (m_RowHeights != null)
-                foreach (float h in m_RowHeights)
+            if (m_ResolvedRowHeights != null)
+                foreach (float h in m_ResolvedRowHeights)
                     m_TotalHeight += h;
 
             m_ContentOffset = GetCellBorderWidth(m_DefaultStyleNamespace) * 0.5f;
@@ -125,9 +125,9 @@ namespace XericUI.XTable.Rendering.Component
             ec = 0;
 
             float accY = 0;
-            for (int r = 0; r < m_RowHeights.Length; r++)
+            for (int r = 0; r < m_ResolvedRowHeights.Length; r++)
             {
-                float rowBottom = accY + m_RowHeights[r];
+                float rowBottom = accY + m_ResolvedRowHeights[r];
                 if (rowBottom > m_VisibleRect.y && accY < m_VisibleRect.yMax)
                 {
                     if (er == 0 && sr == 0) sr = r;
@@ -139,9 +139,9 @@ namespace XericUI.XTable.Rendering.Component
             }
 
             float accX = 0;
-            for (int c = 0; c < m_ColWidths.Length; c++)
+            for (int c = 0; c < m_ResolvedColWidths.Length; c++)
             {
-                float colRight = accX + m_ColWidths[c];
+                float colRight = accX + m_ResolvedColWidths[c];
                 if (colRight > m_VisibleRect.x && accX < m_VisibleRect.xMax)
                 {
                     if (ec == 0 && sc == 0) sc = c;
@@ -233,7 +233,7 @@ namespace XericUI.XTable.Rendering.Component
                 cells.Add(new XTableQuadtreeCell { Row = r, Col = c, Namespace = ResolveCellNamespace(data) });
             }
 
-            m_Quadtree.Build(m_TotalWidth, m_TotalHeight, m_RowHeights, m_ColWidths, cells, Config.QuadtreeMaxCellsPerNode);
+            m_Quadtree.Build(m_TotalWidth, m_TotalHeight, m_ResolvedRowHeights, m_ResolvedColWidths, cells, Config.QuadtreeMaxCellsPerNode);
             m_QuadtreeDirty = false;
         }
 

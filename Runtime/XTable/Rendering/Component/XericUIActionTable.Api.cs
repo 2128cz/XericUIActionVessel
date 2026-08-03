@@ -339,7 +339,7 @@ namespace XericUI.XTable.Rendering.Component
             => TableData.IsMergeSource(row, col, out rowSpan, out colSpan);
 
         /// <summary>
-        /// 在末尾追加一行，默认行高来自 Config。
+        /// 在末尾追加一行，默认行高来自 Config。尺寸在 (0, 1] 时按 viewport、父级或自身高度比例解析，> 1 时为像素。
         /// 行为：普通调用立即扩展行数组；CheckUpdate 内记录追加，结束时只重建一次。
         /// 建议：循环追加或随后填充新行时使用 CheckUpdate。
         /// </summary>
@@ -367,7 +367,7 @@ namespace XericUI.XTable.Rendering.Component
         }
 
         /// <summary>
-        /// 在末尾追加一列，默认列宽来自 Config。
+        /// 在末尾追加一列，默认列宽来自 Config。尺寸在 (0, 1] 时按 viewport、父级或自身宽度比例解析，> 1 时为像素。
         /// 行为：普通调用立即扩展列数组；CheckUpdate 内记录追加，结束时只重建一次。
         /// 建议：循环追加或随后填充新列时使用 CheckUpdate。
         /// </summary>
@@ -395,7 +395,7 @@ namespace XericUI.XTable.Rendering.Component
         }
 
         /// <summary>
-        /// 设置指定行的高度。
+        /// 设置指定行的高度。尺寸在 (0, 1] 时按 viewport、父级或自身高度比例解析，> 1 时为像素。
         /// 行为：普通调用立即更新布局；CheckUpdate 内延后，最终按命令顺序应用。
         /// 建议：批量调整行高时使用 CheckUpdate。
         /// </summary>
@@ -420,7 +420,7 @@ namespace XericUI.XTable.Rendering.Component
         }
 
         /// <summary>
-        /// 设置指定列的宽度。
+        /// 设置指定列的宽度。尺寸在 (0, 1] 时按 viewport、父级或自身宽度比例解析，> 1 时为像素。
         /// 行为：普通调用立即更新布局；CheckUpdate 内延后，最终按命令顺序应用。
         /// 建议：批量调整列宽时使用 CheckUpdate。
         /// </summary>
@@ -672,6 +672,7 @@ namespace XericUI.XTable.Rendering.Component
                 m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
                 m_PrefabPool = new PrefabPrototypePool(ContentTransform);
                 m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
+                UpdateResolvedCellSizes();
                 RecalculateTotalSize();
                 CreateDefaultSampleData();
                 CreateBackground();
@@ -732,6 +733,7 @@ namespace XericUI.XTable.Rendering.Component
                 m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
                 m_PrefabPool = new PrefabPrototypePool(ContentTransform);
                 m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
+                UpdateResolvedCellSizes();
                 RecalculateTotalSize();
 
                 // 恢复文本数据到新 TableData
@@ -820,6 +822,7 @@ namespace XericUI.XTable.Rendering.Component
                 m_PrefabPool = new PrefabPrototypePool(ContentTransform);
                 m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
                 MarkDirty(TableDirtyType.All);
+                UpdateResolvedCellSizes();
                 RecalculateTotalSize();
                 CreateBackground();
                 CreateViewportRenderer();
@@ -881,6 +884,7 @@ namespace XericUI.XTable.Rendering.Component
             // 写回单元格文本与合并信息
             data.PopulateToTable(this);
 
+            UpdateResolvedCellSizes();
             RecalculateTotalSize();
             RequestRefresh(TableDirtyType.DataChanged | TableDirtyType.LayoutChanged, true);
             SetChildrenVisible(m_ChildrenVisible);

@@ -42,7 +42,8 @@ namespace XericUIEditor.XTable
         private static int s_DragStartCol = -1;
         private static Rect s_TableRect;
         private static float s_XScale, s_YScale;
-        private static float[] s_RowHeights, s_ColWidths;
+        private static float[] s_RawRowHeights, s_RawColWidths;
+        private static float[] s_ResolvedRowHeights, s_ResolvedColWidths;
         private static XericUIActionTable s_ActiveTable;
 
         private static readonly Color s_LabelBg = new Color(0.12f, 0.12f, 0.18f, 0.9f);
@@ -119,8 +120,8 @@ namespace XericUIEditor.XTable
                 if (int.TryParse(newFocus.Substring("XTableColSizeEdit_".Length), out int idx))
                 {
                     s_SizeEditTargetIndex = idx;
-                    s_SizeEditText = s_ColWidths != null && idx < s_ColWidths.Length
-                        ? s_ColWidths[idx].ToString("F0")
+                    s_SizeEditText = s_RawColWidths != null && idx < s_RawColWidths.Length
+                        ? s_RawColWidths[idx].ToString("G")
                         : "";
                 }
             }
@@ -129,8 +130,8 @@ namespace XericUIEditor.XTable
                 if (int.TryParse(newFocus.Substring("XTableRowSizeEdit_".Length), out int idx))
                 {
                     s_SizeEditTargetIndex = idx;
-                    s_SizeEditText = s_RowHeights != null && idx < s_RowHeights.Length
-                        ? s_RowHeights[idx].ToString("F0")
+                    s_SizeEditText = s_RawRowHeights != null && idx < s_RawRowHeights.Length
+                        ? s_RawRowHeights[idx].ToString("G")
                         : "";
                 }
             }
@@ -180,9 +181,12 @@ namespace XericUIEditor.XTable
             // 使用 Content 的 RectTransform 进行定位计算（而非表格组件所在的 ScrollRect 根节点）
             RectTransform tableRt = table.ContentTransform.RectTransform();
             if (tableRt == null) tableRt = table.GetComponent<RectTransform>();
-            float[] rh = table.RowHeights;
-            float[] cw = table.ColWidths;
-            if (rh == null || cw == null || rh.Length == 0 || cw.Length == 0) return;
+            float[] rawRh = table.RowHeights;
+            float[] rawCw = table.ColWidths;
+            float[] rh = table.ResolvedRowHeights;
+            float[] cw = table.ResolvedColWidths;
+            if (rawRh == null || rawCw == null || rh == null || cw == null ||
+                rawRh.Length == 0 || rawCw.Length == 0 || rh.Length == 0 || cw.Length == 0) return;
 
             Vector3[] corners = new Vector3[4];
             tableRt.GetWorldCorners(corners);
@@ -208,8 +212,10 @@ namespace XericUIEditor.XTable
             s_TableRect = tableRect;
             s_XScale = xScale;
             s_YScale = yScale;
-            s_RowHeights = rh;
-            s_ColWidths = cw;
+            s_RawRowHeights = rawRh;
+            s_RawColWidths = rawCw;
+            s_ResolvedRowHeights = rh;
+            s_ResolvedColWidths = cw;
             s_ActiveTable = table;
 
             Handles.BeginGUI();
@@ -241,7 +247,7 @@ namespace XericUIEditor.XTable
             DrawGridLines(rh, cw, tableRect, xScale, yScale);
             DrawSelectionHighlight(rh, cw, tableRect, xScale, yScale, table);
             DrawAddButtons(rh, cw, tableRect, xScale, yScale, table);
-            DrawSizeEditBubble(rh, cw, tableRect, xScale, yScale, table);
+            DrawSizeEditBubble(rawRh, rawCw, rh, cw, tableRect, xScale, yScale, table);
             DrawInputBar(table, tableRect.x, tableRect.y + tableRect.height + MARGIN);
 
             // 非导航状态不处理鼠标/键盘表格操作
@@ -671,7 +677,7 @@ namespace XericUIEditor.XTable
             };
         }
 
-        private static void DrawSizeEditBubble(float[] rh, float[] cw, Rect tr,
+        private static void DrawSizeEditBubble(float[] rawRh, float[] rawCw, float[] rh, float[] cw, Rect tr,
             float xScale, float yScale, XericUIActionTable table)
         {
             int selRow = table.SelectedRow;
@@ -686,7 +692,7 @@ namespace XericUIEditor.XTable
                 float cx = tr.x + SumBefore(cw, selCol) * xScale;
                 float bx = cx + 2f;
                 float by = tr.y - ROW_H - MARGIN - BUBBLE_H - 4f;
-                DrawBubble(table, bx, by, cw[selCol], totalW, isColumn: true, index: selCol);
+                DrawBubble(table, bx, by, rawCw[selCol], totalW, isColumn: true, index: selCol);
             }
 
             // ── 行高气泡：左对齐行标签左侧 ──
@@ -696,7 +702,7 @@ namespace XericUIEditor.XTable
                 float rhScaled = rh[selRow] * yScale;
                 float bx = tr.x - COL_W - MARGIN - totalW - 4f;
                 float by = ry + (rhScaled - BUBBLE_H) / 2f;
-                DrawBubble(table, bx, by, rh[selRow], totalW, isColumn: false, index: selRow);
+                DrawBubble(table, bx, by, rawRh[selRow], totalW, isColumn: false, index: selRow);
             }
 
             // ── 单元格选中时同时显示 ──
@@ -707,7 +713,7 @@ namespace XericUIEditor.XTable
                     float cx = tr.x + SumBefore(cw, selCol) * xScale;
                     float bx = cx + 2f;
                     float by = tr.y - ROW_H - MARGIN - BUBBLE_H - 4f;
-                    DrawBubble(table, bx, by, cw[selCol], totalW, isColumn: true, index: selCol);
+                    DrawBubble(table, bx, by, rawCw[selCol], totalW, isColumn: true, index: selCol);
                 }
 
                 if (selRow < rh.Length)
@@ -716,7 +722,7 @@ namespace XericUIEditor.XTable
                     float rhScaled = rh[selRow] * yScale;
                     float bx = tr.x - COL_W - MARGIN - totalW - 4f;
                     float by = ry + (rhScaled - BUBBLE_H) / 2f;
-                    DrawBubble(table, bx, by, rh[selRow], totalW, isColumn: false, index: selRow);
+                    DrawBubble(table, bx, by, rawRh[selRow], totalW, isColumn: false, index: selRow);
                 }
             }
         }
@@ -1060,8 +1066,8 @@ namespace XericUIEditor.XTable
         {
             float rx = (Event.current.mousePosition.x - tr.x) / xScale;
             float ry = (Event.current.mousePosition.y - tr.y) / yScale;
-            col = IndexFromCoord(rx, s_ColWidths);
-            row = IndexFromCoord(ry, s_RowHeights);
+            col = IndexFromCoord(rx, s_ResolvedColWidths);
+            row = IndexFromCoord(ry, s_ResolvedRowHeights);
 
             // 点击合并覆盖的单元格时，重定向到合并源
             if (row >= 0 && col >= 0 && s_ActiveTable != null)

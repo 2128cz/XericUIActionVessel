@@ -264,6 +264,7 @@ namespace XericUI.XTable.Rendering.Component
             }
 
             // 标记脏并刷新
+            UpdateResolvedCellSizes();
             RecalculateTotalSize();
             RequestRefresh(TableDirtyType.DataChanged | TableDirtyType.LayoutChanged, true);
         }
