@@ -35,8 +35,17 @@ namespace XericUI.XTable.Core
 		#region 对象池
 
 		[Header("对象池")]
-		[Tooltip("通用对象池初始容量")]
-		public int PoolInitialCapacity = 64;
+		[Min(1)]
+		[Tooltip("文本池允许创建的对象总上限")]
+		public int TextPoolMaxCapacity = 256;
+
+		[Min(1)]
+		[Tooltip("图片池允许创建的对象总上限")]
+		public int ImagePoolMaxCapacity = 256;
+
+		[Min(1)]
+		[Tooltip("预制体池允许创建的实例总上限")]
+		public int PrefabPoolMaxCapacity = 256;
 
 		#endregion
 

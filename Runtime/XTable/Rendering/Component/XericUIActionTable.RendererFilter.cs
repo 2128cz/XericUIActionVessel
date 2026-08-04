@@ -261,7 +261,8 @@ namespace XericUI.XTable.Rendering.Component
             if (m_Assembler == null)
             {
                 if (rectTransform != null)
-                    m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+                    m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace,
+                        Config.TextPoolMaxCapacity, Config.ImagePoolMaxCapacity);
                 else return;
             }
 
@@ -322,7 +323,8 @@ namespace XericUI.XTable.Rendering.Component
             if (m_Assembler == null)
             {
                 if (rectTransform != null)
-                    m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
+                    m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace,
+                        Config.TextPoolMaxCapacity, Config.ImagePoolMaxCapacity);
                 else return;
             }
 

@@ -669,8 +669,7 @@ namespace XericUI.XTable.Rendering.Component
                 m_QuadtreeDirty = true;
                 m_StyleNamespaceDirty = true;
 
-                m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
-                m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+                CreatePools();
                 m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
                 UpdateResolvedCellSizes();
                 RecalculateTotalSize();
@@ -730,8 +729,7 @@ namespace XericUI.XTable.Rendering.Component
                 m_QuadtreeDirty = true;
                 m_StyleNamespaceDirty = true;
 
-                m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
-                m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+                CreatePools();
                 m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
                 UpdateResolvedCellSizes();
                 RecalculateTotalSize();
@@ -818,8 +816,7 @@ namespace XericUI.XTable.Rendering.Component
                 m_StyleNamespaceDirty = true;
                 ClearSelection();
 
-                m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
-                m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+                CreatePools();
                 m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
                 MarkDirty(TableDirtyType.All);
                 UpdateResolvedCellSizes();

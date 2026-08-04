@@ -15,13 +15,17 @@ namespace XericUI.XTable.Rendering.Elements
 
         private readonly Dictionary<GameObject, PrefabPool> m_Pools = new();
         private readonly Transform m_Parent;
-        private const int MAX_PREFAB_ITEMS = 256;
+        private readonly int m_MaxCapacity;
         private int m_TotalCreated;
         private const HideFlags POOL_FLAGS = HideFlags.DontSave | HideFlags.HideInHierarchy;
         private static readonly Vector2 AnchorTopLeft = new(0, 1);
         private static readonly Vector2 PivotTopLeft = new(0, 1);
 
-        public PrefabPrototypePool(Transform parent) => m_Parent = parent;
+        public PrefabPrototypePool(Transform parent, int maxCapacity = 256)
+        {
+            m_Parent = parent;
+            m_MaxCapacity = Mathf.Max(1, maxCapacity);
+        }
 
         public GameObject Acquire(GameObject prefab, int cellId, Transform parent = null)
         {
@@ -100,9 +104,9 @@ namespace XericUI.XTable.Rendering.Elements
 
         private GameObject Create(GameObject prefab, Transform parent)
         {
-            if (m_TotalCreated >= MAX_PREFAB_ITEMS)
+            if (m_TotalCreated >= m_MaxCapacity)
             {
-                Debug.LogWarning($"[XericUIActionTable] Prefab 池已达上限 {MAX_PREFAB_ITEMS}，无法分配新实例");
+                Debug.LogWarning($"[XericUIActionTable] Prefab 池已达上限 {m_MaxCapacity}，无法分配新实例");
                 return null;
             }
             GameObject instance = UnityEngine.Object.Instantiate(prefab, parent);

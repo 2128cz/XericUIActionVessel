@@ -217,6 +217,14 @@ namespace XericUI.XTable.Rendering.Component
 
         /// <summary>单元格内容水平内边距（单侧）</summary>
         private float CellPadding => Config.CellHorizontalPadding;
+
+        private void CreatePools()
+        {
+            m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace,
+                Config.TextPoolMaxCapacity, Config.ImagePoolMaxCapacity);
+            m_PrefabPool = new PrefabPrototypePool(ContentTransform, Config.PrefabPoolMaxCapacity);
+        }
+
         /// <summary>单元格内容宽度扣除量</summary>
         private float CellPadding2 => Config.CellHorizontalPadding * 2f;
 
@@ -281,8 +289,7 @@ namespace XericUI.XTable.Rendering.Component
                 }
             }
 
-            m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace);
-            m_PrefabPool = new PrefabPrototypePool(ContentTransform);
+            CreatePools();
             m_ActivePrefabMap = new Dictionary<(int, int), GameObject>();
             UpdateResolvedCellSizes();
             RecalculateTotalSize();

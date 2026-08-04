@@ -22,12 +22,19 @@ namespace XericUIEditor.XTable
         private SerializedProperty m_ColWidthsProp;
         private SerializedProperty m_DefaultStyleNsProp;
         private SerializedProperty m_ScrollRectProp;
+        private SerializedProperty m_ConfigProp;
+        private SerializedProperty m_EnableSelectionAutoScrollProp;
+        private SerializedProperty m_SelectionAutoScrollEdgeThresholdProp;
+        private SerializedProperty m_SelectionAutoScrollMaxSpeedProp;
+        private SerializedProperty m_SelectionAutoScrollAccelerationProp;
 
         internal const string MENU_PATH = "GameObject/Xeric Library/Table/Xeric UI Action Table";
 
         // 折叠状态
         private static bool s_StyleFoldout = true;
         private static bool s_SizeFoldout = true;
+        private static bool s_ConfigFoldout = true;
+        private static bool s_InteractionFoldout = true;
         private static bool s_DebugFoldout;
         private static bool s_DataBrowseFoldout;
 
@@ -42,6 +49,11 @@ namespace XericUIEditor.XTable
             m_ColWidthsProp = serializedObject.FindProperty("m_ColWidths");
             m_DefaultStyleNsProp = serializedObject.FindProperty("m_DefaultStyleNamespace");
             m_ScrollRectProp = serializedObject.FindProperty("m_ScrollRect");
+            m_ConfigProp = serializedObject.FindProperty("m_Config");
+            m_EnableSelectionAutoScrollProp = serializedObject.FindProperty("m_EnableSelectionAutoScroll");
+            m_SelectionAutoScrollEdgeThresholdProp = serializedObject.FindProperty("m_SelectionAutoScrollEdgeThreshold");
+            m_SelectionAutoScrollMaxSpeedProp = serializedObject.FindProperty("m_SelectionAutoScrollMaxSpeed");
+            m_SelectionAutoScrollAccelerationProp = serializedObject.FindProperty("m_SelectionAutoScrollAcceleration");
 
             // 同步表格的 ChildrenVisible 状态到编辑器 toggle
             m_ShowChildren = m_Table.ChildrenVisible;
@@ -82,6 +94,36 @@ namespace XericUIEditor.XTable
                 if (freezeColProp != null)
                     EditorGUILayout.PropertyField(freezeColProp, new GUIContent("冻结列数"));
 
+                EditorGUI.indentLevel--;
+            }
+
+            // ===== 配置 =====
+            EditorGUILayout.Space(4);
+            s_ConfigFoldout = EditorGUILayout.Foldout(s_ConfigFoldout, "配置", true);
+            if (s_ConfigFoldout)
+            {
+                EditorGUI.indentLevel++;
+                if (m_ConfigProp != null)
+                    EditorGUILayout.PropertyField(m_ConfigProp, new GUIContent("表格配置"));
+                if (m_ConfigProp == null || m_ConfigProp.objectReferenceValue == null)
+                    EditorGUILayout.HelpBox("未指定配置资源，将在运行时加载默认配置。", MessageType.Info);
+                EditorGUI.indentLevel--;
+            }
+
+            // ===== 交互 =====
+            EditorGUILayout.Space(4);
+            s_InteractionFoldout = EditorGUILayout.Foldout(s_InteractionFoldout, "交互", true);
+            if (s_InteractionFoldout)
+            {
+                EditorGUI.indentLevel++;
+                if (m_EnableSelectionAutoScrollProp != null)
+                    EditorGUILayout.PropertyField(m_EnableSelectionAutoScrollProp, new GUIContent("启用选择自动滚动"));
+                if (m_SelectionAutoScrollEdgeThresholdProp != null)
+                    EditorGUILayout.PropertyField(m_SelectionAutoScrollEdgeThresholdProp, new GUIContent("自动滚动边缘阈值"));
+                if (m_SelectionAutoScrollMaxSpeedProp != null)
+                    EditorGUILayout.PropertyField(m_SelectionAutoScrollMaxSpeedProp, new GUIContent("自动滚动最大速度"));
+                if (m_SelectionAutoScrollAccelerationProp != null)
+                    EditorGUILayout.PropertyField(m_SelectionAutoScrollAccelerationProp, new GUIContent("自动滚动加速度指数"));
                 EditorGUI.indentLevel--;
             }
 

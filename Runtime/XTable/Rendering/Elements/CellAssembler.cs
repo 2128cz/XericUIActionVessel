@@ -49,13 +49,14 @@ namespace XericUI.XTable.Rendering.Elements
 
 		#region 构造函数与析构
 
-		public CellAssembler(Transform parent, string defaultStyleNamespace = null)
+		public CellAssembler(Transform parent, string defaultStyleNamespace = null, int textPoolMaxCapacity = 256,
+			int imagePoolMaxCapacity = 256)
 		{
 			m_Parent = parent;
 			m_DefaultStyleNamespace = defaultStyleNamespace;
-			m_ImagePool = new SlotCounterPool<PooledImage>(() => CreateImage("cell_img"),
+			m_ImagePool = new SlotCounterPool<PooledImage>(() => CreateImage("cell_img"), imagePoolMaxCapacity,
 				SetImageCounterActive, SetImageCounterInactive);
-			m_TextPool = new SlotCounterPool<PooledText>(() => CreateText("cell_text"),
+			m_TextPool = new SlotCounterPool<PooledText>(() => CreateText("cell_text"), textPoolMaxCapacity,
 				SetTextCounterActive, SetTextCounterInactive);
 		}
 
