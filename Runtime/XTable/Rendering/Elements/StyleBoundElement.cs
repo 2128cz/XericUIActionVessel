@@ -30,6 +30,9 @@ namespace XericUI.XTable.Rendering.Elements
         /// <summary>是否已绑定</summary>
         private bool m_IsBound;
 
+        /// <summary>是否正在注册字段，防止 StyleManager 同步回调导致重复注册。</summary>
+        private bool m_IsBinding;
+
         /// <summary>样式变更时触发（通知表格重绘）</summary>
         public event System.Action OnStyleChangedCallback;
 
@@ -46,6 +49,7 @@ namespace XericUI.XTable.Rendering.Elements
         /// </summary>
         public void Bind(string styleNamespace)
         {
+            if (m_IsBinding && m_StyleNamespace == styleNamespace) return;
             if (m_IsBound) Unbind();
             m_StyleNamespace = styleNamespace;
 
@@ -56,19 +60,33 @@ namespace XericUI.XTable.Rendering.Elements
             if (namespaces == null || !namespaces.Contains(styleNamespace))
                 return;
 
-            // 预注册常用路径
-            RegisterField("/cell/bg/color", OnStyleChanged);
-            RegisterField("/cell/fg/color", OnStyleChanged);
-            RegisterField("/cell/border/top/color", OnStyleChanged);
-            RegisterField("/cell/border/bottom/color", OnStyleChanged);
-            RegisterField("/cell/border/left/color", OnStyleChanged);
-            RegisterField("/cell/border/right/color", OnStyleChanged);
-            RegisterField("/cell/font/size", OnStyleChanged);
-            RegisterField("/cell/font/alignment", OnStyleChanged);
-            RegisterField("/cell/font/richText", OnStyleChanged);
-
+            // 先提交绑定状态。StyleField.Register 可能同步触发外部渲染；若此时仍显示未绑定，
+            // 同一对象会被再次 Bind 并重复注册，最终耗尽调用栈。
             m_IsBound = true;
-            RefreshAll();
+            m_IsBinding = true;
+            try
+            {
+                // 预注册常用路径
+                RegisterField("/cell/bg/color", OnStyleChanged);
+                RegisterField("/cell/fg/color", OnStyleChanged);
+                RegisterField("/cell/border/top/color", OnStyleChanged);
+                RegisterField("/cell/border/bottom/color", OnStyleChanged);
+                RegisterField("/cell/border/left/color", OnStyleChanged);
+                RegisterField("/cell/border/right/color", OnStyleChanged);
+                RegisterField("/cell/font/size", OnStyleChanged);
+                RegisterField("/cell/font/alignment", OnStyleChanged);
+                RegisterField("/cell/font/richText", OnStyleChanged);
+                RefreshAll();
+            }
+            catch
+            {
+                Unbind();
+                throw;
+            }
+            finally
+            {
+                m_IsBinding = false;
+            }
         }
 
         /// <summary>
