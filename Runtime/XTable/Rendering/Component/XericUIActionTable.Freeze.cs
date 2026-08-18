@@ -211,8 +211,11 @@ namespace XericUI.XTable.Rendering.Component
         private void SyncFrozenContainer(RectTransform container, Vector2 position)
         {
             if (container == null) return;
-            container.anchoredPosition = position;
-            container.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+            // 偏移 m_ContentOffset（边框半宽）以对齐 Content 中单元格的偏移，
+            // 避免冻结区域左侧/顶部的 1px 边框因 0.5px 坐标差被 viewport 裁切。
+            float pad = m_ContentOffset * 2f;
+            container.anchoredPosition = position + new Vector2(m_ContentOffset, -m_ContentOffset);
+            container.sizeDelta = new Vector2(m_TotalWidth + pad, m_TotalHeight + pad);
         }
     }
 }
