@@ -221,7 +221,8 @@ namespace XericUI.XTable.Rendering.Component
         private void CreatePools()
         {
             m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace,
-                Config.TextPoolMaxCapacity, Config.ImagePoolMaxCapacity);
+				Config.TextPoolMaxCapacity, Config.ImagePoolMaxCapacity,
+				Config.TextPoolRouteBucketCount, Config.ImagePoolRouteBucketCount);
             m_PrefabPool = new PrefabPrototypePool(ContentTransform, Config.PrefabPoolMaxCapacity);
         }
 

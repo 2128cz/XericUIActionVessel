@@ -50,14 +50,14 @@ namespace XericUI.XTable.Rendering.Elements
 		#region 构造函数与析构
 
 		public CellAssembler(Transform parent, string defaultStyleNamespace = null, int textPoolMaxCapacity = 256,
-			int imagePoolMaxCapacity = 256)
+			int imagePoolMaxCapacity = 256, int textPoolRouteBucketCount = 256, int imagePoolRouteBucketCount = 256)
 		{
 			m_Parent = parent;
 			m_DefaultStyleNamespace = defaultStyleNamespace;
 			m_ImagePool = new SlotCounterPool<PooledImage>(() => CreateImage("cell_img"), imagePoolMaxCapacity,
-				SetImageCounterActive, SetImageCounterInactive);
+				SetImageCounterActive, SetImageCounterInactive, imagePoolRouteBucketCount);
 			m_TextPool = new SlotCounterPool<PooledText>(() => CreateText("cell_text"), textPoolMaxCapacity,
-				SetTextCounterActive, SetTextCounterInactive);
+				SetTextCounterActive, SetTextCounterInactive, textPoolRouteBucketCount);
 		}
 
 		/// <summary>彻底销毁所有池对象。</summary>
@@ -175,13 +175,13 @@ namespace XericUI.XTable.Rendering.Elements
 		/// <summary>解除指定 Image 的槽位绑定；显隐仅在所属 Counter 完整归还时变更。</summary>
 		public void ReleaseImage(PooledImage item)
 		{
-			if (item != null) m_ImagePool.ReleaseCell(item.CellId);
+			if (item != null) m_ImagePool.ReleaseByObject(item);
 		}
 
 		/// <summary>解除指定 Text 的槽位绑定；显隐仅在所属 Counter 完整归还时变更。</summary>
 		public void ReleaseText(PooledText item)
 		{
-			if (item != null) m_TextPool.ReleaseCell(item.CellId);
+			if (item != null) m_TextPool.ReleaseByObject(item);
 		}
 
 		private void SetImageCounterActive(IReadOnlyList<PooledImage> items)

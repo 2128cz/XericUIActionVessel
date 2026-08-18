@@ -59,6 +59,13 @@ namespace XericUI.XTable.Rendering.Elements
             }
         }
 
+        public bool IsInstanceOfPrefab(GameObject instance, GameObject prefab)
+        {
+            if (instance == null || prefab == null) return false;
+            return m_Pools.TryGetValue(prefab, out PrefabPool pool)
+                   && pool.ActiveSlots.ContainsValue(instance);
+        }
+
         public bool Release(GameObject instance, Action<GameObject> beforeRelease = null)
         {
             if (instance == null) return false;

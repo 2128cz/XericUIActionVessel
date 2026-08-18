@@ -1,5 +1,6 @@
 using UnityEngine;
 using XericUI.XTable.Rendering.Elements;
+using XericLibrary.Runtime.MacroLibrary;
 
 namespace XericUI.XTable.Rendering.Component
 {

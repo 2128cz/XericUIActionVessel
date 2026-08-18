@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using XericUI.XTable.Core;
+using XericLibrary.Runtime.MacroLibrary;
 
 namespace XericUI.XTable.Rendering.Component
 {

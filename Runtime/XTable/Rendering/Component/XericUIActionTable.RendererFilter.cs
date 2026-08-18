@@ -16,6 +16,7 @@ namespace XericUI.XTable.Rendering.Component
         #region 增量渲染追踪
 
         [NonSerialized] private HashSet<(int, int)> m_LastRenderedCells = new();
+        [NonSerialized] private HashSet<(int, int)> m_VisibleCellsScratch = new();
         [NonSerialized] private Dictionary<(int, int), CellTrackedObjs> m_CellTracked = new();
 
         /// <summary>可复用列表，避免每帧分配 GC</summary>
@@ -40,10 +41,21 @@ namespace XericUI.XTable.Rendering.Component
         private void ReleaseTrackedCell(int row, int col)
         {
             var key = (row, col);
-            if (!m_CellTracked.TryGetValue(key, out var objs)) return;
-            m_Assembler?.ReleaseText(objs.CellText);
-            m_Assembler?.ReleaseImage(objs.CellImage);
-            m_CellTracked.Remove(key);
+            if (m_CellTracked.TryGetValue(key, out var objs))
+            {
+                m_Assembler?.ReleaseText(objs.CellText);
+                m_Assembler?.ReleaseImage(objs.CellImage);
+                m_CellTracked.Remove(key);
+            }
+            ReleasePrefabCell(row, col);
+        }
+
+        private void ReleasePrefabCell(int row, int col)
+        {
+            var key = (row, col);
+            if (m_ActivePrefabMap == null || !m_ActivePrefabMap.TryGetValue(key, out var instance)) return;
+            m_PrefabPool?.Release(instance, TableData.GetCell(row, col)?.OnPrefabRelease);
+            m_ActivePrefabMap.Remove(key);
         }
 
         private void ReleaseAllTrackedCells()
@@ -148,6 +160,8 @@ namespace XericUI.XTable.Rendering.Component
             }
 
             int cellId = row * m_ColWidths.Length + col;
+            var key = (row, col);
+            m_CellTracked.TryGetValue(key, out var previousObjs);
             var objs = new CellTrackedObjs();
 
             // ── 单元格内容 ──
@@ -167,8 +181,16 @@ namespace XericUI.XTable.Rendering.Component
                 }
             }
 
-            m_CellTracked[(row, col)] = objs;
-            m_LastRenderedCells.Add((row, col));
+            if (previousObjs.CellText != null && previousObjs.CellText != objs.CellText)
+                m_Assembler.ReleaseText(previousObjs.CellText);
+            if (previousObjs.CellImage != null && previousObjs.CellImage != objs.CellImage)
+                m_Assembler.ReleaseImage(previousObjs.CellImage);
+
+            if (objs.CellText != null || objs.CellImage != null)
+                m_CellTracked[key] = objs;
+            else
+                m_CellTracked.Remove(key);
+            m_LastRenderedCells.Add(key);
         }
 
         private void RenderCellText(int cellId, XTableCellData data,
@@ -219,6 +241,12 @@ namespace XericUI.XTable.Rendering.Component
             GameObject instance = null;
             bool wasActive = m_ActivePrefabMap != null
                              && m_ActivePrefabMap.TryGetValue(key, out instance);
+            if (wasActive && !m_PrefabPool.IsInstanceOfPrefab(instance, data.Prefab))
+            {
+                m_PrefabPool.Release(instance, TableData.GetCell(row, col)?.OnPrefabRelease);
+                m_ActivePrefabMap.Remove(key);
+                wasActive = false;
+            }
             if (!wasActive)
                 instance = m_PrefabPool.Acquire(data.Prefab, cellId);
             if (instance == null) return;
@@ -262,7 +290,8 @@ namespace XericUI.XTable.Rendering.Component
             {
                 if (rectTransform != null)
                     m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace,
-                        Config.TextPoolMaxCapacity, Config.ImagePoolMaxCapacity);
+                        Config.TextPoolMaxCapacity, Config.ImagePoolMaxCapacity,
+                        Config.TextPoolRouteBucketCount, Config.ImagePoolRouteBucketCount);
                 else return;
             }
 
@@ -293,16 +322,20 @@ namespace XericUI.XTable.Rendering.Component
             // 清理孤立子对象
             CleanOrphanChildren();
 
-            // 渲染所有可见单元格
+            // 同步主区可见集合：只释放不再可见的绑定，保留仍可见单元格的路由归属。
 #if UNITY_EDITOR
             bool editorMode = !Application.isPlaying;
 #else
             bool editorMode = false;
 #endif
             string ns = m_DefaultStyleNamespace;
-            ComputeVisibleCellsInto(m_LastRenderedCells);
-            foreach (var (r, c) in m_LastRenderedCells)
-                RenderCellContent(r, c, ns, editorMode);
+            ComputeVisibleCellsInto(m_VisibleCellsScratch);
+            foreach (var cell in m_LastRenderedCells)
+                if (!m_VisibleCellsScratch.Contains(cell))
+                    ReleaseTrackedCell(cell.Item1, cell.Item2);
+            foreach (var cell in m_VisibleCellsScratch)
+                RenderCellContent(cell.Item1, cell.Item2, ns, editorMode);
+            (m_LastRenderedCells, m_VisibleCellsScratch) = (m_VisibleCellsScratch, m_LastRenderedCells);
 
             // 主 Content 已先渲染，冻结区随后复用其释放的对象；边框按区域最后提交。
             RenderFrozenCells(true);
@@ -324,7 +357,8 @@ namespace XericUI.XTable.Rendering.Component
             {
                 if (rectTransform != null)
                     m_Assembler = new CellAssembler(ContentTransform, m_DefaultStyleNamespace,
-                        Config.TextPoolMaxCapacity, Config.ImagePoolMaxCapacity);
+                        Config.TextPoolMaxCapacity, Config.ImagePoolMaxCapacity,
+                        Config.TextPoolRouteBucketCount, Config.ImagePoolRouteBucketCount);
                 else return;
             }
 
@@ -347,24 +381,24 @@ namespace XericUI.XTable.Rendering.Component
 
             // 选区由固定 Overlay 绘制，选择变化无需回收或重绘单元格内容。
 
-            // 1. 计算新一帧的可见单元格（滚动路径用简单范围遍历，避免四叉树/分配开销）
-            var newVisible = new HashSet<(int, int)>();
-            ComputeVisibleCellsScrollInto(newVisible);
+            // 1. 计算新一帧的可见单元格（滚动路径用简单范围遍历）。
+            ComputeVisibleCellsScrollInto(m_VisibleCellsScratch);
 
-            // 2. 离屏单元格保持其绑定，供后续重绘直接复用。
+            // 2. 先释放离屏单元格的 tracked 槽位与预制体实例；Counter 仅在全部槽位释放后整体归还。
+            foreach (var cell in m_LastRenderedCells)
+                if (!m_VisibleCellsScratch.Contains(cell))
+                    ReleaseTrackedCell(cell.Item1, cell.Item2);
 
-            // 3. 渲染单元格：选区变更时全量重渲所有可见单元格，否则仅新进入的
-            foreach (var cell in newVisible)
-            {
+            // 3. 仅渲染新进入的单元格。
+            foreach (var cell in m_VisibleCellsScratch)
                 if (!m_LastRenderedCells.Contains(cell))
                     RenderCellContent(cell.Item1, cell.Item2, ns, editorMode);
-            }
 
             // 冻结列、冻结行与左上角在 Content 后更新，并复用同一全局对象池。
             RenderFrozenCells(false);
 
-            // 5. 交换：将 newVisible 作为下一帧的比较基准
-            (m_LastRenderedCells, newVisible) = (newVisible, m_LastRenderedCells);
+            // 5. 交换：scratch 不作为 Compute 输出前保留旧集合。
+            (m_LastRenderedCells, m_VisibleCellsScratch) = (m_VisibleCellsScratch, m_LastRenderedCells);
 
             m_DirtyFlag.ClearFlags(refreshedFlags & (TableDirtyType.ScrollChanged | TableDirtyType.SelectionChanged));
             OnTableRefreshed?.Invoke();

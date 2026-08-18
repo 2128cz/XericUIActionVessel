@@ -47,6 +47,14 @@ namespace XericUI.XTable.Core
 		[Tooltip("预制体池允许创建的实例总上限")]
 		public int PrefabPoolMaxCapacity = 256;
 
+		[Min(1)]
+		[Tooltip("文本池 cellId 路由桶数量")]
+		public int TextPoolRouteBucketCount = 256;
+
+		[Min(1)]
+		[Tooltip("图片池 cellId 路由桶数量")]
+		public int ImagePoolRouteBucketCount = 256;
+
 		#endregion
 
 		#region 样式回退值

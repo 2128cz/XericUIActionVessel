@@ -30,10 +30,9 @@ namespace XericUI.XTable.Rendering.Elements
 
 		#region 字段
 
-		/// <summary>cellId 路由桶数量。</summary>
-		private const int ROUTE_BUCKET_COUNT = 256;
+		private const int DEFAULT_ROUTE_BUCKET_COUNT = 256;
 
-		private readonly SlotCounter[] m_Counters = new SlotCounter[ROUTE_BUCKET_COUNT];
+		private readonly SlotCounter[] m_Counters;
 		private readonly int m_MaxCreatedCount;
 		private readonly Stack<SlotCounter> m_StandbyCounters = new Stack<SlotCounter>();
 		private readonly Func<T> m_Factory;
@@ -43,16 +42,31 @@ namespace XericUI.XTable.Rendering.Elements
 
 		/// <summary>已创建对象总数（只读）</summary>
 		public int CreatedCount => m_CreatedCount;
+		public int MaxCreatedCount => m_MaxCreatedCount;
+		public int RouteBucketCount => m_Counters.Length;
+		public int ActiveCounterCount
+		{
+			get
+			{
+				int count = 0;
+				for (int i = 0; i < m_Counters.Length; i++)
+					if (m_Counters[i] != null) count++;
+				return count;
+			}
+		}
+		public bool IsPoolFull => m_CreatedCount >= m_MaxCreatedCount;
 
 		#endregion
 
 		#region 构造
 
 		public SlotCounterPool(Func<T> factory, int maxCreatedCount = 256,
-			Action<IReadOnlyList<T>> onCounterBorrowed = null, Action<IReadOnlyList<T>> onCounterReturned = null)
+			Action<IReadOnlyList<T>> onCounterBorrowed = null, Action<IReadOnlyList<T>> onCounterReturned = null,
+			int routeBucketCount = DEFAULT_ROUTE_BUCKET_COUNT)
 		{
 			m_Factory = factory ?? throw new ArgumentNullException(nameof(factory));
 			m_MaxCreatedCount = Mathf.Max(1, maxCreatedCount);
+			m_Counters = new SlotCounter[Mathf.Max(1, routeBucketCount)];
 			m_OnCounterBorrowed = onCounterBorrowed;
 			m_OnCounterReturned = onCounterReturned;
 		}
@@ -159,7 +173,7 @@ namespace XericUI.XTable.Rendering.Elements
 		{
 			if (pooledObject == null) return false;
 
-			for (int ci = 0; ci < ROUTE_BUCKET_COUNT; ci++)
+			for (int ci = 0; ci < m_Counters.Length; ci++)
 			{
 				var counter = m_Counters[ci];
 				if (counter == null) continue;
@@ -176,7 +190,7 @@ namespace XericUI.XTable.Rendering.Elements
 		/// <summary>解除全部槽位绑定，并将所有计数器整体归还待命栈。</summary>
 		public void ReleaseAllBindings()
 		{
-			for (int ci = 0; ci < ROUTE_BUCKET_COUNT; ci++)
+			for (int ci = 0; ci < m_Counters.Length; ci++)
 			{
 				var counter = m_Counters[ci];
 				if (counter == null) continue;
@@ -192,7 +206,7 @@ namespace XericUI.XTable.Rendering.Elements
 		{
 			if (beforeRelease != null)
 			{
-				for (int ci = 0; ci < ROUTE_BUCKET_COUNT; ci++)
+				for (int ci = 0; ci < m_Counters.Length; ci++)
 				{
 					var counter = m_Counters[ci];
 					if (counter == null) continue;
@@ -208,7 +222,7 @@ namespace XericUI.XTable.Rendering.Elements
 		{
 			if (destroyFunc == null) return;
 			var destroyedCounters = new HashSet<SlotCounter>();
-			for (int ci = 0; ci < ROUTE_BUCKET_COUNT; ci++)
+			for (int ci = 0; ci < m_Counters.Length; ci++)
 			{
 				var counter = m_Counters[ci];
 				if (counter != null) destroyedCounters.Add(counter);
@@ -221,10 +235,10 @@ namespace XericUI.XTable.Rendering.Elements
 			m_CreatedCount = 0;
 		}
 
-		private static int GetRouteIndex(int cellId)
+		private int GetRouteIndex(int cellId)
 		{
-			int index = cellId % ROUTE_BUCKET_COUNT;
-			return index < 0 ? index + ROUTE_BUCKET_COUNT : index;
+			int index = cellId % m_Counters.Length;
+			return index < 0 ? index + m_Counters.Length : index;
 		}
 
 		private void ReturnCounter(int index, SlotCounter counter)

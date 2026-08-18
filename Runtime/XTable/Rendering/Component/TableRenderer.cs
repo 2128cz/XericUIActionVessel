@@ -19,6 +19,7 @@ namespace XericUI.XTable.Rendering.Component
         private readonly Transform m_Parent;
         private readonly Dictionary<(int, int), Tracked> m_Tracked = new();
         private readonly HashSet<(int, int)> m_Rendered = new();
+        private readonly HashSet<(int, int)> m_Target = new();
         private readonly Dictionary<Texture2D, Sprite> m_SpriteCache = new();
         private GameObject m_BackgroundGo;
 
@@ -90,27 +91,51 @@ namespace XericUI.XTable.Rendering.Component
             sc = Mathf.Max(sc, StartCol);
             er = Mathf.Min(er, EndRow > 0 ? EndRow : rows.Length);
             ec = Mathf.Min(ec, EndCol > 0 ? EndCol : cols.Length);
-            if (sr >= er || sc >= ec) return;
 
-            var target = new HashSet<(int, int)>();
+            m_Target.Clear();
+            if (sr >= er || sc >= ec)
+            {
+                ReleaseAll();
+                return;
+            }
             for (int r = sr; r < er; r++)
             for (int c = sc; c < ec; c++)
-                target.Add((r, c));
+                m_Target.Add((r, c));
 
-            foreach (var cell in target)
+            foreach (var cell in m_Rendered)
+                if (!m_Target.Contains(cell))
+                    ReleaseCell(cell.Item1, cell.Item2);
+
+            foreach (var cell in m_Target)
                 if (fullRefresh || !m_Rendered.Contains(cell))
                     RenderCell(cell.Item1, cell.Item2, rows, cols, editorMode);
 
             m_Rendered.Clear();
-            foreach (var cell in target) m_Rendered.Add(cell);
+            foreach (var cell in m_Target) m_Rendered.Add(cell);
         }
 
         public void ReleaseAll()
         {
-            foreach (var pair in m_Tracked)
-                ReleaseTracked(pair.Value);
+            foreach (var cell in m_Rendered)
+                ReleaseCell(cell.Item1, cell.Item2);
             m_Tracked.Clear();
             m_Rendered.Clear();
+            m_Target.Clear();
+        }
+
+        private void ReleaseCell(int row, int col)
+        {
+            var key = (row, col);
+            if (m_Tracked.TryGetValue(key, out var tracked))
+            {
+                ReleaseTracked(tracked);
+                m_Tracked.Remove(key);
+            }
+            if (ActivePrefabMap != null && ActivePrefabMap.TryGetValue(key, out var instance))
+            {
+                PrefabPool?.Release(instance, GetTableData?.Invoke()?.GetCell(row, col)?.OnPrefabRelease);
+                ActivePrefabMap.Remove(key);
+            }
         }
 
         private void ReleaseTracked(Tracked tracked)
@@ -136,6 +161,8 @@ namespace XericUI.XTable.Rendering.Component
             }
 
             int cellId = row * cols.Length + col;
+            var key = (row, col);
+            m_Tracked.TryGetValue(key, out var previousTracked);
             var tracked = new Tracked();
             var cell = data?.GetCell(row, col);
             if (cell != null)
@@ -170,10 +197,16 @@ namespace XericUI.XTable.Rendering.Component
                 }
                 else if (cell.ContentType == CellContentType.Prefab && cell.Prefab != null && PrefabPool != null)
                 {
-                    var key = (row, col);
+                    key = (row, col);
                     GameObject activePrefab = null;
                     bool wasActive = ActivePrefabMap != null
                         && ActivePrefabMap.TryGetValue(key, out activePrefab);
+                    if (wasActive && !PrefabPool.IsInstanceOfPrefab(activePrefab, cell.Prefab))
+                    {
+                        PrefabPool.Release(activePrefab, cell.OnPrefabRelease);
+                        ActivePrefabMap.Remove(key);
+                        wasActive = false;
+                    }
                     var prefab = wasActive ? activePrefab : PrefabPool.Acquire(cell.Prefab, cellId, m_Parent);
                     if (prefab != null)
                     {
@@ -187,7 +220,15 @@ namespace XericUI.XTable.Rendering.Component
                     }
                 }
             }
-            m_Tracked[(row, col)] = tracked;
+            if (previousTracked.Text != null && previousTracked.Text != tracked.Text)
+                Assembler.ReleaseText(previousTracked.Text);
+            if (previousTracked.Image != null && previousTracked.Image != tracked.Image)
+                Assembler.ReleaseImage(previousTracked.Image);
+
+            if (tracked.Text != null || tracked.Image != null)
+                m_Tracked[key] = tracked;
+            else
+                m_Tracked.Remove(key);
         }
 
         private Sprite GetSprite(Texture2D texture)
