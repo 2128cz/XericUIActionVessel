@@ -33,7 +33,8 @@ namespace XericUI.XTable.Rendering.Component
         {
             if (!m_Dragging) return;
             m_Dragging = false;
-            m_Table?.EndSelection();
+            // 用 Unity 判空而非 ?.：表格可能已被销毁（“假 null”）。
+            if (m_Table != null) m_Table.EndSelection();
         }
     }
 }

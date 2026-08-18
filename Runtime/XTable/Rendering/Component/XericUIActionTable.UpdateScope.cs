@@ -106,7 +106,8 @@ namespace XericUI.XTable.Rendering.Component
             {
                 if (m_Disposed) return;
                 m_Disposed = true;
-                m_Table?.EndCheckUpdate(m_Token);
+                // 用 Unity 判空而非 ?.：表格可能已被外部销毁（“假 null”），?. 仍会调用其方法。
+                if (m_Table != null) m_Table.EndCheckUpdate(m_Token);
                 m_Table = null;
             }
         }
