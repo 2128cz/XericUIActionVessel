@@ -36,7 +36,7 @@ namespace XericUI.XChart
             Initialize();
         }
 
-        private void OnEnable()
+        protected virtual void OnEnable()
         {
             if (!m_IsInitialized) Initialize();
         }

@@ -1,5 +1,6 @@
 using UnityEngine;
 using XericLibrary.Runtime.UIGraph;
+using UIPrimitiveType = XericLibrary.Runtime.UIGraph.PrimitiveType;
 
 namespace XericUI.XChart.Pseudo3D
 {
@@ -17,7 +18,7 @@ namespace XericUI.XChart.Pseudo3D
         // ── 全局形状参数 ──────────────────────────────────────────
 
         /// <summary>图元类型（多边形 / 矩形）</summary>
-        public PrimitiveType pointType = PrimitiveType.Polygon;
+        public UIPrimitiveType pointType = UIPrimitiveType.Polygon;
 
         /// <summary>尺寸模式</summary>
         public SizeMode sizeMode = SizeMode.InscribedCircle;

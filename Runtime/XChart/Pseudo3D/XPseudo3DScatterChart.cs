@@ -1,5 +1,6 @@
 using UnityEngine;
 using XericLibrary.Runtime.UIGraph;
+using PrimitiveType = XericLibrary.Runtime.UIGraph.PrimitiveType;
 
 namespace XericUI.XChart.Pseudo3D
 {
