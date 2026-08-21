@@ -17,6 +17,7 @@ namespace XericUI.XTable.Rendering.Component
 
         public void Configure(XericUIActionTable table, int rowStart, int rowEnd, int colStart, int colEnd)
         {
+            if (table == null || this == null) return;
             m_Table = table;
             m_RowStart = rowStart;
             m_RowEnd = rowEnd;
@@ -35,7 +36,11 @@ namespace XericUI.XTable.Rendering.Component
 
         public void RefreshVisual()
         {
+            // 防御：覆盖层自身可能已被销毁（“假 null”），此处的 Unity == 判空直接拦截，
+            // 防止继续走到 GetComponent 原生层抛 NullReferenceException。
+            if (this == null) return;
             EnsureVisuals();
+            if (m_Fill == null) return;
             if (m_Table == null || !m_Table.SelectionHandle.HasSelection || m_RowStart >= m_RowEnd || m_ColStart >= m_ColEnd)
             {
                 m_Fill.gameObject.SetActive(false);
@@ -63,7 +68,11 @@ namespace XericUI.XTable.Rendering.Component
 
         private void EnsureVisuals()
         {
+            if (this == null) return;
+            // Image 组件理论上由 RequireComponent 保证，但外部代码可能移除它；
+            // GetComponent 缺失时返回 null，直接补一个，避免 input.color 空引用。
             var input = GetComponent<Image>();
+            if (input == null) input = gameObject.AddComponent<Image>();
             input.color = Color.clear;
             input.raycastTarget = false;
             for (int i = transform.childCount - 1; i >= 0; i--)

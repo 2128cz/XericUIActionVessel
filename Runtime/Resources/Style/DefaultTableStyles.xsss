@@ -40,7 +40,7 @@ cell/font/ {
   size = 14:System.Int32 @Desc:默认字体大小
   alignment = MiddleCenter:UnityEngine.TextAnchor @Desc:默认文本对齐
   richText = true:System.Boolean @Desc:是否启用富文本
-  fontAsset = guid:68dace674a028544187e7ffe55cdae8b:TMPro.TMP_FontAsset:TMPro.TMP_FontAsset @Desc:字体资源 @ResourceSoftReference:Packages/com.lrss3.xericuiactionvessel/Runtime/Font/SourceHanSansSC-Regular-2 SDF.asset
+  #fontAsset = guid:68dace674a028544187e7ffe55cdae8b:TMPro.TMP_FontAsset:TMPro.TMP_FontAsset @Desc:字体资源 @ResourceSoftReference:Packages/com.lrss3.xericuiactionvessel/Runtime/Font/SourceHanSansSC-Regular-2 SDF.asset
 }
 
 cell/default/ {

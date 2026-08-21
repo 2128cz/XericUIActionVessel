@@ -172,7 +172,10 @@ namespace XericUI.XTable.Rendering.Component
         private XTableSelectionOverlay CreateOrUpdateSelectionOverlay(Transform parent, XTableSelectionOverlay overlay,
             int rowStart, int rowEnd, int colStart, int colEnd, string name)
         {
-            if (parent == null) return overlay;
+            // 父容器已销毁：旧引用是“假 null”，直接返回 null 让调用方清空字段，
+            // 避免把已销毁引用写回字段后在 RefreshSelectionOverlays 中崩溃。
+            if (parent == null) return null;
+            // Unity 的 == 能识别已销毁覆盖层的“假 null”，此处会正确重建。
             if (overlay == null)
             {
                 var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Image), typeof(XTableSelectionOverlay));
@@ -180,6 +183,7 @@ namespace XericUI.XTable.Rendering.Component
                 go.transform.SetParent(parent, false);
                 overlay = go.GetComponent<XTableSelectionOverlay>();
             }
+            if (overlay == null) return null;
             // Overlay 必须处于当前区域最上层，才能先于边框和其他 Graphic 接收 PointerDown/Drag。
             overlay.Configure(this, rowStart, rowEnd, colStart, colEnd);
             overlay.transform.SetAsLastSibling();
@@ -188,10 +192,12 @@ namespace XericUI.XTable.Rendering.Component
 
         private void RefreshSelectionOverlays()
         {
-            m_NormalSelectionOverlay?.RefreshVisual();
-            m_FrozenColumnSelectionOverlay?.RefreshVisual();
-            m_FrozenRowSelectionOverlay?.RefreshVisual();
-            m_FrozenCornerSelectionOverlay?.RefreshVisual();
+            // 注意：不能用 ?. —— C# 的 ?. 只检查托管 null，识别不了 Unity 已销毁对象的“假 null”；
+            // 对已销毁的覆盖层调用 RefreshVisual 会在 GetComponent 原生层抛 NullReferenceException。
+            if (m_NormalSelectionOverlay != null) m_NormalSelectionOverlay.RefreshVisual();
+            if (m_FrozenColumnSelectionOverlay != null) m_FrozenColumnSelectionOverlay.RefreshVisual();
+            if (m_FrozenRowSelectionOverlay != null) m_FrozenRowSelectionOverlay.RefreshVisual();
+            if (m_FrozenCornerSelectionOverlay != null) m_FrozenCornerSelectionOverlay.RefreshVisual();
         }
 
         private void SyncFrozenContainers()
@@ -206,8 +212,11 @@ namespace XericUI.XTable.Rendering.Component
         private void SyncFrozenContainer(RectTransform container, Vector2 position)
         {
             if (container == null) return;
-            container.anchoredPosition = position;
-            container.sizeDelta = new Vector2(m_TotalWidth, m_TotalHeight);
+            // 偏移 m_ContentOffset（边框半宽）以对齐 Content 中单元格的偏移，
+            // 避免冻结区域左侧/顶部的 1px 边框因 0.5px 坐标差被 viewport 裁切。
+            float pad = m_ContentOffset * 2f;
+            container.anchoredPosition = position + new Vector2(m_ContentOffset, -m_ContentOffset);
+            container.sizeDelta = new Vector2(m_TotalWidth + pad, m_TotalHeight + pad);
         }
     }
 }
