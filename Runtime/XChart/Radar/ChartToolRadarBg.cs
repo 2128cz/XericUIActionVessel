@@ -119,7 +119,6 @@ namespace XericUI.XChart.Radar
             var labelsObj = CreateChild("Labels");
             LabelsRoot = labelsObj;
 
-            SetVisible(true);
         }
 
         // ── 标记脏 ────────────────────────────────────────────────
@@ -281,7 +280,7 @@ namespace XericUI.XChart.Radar
 
             for (int i = 0; i < count; i++)
             {
-                var labelObj = new GameObject($"Label_{i}");
+                var labelObj = new GameObject($"Label_{i}", typeof(RectTransform));
                 labelObj.transform.SetParent(LabelsRoot, false);
                 labelObj.hideFlags = CurrentFlags;
 

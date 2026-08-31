@@ -275,11 +275,10 @@ namespace XericUI.XChart.Pseudo3D
                 if (ShowGridLines)
                 {
                     DrawGridLines();
-                    GridRenderer.RootObject.SetActive(true);
                 }
                 else
                 {
-                    GridRenderer.RootObject.SetActive(false);
+                    GridRenderer.ClearAll();
                 }
             }
         }

@@ -70,8 +70,8 @@ namespace XericUI.XChart.Radar
 
         private XChartRadarDataModel m_DataModel = new XChartRadarDataModel();
 
-        /// <summary>数据模型（只读）</summary>
-        public XChartRadarDataModel DataModel => m_DataModel;
+        /// <summary>雷达数据模型（只读）</summary>
+        public XChartRadarDataModel RadarDataModel => m_DataModel;
 
         // ── 预置颜色轮（用于自动分配颜色） ────────────────────────
 
@@ -208,6 +208,10 @@ namespace XericUI.XChart.Radar
         public void SetDimensions(params string[] dimensionNames)
         {
             m_DataModel.SetDimensions(dimensionNames);
+            var dimensions = new System.Collections.Generic.List<XChartDimensionDefinition>(dimensionNames.Length);
+            for (int i = 0; i < dimensionNames.Length; i++)
+                dimensions.Add(new XChartDimensionDefinition($"radar_{i}", dimensionNames[i], XChartDimensionKind.Number));
+            DataModel.SetDimensions(dimensions);
             // 由 Update 自动同步
         }
 
@@ -222,12 +226,14 @@ namespace XericUI.XChart.Radar
         {
             Color color = s_ColorWheel[m_DataModel.SeriesCount % s_ColorWheel.Length];
             m_DataModel.AddSeries(name, values, color, m_DefaultLineWidth);
+            DataModel.TryAddRecord(m_DataModel.SeriesCount, values, new[] { name });
         }
 
         /// <summary>添加一个数据系列（指定颜色）</summary>
         public void AddSeries(string name, float[] values, Color color, float lineWidth = 2f)
         {
             m_DataModel.AddSeries(name, values, color, lineWidth);
+            DataModel.TryAddRecord(m_DataModel.SeriesCount, values, new[] { name });
         }
 
         /// <summary>批量设置数据系列</summary>

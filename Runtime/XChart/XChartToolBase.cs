@@ -79,13 +79,23 @@ namespace XericUI.XChart
 
         protected RectTransform CreateChild(string childName)
         {
-            var child = new GameObject(childName);
+            var child = new GameObject(childName, typeof(RectTransform));
             child.transform.SetParent(RootTransform, false);
             child.hideFlags = CurrentFlags;
 
             var rt = child.GetComponent<RectTransform>();
             if (rt == null) rt = child.AddComponent<RectTransform>();
             return rt;
+        }
+
+        protected RectTransform CreateStretchChild(string childName)
+        {
+            var child = CreateChild(childName);
+            child.anchorMin = Vector2.zero;
+            child.anchorMax = Vector2.one;
+            child.offsetMin = Vector2.zero;
+            child.offsetMax = Vector2.zero;
+            return child;
         }
 
         protected T CreateChildComponent<T>(string childName) where T : Component

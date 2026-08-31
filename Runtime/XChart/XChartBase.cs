@@ -15,9 +15,11 @@ namespace XericUI.XChart
         [Header("工具管理")]
         [SerializeField] private bool m_ShowDebug;
         [SerializeField] private bool m_HideAllTools;
+        [SerializeField] private XChartDataModel m_DataModel = new XChartDataModel();
 
         public XChartToolsManager ToolManager { get; private set; }
         public Transform ToolsRoot { get; private set; }
+        public XChartDataModel DataModel => m_DataModel;
 
         private bool m_IsInitialized;
 
@@ -48,10 +50,21 @@ namespace XericUI.XChart
 
             var flags = CurrentFlags;
 
-            var toolsObj = new GameObject("[XChartTools]");
-            toolsObj.transform.SetParent(transform, false);
-            toolsObj.hideFlags = flags;
-            ToolsRoot = toolsObj.transform;
+            var toolsRoot = transform.Find("[XChartTools]") as RectTransform;
+            if (toolsRoot == null)
+            {
+                var toolsObj = new GameObject("[XChartTools]", typeof(RectTransform));
+                toolsRoot = toolsObj.GetComponent<RectTransform>();
+                toolsRoot.SetParent(transform, false);
+            }
+
+            toolsRoot.anchorMin = Vector2.zero;
+            toolsRoot.anchorMax = Vector2.one;
+            toolsRoot.offsetMin = Vector2.zero;
+            toolsRoot.offsetMax = Vector2.zero;
+            toolsRoot.pivot = new Vector2(0.5f, 0.5f);
+            toolsRoot.gameObject.hideFlags = flags;
+            ToolsRoot = toolsRoot;
 
             ToolManager = new XChartToolsManager
             {
@@ -94,6 +107,7 @@ namespace XericUI.XChart
 
         protected virtual void OnDestroy()
         {
+            m_DataModel?.DisposeRuntime();
             if (ToolManager != null)
             {
                 ToolManager.Dispose();

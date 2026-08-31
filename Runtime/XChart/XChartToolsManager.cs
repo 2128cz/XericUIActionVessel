@@ -47,8 +47,13 @@ namespace XericUI.XChart
                 ? HideFlags.HideAndDontSave
                 : HideFlags.DontSaveInEditor;
 
-            var rootObject = new GameObject(toolName);
-            rootObject.transform.SetParent(ToolsRoot, false);
+            var rootObject = new GameObject(toolName, typeof(RectTransform));
+            var rootTransform = rootObject.GetComponent<RectTransform>();
+            rootTransform.SetParent(ToolsRoot, false);
+            rootTransform.anchorMin = Vector2.zero;
+            rootTransform.anchorMax = Vector2.one;
+            rootTransform.offsetMin = Vector2.zero;
+            rootTransform.offsetMax = Vector2.zero;
             rootObject.hideFlags = flags;
 
             var tool = new T();

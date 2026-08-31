@@ -53,7 +53,6 @@ namespace XericUI.XChart.Radar
                 rt.offsetMax = Vector2.zero;
             }
 
-            SetVisible(true);
         }
 
         // ── 数据更新 ──────────────────────────────────────────────

@@ -6,7 +6,8 @@
         "Unity.TextMeshPro",
         "Lrss3.Deconstruction",
         "Unity.Burst",
-        "Unity.Collections"
+        "Unity.Collections",
+        "Unity.Jobs"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

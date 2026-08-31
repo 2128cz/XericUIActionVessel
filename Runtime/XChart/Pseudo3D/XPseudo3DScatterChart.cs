@@ -74,8 +74,8 @@ namespace XericUI.XChart.Pseudo3D
 
         private XChartDataModel3D m_DataModel = new XChartDataModel3D();
 
-        /// <summary>数据模型（只读）</summary>
-        public XChartDataModel3D DataModel => m_DataModel;
+        /// <summary>3D 数据模型（只读）</summary>
+        public XChartDataModel3D DataModel3D => m_DataModel;
 
         // ── 初始化 ────────────────────────────────────────────────
 
@@ -203,6 +203,7 @@ namespace XericUI.XChart.Pseudo3D
         public void SetData(double[] xs, double[] ys, double[] zs)
         {
             m_DataModel.SetPoints(xs, ys, zs);
+            SetSharedData(xs, ys, zs);
             RefreshChart();
         }
 
@@ -225,7 +226,29 @@ namespace XericUI.XChart.Pseudo3D
         public void AddDataPoint(double x, double y, double z)
         {
             m_DataModel.AddPoint(x, y, z);
+            EnsureSharedDimensions();
+            DataModel.TryAddRecord(m_DataModel.PointCount, new[] { (float)x, (float)y, (float)z });
             RefreshChart();
+        }
+
+        private void SetSharedData(double[] xs, double[] ys, double[] zs)
+        {
+            EnsureSharedDimensions();
+            DataModel.Clear();
+            int count = System.Math.Min(System.Math.Min(xs.Length, ys.Length), zs.Length);
+            for (int i = 0; i < count; i++)
+                DataModel.TryAddRecord(i, new[] { (float)xs[i], (float)ys[i], (float)zs[i] });
+        }
+
+        private void EnsureSharedDimensions()
+        {
+            if (DataModel.NumericDimensionCount == 3) return;
+            DataModel.SetDimensions(new System.Collections.Generic.List<XChartDimensionDefinition>
+            {
+                new XChartDimensionDefinition("x", "X", XChartDimensionKind.Number),
+                new XChartDimensionDefinition("y", "Y", XChartDimensionKind.Number),
+                new XChartDimensionDefinition("z", "Z", XChartDimensionKind.Number),
+            });
         }
 
         /// <summary>清空所有数据</summary>

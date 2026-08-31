@@ -141,7 +141,6 @@ namespace XericUI.XChart.Pseudo3D
             }
 
             SyncShapeParams();
-            SetVisible(true);
         }
 
         // ── 形状参数同步 ──────────────────────────────────────────
