@@ -1,6 +1,7 @@
 using UnityEngine;
 using XericLibrary.Runtime.UIGraph;
 using UIPrimitiveType = XericLibrary.Runtime.UIGraph.PrimitiveType;
+using XericUI.Core;
 
 namespace XericUI.XChart.Pseudo3D
 {
@@ -12,7 +13,7 @@ namespace XericUI.XChart.Pseudo3D
     ///
     /// 相比为每个点创建独立的 UIPrimitiveRenderer，本组件大幅减少 GameObject 数量和 Draw Call。
     /// </summary>
-    [AddComponentMenu("Xeric/XChart/Pseudo3D/Scatter Point Renderer")]
+    [AddComponentMenu(XericRegistrationPaths.Chart + "/Pseudo3D/Scatter Point Renderer")]
     public class XScatterPointRenderer : PrimitiveCacheRendererBase
     {
         // ── 全局形状参数 ──────────────────────────────────────────
@@ -64,6 +65,14 @@ namespace XericUI.XChart.Pseudo3D
         /// <param name="colors">可选：每个点的颜色（null 则使用 fillColor）</param>
         public void SetPoints(Vector2[] positions, Color[] colors = null)
         {
+            // null 的意思是"没有点了，清空"。当成数据去读 .Length 就是一条 NRE，
+            // 而这条 NRE 会把管理器渲染循环里后面的所有工具一起带走（现象：加一个元素，全图不显示）。
+            if (positions == null)
+            {
+                ClearAll();
+                return;
+            }
+
             ClearAll();
 
             for (int i = 0; i < positions.Length; i++)

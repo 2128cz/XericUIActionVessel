@@ -1,4 +1,5 @@
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.XChart.Radar
 {
@@ -27,7 +28,7 @@ namespace XericUI.XChart.Radar
     ///          └─ [ChartTool_RadarData] (OrderIndex=10) ← 数据线框
     ///               └─ DataRenderer (UILineRendererV2)
     /// </summary>
-    [AddComponentMenu("Xeric/XChart/Radar/Radar Chart")]
+    [AddComponentMenu(XericRegistrationPaths.Chart + "/Radar/Radar Chart")]
     [ExecuteAlways]
     public class XRadarChart : XChartBase
     {
@@ -345,13 +346,19 @@ namespace XericUI.XChart.Radar
 
         // ── 编辑器 ────────────────────────────────────────────────
 
-#if UNITY_EDITOR
-        private void OnValidate()
+        /// <summary>
+        /// override 基类并调 base：写成 <c>private void OnValidate()</c> 会遮掉基类那份，
+        /// "重灌元素 + 强制刷新"就再也不会为这个组件执行（和散点图同一个坑）。
+        /// </summary>
+        protected override void OnValidate()
         {
             if (m_Radius < 10f) m_Radius = 10f;
             if (m_RingCount < 1) m_RingCount = 1;
             if (m_LabelFontSize < 4f) m_LabelFontSize = 4f;
 
+            base.OnValidate();
+
+#if UNITY_EDITOR
             if (isActiveAndEnabled && m_RadarBg != null)
             {
                 UnityEditor.EditorApplication.delayCall += () =>
@@ -363,7 +370,7 @@ namespace XericUI.XChart.Radar
                     }
                 };
             }
-        }
 #endif
+        }
     }
 }

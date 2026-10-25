@@ -1,38 +1,39 @@
 using System.Collections.Generic;
 using UnityEngine;
 using XericLibrary.Runtime.UIGraph;
+using XericUI.XChart.Mesh;
+using XericUI.XChart.Space;
+using XericUI.Core;
 
 namespace XericUI.XChart.Pseudo3D
 {
     /// <summary>
-    /// 伪 3D 立方体背景工具。
+    /// 伪 3D 立方体<b>线框</b>工具（元素显示名 <c>BG Cube Wire</c>）。
     ///
-    /// 使用 UILineRendererV2 绘制：
-    ///   1. 立方体 12 条棱的线框（前向棱使用实色，后向棱可选半透明）
-    ///   2. 三个可见面上的轴标线网格
+    /// <para>它只做两件事：<b>12 条棱</b>（相邻面里只要有一个朝向观察者就算前向棱，与面用同一套
+    /// 可见性口径）＋ <b>把六个面发布成 <c>mesh.face.&lt;n&gt;</c> 插槽</b>（供轴线/散点取几何）。
+    /// 它<b>不画面内格线、也不发布格线插槽</b>——那是 <c>BG Cube Grid</c>
+    /// （<see cref="ChartToolMeshBg"/>）作为唯一作者的活（规范 §22）。上一版两边都画格线、还都往
+    /// 同一批插槽 id 上发布，于是"关掉一边、另一边又把线显示回来"，看起来就像开关反了
+    /// （他 2026-10-25 现场报的两条症状是同一个结构问题的两个面）。</para>
     ///
-    /// 3D 坐标系统：
-    ///   立方体中心在原点，半边长 1（即 [-1, 1] 范围）。
-    ///   通过 pitch/yaw 旋转后进行正交投影（丢弃 Z 轴）得到 2D UI 坐标。
-    ///   最终通过 scale + offset 映射到 RectTransform 的像素空间。
+    /// 几何与投影全部来自 <see cref="XChartCubeGeometry"/> 与 <see cref="XChartCubeView"/>，
+    /// 投影权威来自 <see cref="ChartToolSpace"/>（本类不自带顶点/面/棱表，也不自己算投影）：
+    /// <see cref="ComposedMatrix"/> / <see cref="Space"/> 是对外的投影出口，
+    /// 数据类工具靠它对齐到同一空间。
     ///
-    /// 子节点结构：
-    ///   [ChartTool_CubeBg]
-    ///     └─ CubeRenderer (UILineRendererV2)
+    /// <para><b>旋转是一个四元数，不是两轴角度</b>；<b>尺寸是半边长</b>，默认口径下它不随旋转变化
+    /// （旧版按投影包围盒 fit，转起来会越转越小）。理由与换算见 <see cref="XChartCubeView"/>。</para>
+    ///
+    /// 子节点结构：<c>[BG Cube Wire] → CubeEdgeRenderer (UILineRendererV2)</c>
     /// </summary>
-    [AddComponentMenu("Xeric/XChart/Pseudo3D/Cube Background Tool")]
+    [AddComponentMenu(XericRegistrationPaths.Chart + "/Pseudo3D/Cube Wire Background Tool")]
     public class ChartToolCubeBg : XChartToolBase
     {
         // ── 外观配置 ──────────────────────────────────────────────
 
-        /// <summary>立方体半边长（UI 像素）</summary>
-        public float CubeHalfSize { get; set; } = 150f;
-
-        /// <summary>俯仰角（绕 X 轴旋转，度数）</summary>
-        public float Pitch { get; set; } = 25f;
-
-        /// <summary>偏航角（绕 Y 轴旋转，度数）</summary>
-        public float Yaw { get; set; } = -30f;
+        /// <summary>线框自己的变换（立方体局部单位）；默认恒等，即和图的空间重合</summary>
+        public XChartToolTransform Transform { get; set; } = XChartToolTransform.Identity;
 
         /// <summary>前向棱颜色</summary>
         public Color FrontEdgeColor { get; set; } = new Color(0.7f, 0.7f, 0.7f, 1f);
@@ -43,219 +44,128 @@ namespace XericUI.XChart.Pseudo3D
         /// <summary>棱线宽度</summary>
         public float EdgeThickness { get; set; } = 2f;
 
-        /// <summary>网格线颜色</summary>
-        public Color GridLineColor { get; set; } = new Color(0.5f, 0.5f, 0.5f, 0.3f);
-
-        /// <summary>网格线宽度</summary>
-        public float GridLineThickness { get; set; } = 1f;
-
-        /// <summary>每轴网格分割数</summary>
-        public int GridDivisions { get; set; } = 5;
-
         /// <summary>是否显示后向棱</summary>
         public bool ShowBackEdges { get; set; } = true;
-
-        /// <summary>是否显示网格标线</summary>
-        public bool ShowGridLines { get; set; } = true;
-
-        /// <summary>立方体中心偏移</summary>
-        public Vector2 CenterOffset { get; set; } = Vector2.zero;
 
         // ── 内部组件 ──────────────────────────────────────────────
 
         /// <summary>棱线渲染器</summary>
         public UILineRendererV2 EdgeRenderer { get; private set; }
 
-        /// <summary>网格线渲染器</summary>
-        public UILineRendererV2 GridRenderer { get; private set; }
-
-        // ── 3D 管线状态 ──────────────────────────────────────────
-
-        // 8 个立方体顶点（中心在原点，半边长 1）
-        private static readonly Vector3[] s_CubeVertices = new Vector3[]
-        {
-            new Vector3(-1, -1, -1), // 0: 后下左
-            new Vector3( 1, -1, -1), // 1: 后下右
-            new Vector3( 1,  1, -1), // 2: 后上右
-            new Vector3(-1,  1, -1), // 3: 后上左
-            new Vector3(-1, -1,  1), // 4: 前下左
-            new Vector3( 1, -1,  1), // 5: 前下右
-            new Vector3( 1,  1,  1), // 6: 前上右
-            new Vector3(-1,  1,  1), // 7: 前上左
-        };
-
-        // 12 条棱（顶点索引对）
-        private static readonly int[,] s_CubeEdges = new int[12, 2]
-        {
-            {0,1}, {1,2}, {2,3}, {3,0}, // 后面
-            {4,5}, {5,6}, {6,7}, {7,4}, // 前面
-            {0,4}, {1,5}, {2,6}, {3,7}, // 连接棱
-        };
-
-        // 6 个面的顶点索引 + 法线
-        private struct FaceDef { public int[] verts; public Vector3 normal; }
-        private static readonly FaceDef[] s_Faces = new FaceDef[]
-        {
-            new FaceDef { verts = new int[] {4,5,6,7}, normal = new Vector3(0, 0, 1) },  // 前
-            new FaceDef { verts = new int[] {0,1,2,3}, normal = new Vector3(0, 0,-1) },  // 后
-            new FaceDef { verts = new int[] {1,5,6,2}, normal = new Vector3(1, 0, 0) },  // 右
-            new FaceDef { verts = new int[] {0,4,7,3}, normal = new Vector3(-1,0, 0) },  // 左
-            new FaceDef { verts = new int[] {2,6,7,3}, normal = new Vector3(0, 1, 0) },  // 上
-            new FaceDef { verts = new int[] {0,1,5,4}, normal = new Vector3(0,-1, 0) },  // 下
-        };
-
-        // 每个面由两个轴定义（用于网格线方向）
-        private static readonly Vector3[] s_FaceAxisA = new Vector3[]
-        {
-            new Vector3(1,0,0), new Vector3(1,0,0), // 前/后: X 轴
-            new Vector3(0,1,0), new Vector3(0,1,0), // 右/左: Y 轴
-            new Vector3(1,0,0), new Vector3(1,0,0), // 上/下: X 轴
-        };
-        private static readonly Vector3[] s_FaceAxisB = new Vector3[]
-        {
-            new Vector3(0,1,0), new Vector3(0,1,0), // 前/后: Y 轴
-            new Vector3(0,0,1), new Vector3(0,0,1), // 右/左: Z 轴
-            new Vector3(0,0,1), new Vector3(0,0,1), // 上/下: Z 轴
-        };
-
         // ── 投影状态 ──────────────────────────────────────────────
 
-        private Vector3[] m_RotatedVerts = new Vector3[8]; // 旋转后的 3D 顶点
-        private Vector2[] m_ProjectedVerts = new Vector2[8]; // 投影后的 2D 顶点
-        private bool m_ProjectionDirty = true;
+        private readonly XChartFaceFrame[] m_FaceFrames = new XChartFaceFrame[XChartCubeGeometry.FaceCount];
+        private readonly List<LineVertexData> m_FrontEdges = new List<LineVertexData>(24);
+        private readonly List<LineVertexData> m_BackEdges = new List<LineVertexData>(24);
 
-        /// <summary>投影版本号（每次投影矩阵变化时递增，供外部检测变化）</summary>
-        public int ProjectionVersion { get; private set; } = 0;
+        private ChartToolSpace m_Space;
+        private Matrix4x4 m_Composed = Matrix4x4.identity;
+        private int m_LastSpaceVersion = -1;
+        private bool m_Dirty = true;
 
-        private Matrix4x4 m_RotationMatrix;
-        private float m_Scale;
-        private Vector2 m_Offset;
+        /// <summary>发布插槽用的复用缓冲（一个面的四角 = 12 个值）</summary>
+        private readonly float[] m_SlotValues = new float[12];
+
+        // 本帧提交了多少：线框"整块不见了"要能分清是没空间、没提交还是提交了 0 条
+        private int m_EdgesDrawn;
+        private int m_FacesPublished;
+
+        // ── 对外出口 ──────────────────────────────────────────────
+
+        /// <summary>六个可见性判定共用的面帧（图表局部像素）</summary>
+        public XChartFaceFrame GetFaceFrame(XChartCubeGeometry.CubeFace face)
+        {
+            UpdateProjection();
+            return m_FaceFrames[(int)face];
+        }
+
+        /// <summary>本元素的变换变了（或想强制重取空间）时调用</summary>
+        public void MarkDirty() => m_Dirty = true;
+
+        /// <summary>线框定义立方体的面（发布 <c>mesh.face.*</c> 四角）⇒ 归定义组、最先跑（规范 §11.4）</summary>
+        public override XChartToolCategory Category => XChartToolCategory.Definition;
+
+        /// <summary>线框用的复合矩阵。数据元素要落到同一个空间就问它要，别自己再算一遍</summary>
+        public Matrix4x4 ComposedMatrix { get { UpdateProjection(); return m_Composed; } }
+
+        /// <summary>空间工具（投影权威）。渲染时现找，所以注册先后顺序不影响正确性</summary>
+        public ChartToolSpace Space
+        {
+            get
+            {
+                m_Space = Context?.Space;
+                return m_Space;
+            }
+        }
+
+        // ── 插槽发布 ──────────────────────────────────────────────
+
+        /// <summary>
+        /// 把六个面发布成 <c>Quad3D</c> 插槽：<b>用哪个网格元素都得能供面给轴线</b>，
+        /// 否则"轴线跟随网格"会因为图里只放了线框而静默回落（报表里 <c>frame=cube</c> 就是那个信号）。
+        /// 只发四角、不发格线：格线由画它的那个元素发布（两个发布者会抢同一批 id，见规范 §22）。
+        /// </summary>
+        private void PublishFaceSlots()
+        {
+            IXChartSlotBoard board = Context?.Slots;
+            m_FacesPublished = 0;
+            if (board == null) return;
+
+            for (int i = 0; i < XChartCubeGeometry.FaceCount; i++)
+            {
+                var face = (XChartCubeGeometry.CubeFace)i;
+                Vector3 c00, c01, c11, c10;
+                XChartCubeGeometry.GetFaceCorners(face, out c00, out c01, out c11, out c10);
+
+                m_SlotValues[0] = c00.x; m_SlotValues[1] = c00.y; m_SlotValues[2] = c00.z;
+                m_SlotValues[3] = c01.x; m_SlotValues[4] = c01.y; m_SlotValues[5] = c01.z;
+                m_SlotValues[6] = c11.x; m_SlotValues[7] = c11.y; m_SlotValues[8] = c11.z;
+                m_SlotValues[9] = c10.x; m_SlotValues[10] = c10.y; m_SlotValues[11] = c10.z;
+
+                board.Publish(XChartCubeGeometry.FaceSlotId(face), XChartSlotMode.Quad3D,
+                    XChartSlotAccess.ReadOnly, m_SlotValues, out string _);
+                m_FacesPublished++;
+            }
+        }
 
         // ── 初始化 ────────────────────────────────────────────────
 
         protected override void OnInitialize()
         {
-            // 创建棱线渲染器
             EdgeRenderer = CreateChildComponent<UILineRendererV2>("CubeEdgeRenderer");
             if (EdgeRenderer != null)
             {
                 EdgeRenderer.defaultColor = FrontEdgeColor;
                 EdgeRenderer.defaultThickness = EdgeThickness;
-                var rt = EdgeRenderer.rectTransform;
-                rt.anchorMin = Vector2.zero;
-                rt.anchorMax = Vector2.one;
-                rt.offsetMin = Vector2.zero;
-                rt.offsetMax = Vector2.zero;
-            }
-
-            // 创建网格线渲染器
-            GridRenderer = CreateChildComponent<UILineRendererV2>("CubeGridRenderer");
-            if (GridRenderer != null)
-            {
-                GridRenderer.defaultColor = GridLineColor;
-                GridRenderer.defaultThickness = GridLineThickness;
-                var rt = GridRenderer.rectTransform;
-                rt.anchorMin = Vector2.zero;
-                rt.anchorMax = Vector2.one;
-                rt.offsetMin = Vector2.zero;
-                rt.offsetMax = Vector2.zero;
+                StretchToRoot(EdgeRenderer);
             }
 
             SetVisible(true);
         }
 
-        // ── 更新投影矩阵 ──────────────────────────────────────────
+        private static void StretchToRoot(UILineRendererV2 renderer)
+        {
+            var rt = renderer.rectTransform;
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+        }
+
+        // ── 投影 ──────────────────────────────────────────────────
 
         private void UpdateProjection()
         {
-            if (!m_ProjectionDirty) return;
-            m_ProjectionDirty = false;
+            var space = Space;
+            if (space == null) return;
+            if (!m_Dirty && space.ProjectionVersion == m_LastSpaceVersion) return;
+            m_Dirty = false;
+            m_LastSpaceVersion = space.ProjectionVersion;
 
-            // 1. 构建旋转矩阵：先绕 X 轴（pitch），再绕 Y 轴（yaw）
-            float pitchRad = Pitch * Mathf.Deg2Rad;
-            float yawRad = Yaw * Mathf.Deg2Rad;
-            m_RotationMatrix = Matrix4x4.Rotate(
-                Quaternion.Euler(pitchRad * Mathf.Rad2Deg, yawRad * Mathf.Rad2Deg, 0));
-
-            // 2. 旋转所有顶点
-            for (int i = 0; i < 8; i++)
-                m_RotatedVerts[i] = m_RotationMatrix.MultiplyPoint3x4(s_CubeVertices[i]);
-
-            // 3. 计算投影后的 2D 范围（丢弃 Z）
-            float minX = float.MaxValue, maxX = float.MinValue;
-            float minY = float.MaxValue, maxY = float.MinValue;
-            for (int i = 0; i < 8; i++)
-            {
-                float px = m_RotatedVerts[i].x;
-                float py = m_RotatedVerts[i].y;
-                if (px < minX) minX = px;
-                if (px > maxX) maxX = px;
-                if (py < minY) minY = py;
-                if (py > maxY) maxY = py;
-            }
-
-            // 4. 计算缩放和偏移，使立方体适配 CubeHalfSize
-            float rangeX = maxX - minX;
-            float rangeY = maxY - minY;
-            float maxRange = Mathf.Max(rangeX, rangeY);
-            m_Scale = (maxRange > 0.001f) ? (CubeHalfSize * 2f / maxRange) : 1f;
-
-            // 中心对齐到 CenterOffset
-            float centerX = (minX + maxX) * 0.5f;
-            float centerY = (minY + maxY) * 0.5f;
-            m_Offset = new Vector2(
-                CenterOffset.x - centerX * m_Scale,
-                CenterOffset.y - centerY * m_Scale);
-
-            // 5. 计算最终投影坐标
-            for (int i = 0; i < 8; i++)
-            {
-                m_ProjectedVerts[i] = new Vector2(
-                    m_RotatedVerts[i].x * m_Scale + m_Offset.x,
-                    m_RotatedVerts[i].y * m_Scale + m_Offset.y);
-            }
+            m_Composed = space.Compose(Transform);
+            space.BuildFaceFrames(m_FaceFrames, m_Composed);
+            PublishFaceSlots();
         }
-
-        /// <summary>标记投影需要重新计算</summary>
-        public void MarkProjectionDirty()
-        {
-            m_ProjectionDirty = true;
-            ProjectionVersion++;
-        }
-
-        // ── 3D 投影辅助 ──────────────────────────────────────────
-
-        /// <summary>将 3D 点投影到 2D</summary>
-        public Vector2 ProjectPoint3D(Vector3 point3d)
-        {
-            UpdateProjection();
-            Vector3 rotated = m_RotationMatrix.MultiplyPoint3x4(point3d);
-            return new Vector2(rotated.x * m_Scale + m_Offset.x,
-                               rotated.y * m_Scale + m_Offset.y);
-        }
-
-        /// <summary>批量投影 3D 点到 2D</summary>
-        public Vector2[] ProjectPoints3D(Vector3[] points3d)
-        {
-            UpdateProjection();
-            var result = new Vector2[points3d.Length];
-            for (int i = 0; i < points3d.Length; i++)
-            {
-                Vector3 rotated = m_RotationMatrix.MultiplyPoint3x4(points3d[i]);
-                result[i] = new Vector2(rotated.x * m_Scale + m_Offset.x,
-                                        rotated.y * m_Scale + m_Offset.y);
-            }
-            return result;
-        }
-
-        /// <summary>获取当前旋转矩阵</summary>
-        public Matrix4x4 RotationMatrix => m_RotationMatrix;
-
-        /// <summary>获取当前缩放</summary>
-        public float Scale => m_Scale;
-
-        /// <summary>获取当前偏移</summary>
-        public Vector2 Offset => m_Offset;
 
         // ── 渲染 ──────────────────────────────────────────────────
 
@@ -265,196 +175,87 @@ namespace XericUI.XChart.Pseudo3D
             if (EdgeRenderer == null) return;
 
             UpdateProjection();
-
-            // 绘制棱线
             DrawEdges();
-
-            // 绘制网格标线
-            if (GridRenderer != null)
-            {
-                if (ShowGridLines)
-                {
-                    DrawGridLines();
-                }
-                else
-                {
-                    GridRenderer.ClearAll();
-                }
-            }
         }
-
-        // ── 棱线绘制 ──────────────────────────────────────────────
 
         private void DrawEdges()
         {
             EdgeRenderer.ClearAll();
+            m_FrontEdges.Clear();
+            m_BackEdges.Clear();
+            m_EdgesDrawn = 0;
 
-            // 确定前向棱：棱的两个顶点中，Z 值较大的为前向
-            // 更准确：棱所属的面中，法线 Z > 0 的面为可见面
-            // 简单方法：棱的两个顶点的 rotated Z 平均值 > 0 为前向
-            var frontVerts = new List<LineVertexData>();
-            var backVerts = new List<LineVertexData>();
-
-            for (int e = 0; e < 12; e++)
+            for (int e = 0; e < XChartCubeGeometry.EdgeCount; e++)
             {
-                int v0 = s_CubeEdges[e, 0];
-                int v1 = s_CubeEdges[e, 1];
-                float avgZ = (m_RotatedVerts[v0].z + m_RotatedVerts[v1].z) * 0.5f;
-                bool isFront = avgZ >= 0;
-
-                var list = isFront ? frontVerts : backVerts;
-                int startIdx = list.Count;
+                bool isFront = XChartCubeGeometry.IsEdgeVisible(m_Composed, e);
+                var list = isFront ? m_FrontEdges : m_BackEdges;
+                Color color = isFront ? FrontEdgeColor : BackEdgeColor;
 
                 list.Add(new LineVertexData
                 {
-                    position = m_ProjectedVerts[v0],
-                    color = isFront ? FrontEdgeColor : BackEdgeColor,
+                    position = Space.Project(XChartCubeGeometry.Vertices[XChartCubeGeometry.Edges[e, 0]], m_Composed),
+                    color = color,
                     thickness = EdgeThickness,
                     userData = Vector4.zero,
                 });
                 list.Add(new LineVertexData
                 {
-                    position = m_ProjectedVerts[v1],
-                    color = isFront ? FrontEdgeColor : BackEdgeColor,
+                    position = Space.Project(XChartCubeGeometry.Vertices[XChartCubeGeometry.Edges[e, 1]], m_Composed),
+                    color = color,
                     thickness = EdgeThickness,
                     userData = Vector4.zero,
                 });
             }
 
-            // 先画后向棱（在底层），再画前向棱（在上层）
-            if (ShowBackEdges && backVerts.Count > 0)
-            {
-                // 每两个顶点构成一条线段
-                for (int i = 0; i < backVerts.Count; i += 2)
-                {
-                    EdgeRenderer.DrawLine(
-                        backVerts[i].position,
-                        backVerts[i + 1].position,
-                        backVerts[i].color,
-                        backVerts[i].thickness);
-                }
-            }
+            // 先画后向棱（在底层），再画前向棱
+            if (ShowBackEdges)
+                DrawSegments(m_BackEdges);
+            DrawSegments(m_FrontEdges);
+        }
 
-            for (int i = 0; i < frontVerts.Count; i += 2)
+        private void DrawSegments(List<LineVertexData> segments)
+        {
+            for (int i = 0; i + 1 < segments.Count; i += 2)
             {
                 EdgeRenderer.DrawLine(
-                    frontVerts[i].position,
-                    frontVerts[i + 1].position,
-                    frontVerts[i].color,
-                    frontVerts[i].thickness);
+                    segments[i].position,
+                    segments[i + 1].position,
+                    segments[i].color,
+                    segments[i].thickness);
+                m_EdgesDrawn++;
             }
         }
 
-        // ── 网格标线绘制 ──────────────────────────────────────────
+        // ── 自述读数 ──────────────────────────────────────────────
 
-        private void DrawGridLines()
+#if UNITY_EDITOR
+        /// <summary>
+        /// 线框这一帧做了什么，全写在报表这一行里：<c>edges=</c> 提交了几条棱、
+        /// <c>faces=</c> 发布了几个面、<c>space=</c> 有没有投影权威、<c>renderer=</c> 渲染器在不在位。
+        /// "线框整个不见了"这四件事在画面上长得一样，只有这一行分得清（规范 §22）。
+        /// </summary>
+        internal override void AppendDebugLine(System.Text.StringBuilder sb)
         {
-            GridRenderer.ClearAll();
-
-            // 获取 3 个可见面（法线 Z 值最大的 3 个面）
-            var visibleFaces = GetVisibleFaces();
-            if (visibleFaces.Count == 0) return;
-
-            foreach (int faceIdx in visibleFaces)
-            {
-                DrawGridLinesOnFace(faceIdx);
-            }
+            base.AppendDebugLine(sb);
+            int valid = 0;
+            for (int i = 0; i < m_FaceFrames.Length; i++)
+                if (m_FaceFrames[i].IsValid) valid++;
+            sb.Append(" edges=").Append(m_EdgesDrawn)
+              .Append(" faces=").Append(m_FacesPublished)
+              .Append(" frames=").Append(valid).Append('/').Append(m_FaceFrames.Length)
+              .Append(" backEdges=").Append(ShowBackEdges ? "on" : "off")
+              .Append(" space=").Append(Context != null && Context.Space != null ? "ok" : "NULL")
+              .Append(" renderer=").Append(EdgeRenderer == null ? "NULL" : "ok");
         }
-
-        /// <summary>获取可见面索引列表（按可见度排序，最多 3 个）</summary>
-        private List<int> GetVisibleFaces()
-        {
-            var result = new List<int>(3);
-            var faceScores = new (int index, float score)[6];
-
-            for (int i = 0; i < 6; i++)
-            {
-                // 将面法线旋转到当前视角
-                Vector3 rotatedNormal = m_RotationMatrix.MultiplyVector(s_Faces[i].normal);
-                // Z 分量越大，越面向用户
-                faceScores[i] = (i, rotatedNormal.z);
-            }
-
-            // 按 Z 值降序排列（Z 越大越面向用户）
-            System.Array.Sort(faceScores, (a, b) => b.score.CompareTo(a.score));
-
-            // 取前 3 个且 Z > 0 的面
-            for (int i = 0; i < 3 && faceScores[i].score > 0; i++)
-                result.Add(faceScores[i].index);
-
-            return result;
-        }
-
-        /// <summary>在指定面上绘制网格线</summary>
-        private void DrawGridLinesOnFace(int faceIdx)
-        {
-            var face = s_Faces[faceIdx];
-            Vector3 axisA = s_FaceAxisA[faceIdx];
-            Vector3 axisB = s_FaceAxisB[faceIdx];
-
-            // 面的四个顶点（在立方体局部坐标中）
-            Vector3 v0 = s_CubeVertices[face.verts[0]];
-            Vector3 v1 = s_CubeVertices[face.verts[1]];
-            Vector3 v2 = s_CubeVertices[face.verts[2]];
-            Vector3 v3 = s_CubeVertices[face.verts[3]];
-
-            // 面的范围
-            float minA = float.MaxValue, maxA = float.MinValue;
-            float minB = float.MaxValue, maxB = float.MinValue;
-
-            // 计算顶点在轴上的投影
-            float GetAxisValue(Vector3 v, Vector3 axis) => Vector3.Dot(v, axis);
-
-            for (int i = 0; i < 4; i++)
-            {
-                var v = s_CubeVertices[face.verts[i]];
-                float va = GetAxisValue(v, axisA);
-                float vb = GetAxisValue(v, axisB);
-                if (va < minA) minA = va;
-                if (va > maxA) maxA = va;
-                if (vb < minB) minB = vb;
-                if (vb > maxB) maxB = vb;
-            }
-
-            // 沿 A 轴画线（平行于 B 轴）
-            float stepA = (maxA - minA) / GridDivisions;
-            float stepB = (maxB - minB) / GridDivisions;
-
-            // 沿 A 轴方向的网格线
-            for (int i = 0; i <= GridDivisions; i++)
-            {
-                float aVal = minA + i * stepA;
-                // 线的两个端点
-                Vector3 p1 = face.normal + axisA * aVal + axisB * minB;
-                Vector3 p2 = face.normal + axisA * aVal + axisB * maxB;
-
-                Vector2 pp1 = ProjectPoint3D(p1);
-                Vector2 pp2 = ProjectPoint3D(p2);
-
-                // 只绘制落在面范围内的线
-                GridRenderer.DrawLine(pp1, pp2, GridLineColor, GridLineThickness);
-            }
-
-            // 沿 B 轴方向的网格线
-            for (int i = 0; i <= GridDivisions; i++)
-            {
-                float bVal = minB + i * stepB;
-                Vector3 p1 = face.normal + axisA * minA + axisB * bVal;
-                Vector3 p2 = face.normal + axisA * maxA + axisB * bVal;
-
-                Vector2 pp1 = ProjectPoint3D(p1);
-                Vector2 pp2 = ProjectPoint3D(p2);
-
-                GridRenderer.DrawLine(pp1, pp2, GridLineColor, GridLineThickness);
-            }
-        }
+#endif
 
         // ── 清理 ──────────────────────────────────────────────────
 
         protected override void OnDispose()
         {
             EdgeRenderer = null;
-            GridRenderer = null;
+            m_FrontEdges.Clear();
+            m_BackEdges.Clear();
         }
     }
 }

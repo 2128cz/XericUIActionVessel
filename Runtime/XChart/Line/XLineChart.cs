@@ -2,10 +2,11 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using XericLibrary.Runtime.UIGraph;
+using XericUI.Core;
 
 namespace XericUI.XChart.Line
 {
-    [AddComponentMenu("Xeric/XChart/Line/Line Chart")]
+    [AddComponentMenu(XericRegistrationPaths.Chart + "/Line/Line Chart")]
     [ExecuteAlways]
     public sealed class XLineChart : XChartBase
     {

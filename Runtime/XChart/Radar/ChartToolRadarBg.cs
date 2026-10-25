@@ -1,6 +1,7 @@
 using UnityEngine;
 using XericLibrary.Runtime.UIGraph;
 using TMPro;
+using XericUI.Core;
 
 namespace XericUI.XChart.Radar
 {
@@ -21,7 +22,7 @@ namespace XericUI.XChart.Radar
     ///          ├─ Label_1 (TMP_Text)
     ///          └─ ...
     /// </summary>
-    [AddComponentMenu("Xeric/XChart/Radar/Radar Background Tool")]
+    [AddComponentMenu(XericRegistrationPaths.Chart + "/Radar/Radar Background Tool")]
     public class ChartToolRadarBg : XChartToolBase
     {
         // ── 配置 ──────────────────────────────────────────────────
@@ -79,11 +80,12 @@ namespace XericUI.XChart.Radar
         /// <summary>轴线渲染器</summary>
         public UILineRendererV2 AxisRenderer { get; private set; }
 
-        /// <summary>标签的父变换</summary>
-        public Transform LabelsRoot { get; private set; }
-
-        /// <summary>所有标签文本组件</summary>
-        public TMP_Text[] LabelTexts { get; private set; }
+        /// <summary>
+        /// 维度标签的数量口径：<b>要几个就申请几个</b>，件本身由 chart 的文本槽位池发落
+        /// （规范 §5.4：隐藏靠少申请，不靠把发落到的槽位 <c>SetActive(false)</c>——那会被校验当无效丢弃）。
+        /// </summary>
+        private int DesiredLabelCount
+            => ShowLabels && DimensionCount >= 3 ? DimensionCount : 0;
 
         // ── 内部状态 ──────────────────────────────────────────────
 
@@ -114,11 +116,13 @@ namespace XericUI.XChart.Radar
                 rt.offsetMin = Vector2.zero;
                 rt.offsetMax = Vector2.zero;
             }
+        }
 
-            // 创建标签父节点
-            var labelsObj = CreateChild("Labels");
-            LabelsRoot = labelsObj;
-
+        /// <summary>申请维度标签（只登记需求，件在 chart 的池调度里发落）</summary>
+        public override void OnUpdate()
+        {
+            base.OnUpdate();
+            RequestTextSlots(DesiredLabelCount);
         }
 
         // ── 标记脏 ────────────────────────────────────────────────
@@ -139,6 +143,8 @@ namespace XericUI.XChart.Radar
             DrawGrid();
             DrawAxis();
             UpdateLabels();
+            // 槽位是下一轮调度才补齐的：还欠着件就保持脏，补齐后重画一次
+            if (TextSlotsPending) m_DataDirty = true;
         }
 
         // ── 网格绘制 ──────────────────────────────────────────────
@@ -197,24 +203,17 @@ namespace XericUI.XChart.Radar
 
         private void UpdateLabels()
         {
-            if (LabelsRoot == null) return;
-
             int dims = DimensionCount;
             var dirs = XChartRadarDataModel.GetDimensionDirections(dims);
+            var labels = Texts;
 
-            // 确保标签数量匹配
-            EnsureLabelCount(dims);
+            // 件要下一轮调度才补齐：这一帧先画已有的那些，欠着的由 OnRender 保持脏后再画一遍
+            int usable = Mathf.Min(dims, labels.Count);
 
-            bool show = ShowLabels && dims >= 3;
-
-            for (int i = 0; i < dims; i++)
+            for (int i = 0; i < usable; i++)
             {
-                var label = LabelTexts[i];
+                var label = labels[i];
                 if (label == null) continue;
-
-                label.gameObject.SetActive(show);
-
-                if (!show) continue;
 
                 // 设置文本
                 string name = (i < DimensionNames.Length && DimensionNames[i] != null)
@@ -239,65 +238,18 @@ namespace XericUI.XChart.Radar
                 else
                     label.alignment = TextAlignmentOptions.Top;
 
-                // 应用位置
+                // 应用位置（尺寸也要在这里设：槽位来自池，创建时不知道要给哪个图表用）
                 var rt = label.rectTransform;
                 rt.anchoredPosition = labelPos;
                 rt.anchorMin = new Vector2(0.5f, 0.5f);
                 rt.anchorMax = new Vector2(0.5f, 0.5f);
                 rt.pivot = new Vector2(0.5f, 0.5f);
-            }
-
-            // 隐藏多余的标签
-            for (int i = dims; i < LabelTexts.Length; i++)
-            {
-                if (LabelTexts[i] != null)
-                    LabelTexts[i].gameObject.SetActive(false);
-            }
-        }
-
-        /// <summary>确保标签数组长度匹配维度数量</summary>
-        private void EnsureLabelCount(int count)
-        {
-            if (LabelTexts != null && LabelTexts.Length == count)
-                return;
-
-            // 清理旧的标签
-            if (LabelTexts != null)
-            {
-                foreach (var label in LabelTexts)
-                {
-                    if (label != null && label.gameObject != null)
-                    {
-                        if (Application.isPlaying)
-                            Object.Destroy(label.gameObject);
-                        else
-                            Object.DestroyImmediate(label.gameObject);
-                    }
-                }
-            }
-
-            LabelTexts = new TMP_Text[count];
-
-            for (int i = 0; i < count; i++)
-            {
-                var labelObj = new GameObject($"Label_{i}", typeof(RectTransform));
-                labelObj.transform.SetParent(LabelsRoot, false);
-                labelObj.hideFlags = CurrentFlags;
-
-                var tmp = labelObj.AddComponent<TextMeshProUGUI>();
-                tmp.text = "";
-                tmp.fontSize = LabelFontSize;
-                tmp.color = LabelColor;
-                tmp.alignment = TextAlignmentOptions.Center;
-
-                var rt = tmp.rectTransform;
-                rt.anchorMin = new Vector2(0.5f, 0.5f);
-                rt.anchorMax = new Vector2(0.5f, 0.5f);
-                rt.pivot = new Vector2(0.5f, 0.5f);
                 rt.sizeDelta = new Vector2(100f, 24f);
-
-                LabelTexts[i] = tmp;
             }
+
+            // 没点亮的槽位必须擦空：池件是跨维度数复用的，留着上一轮的字就是残影
+            for (int i = usable; i < labels.Count; i++)
+                if (labels[i] != null) labels[i].text = string.Empty;
         }
 
         // ── 清理 ──────────────────────────────────────────────────
@@ -306,8 +258,6 @@ namespace XericUI.XChart.Radar
         {
             GridRenderer = null;
             AxisRenderer = null;
-            LabelsRoot = null;
-            LabelTexts = null;
         }
     }
 }

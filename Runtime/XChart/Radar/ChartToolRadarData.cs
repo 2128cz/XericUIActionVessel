@@ -1,5 +1,6 @@
 using UnityEngine;
 using XericLibrary.Runtime.UIGraph;
+using XericUI.Core;
 
 namespace XericUI.XChart.Radar
 {
@@ -14,7 +15,7 @@ namespace XericUI.XChart.Radar
     ///   [ChartTool_RadarData]
     ///     └─ DataRenderer (UILineRendererV2) — 所有数据系列的线框
     /// </summary>
-    [AddComponentMenu("Xeric/XChart/Radar/Radar Data Tool")]
+    [AddComponentMenu(XericRegistrationPaths.Chart + "/Radar/Radar Data Tool")]
     public class ChartToolRadarData : XChartToolBase
     {
         // ── 配置 ──────────────────────────────────────────────────
