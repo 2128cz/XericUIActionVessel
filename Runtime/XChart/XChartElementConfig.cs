@@ -108,6 +108,13 @@ namespace XericUI.XChart
         public virtual int RequiredNumericDimensions => 0;
 
         /// <summary>
+        /// 这个元素要<b>几条记录</b>才画得出来（0＝一条也行）。
+        /// 和维数是同一件事的两半：矢量场一条记录都不缺维、但只有一条记录时**一支箭头都构不成**
+        /// （一支＝相邻两条）。两个数必须都印出来，否则"有数据但不够"又会混进"什么都没显示"里。
+        /// </summary>
+        public virtual int RequiredRecordCount => 0;
+
+        /// <summary>
         /// 互斥显示：<paramref name="fieldName"/> 这个字段在当前配置下要不要从面板上<b>藏掉</b>。
         ///
         /// <para>他 2026-10-25 要的用法："我勾选'连续绘制'，配置里就失去'相对还是绝对'那个选项；

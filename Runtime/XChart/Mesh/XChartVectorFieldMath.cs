@@ -23,6 +23,20 @@ namespace XericUI.XChart.Mesh
         }
 
         /// <summary>
+        /// 一支箭头＝相邻两条记录 ⇒ 给定记录数与上限，能画出几支（上限 ≤0 ＝不限）。
+        ///
+        /// <para>单列出来是因为<b>"记录不够"与"维数不够"在画面上完全同形</b>（都是一条都不画），
+        /// 而 N−1 与 0 这两个数是唯一分得清它们的读数（规范 §25.1）。</para>
+        /// </summary>
+        public static int ArrowCount(int recordCount, int maxArrows)
+        {
+            if (recordCount < 2) return 0;
+            int pairs = recordCount - 1;
+            if (maxArrows > 0 && maxArrows < pairs) return maxArrows;
+            return pairs;
+        }
+
+        /// <summary>
         /// 读一组颜色维：<paramref name="hue"/> 按 <b>0..256 的色环</b>（256 与 0 是同一个颜色，
         /// 取模，所以 300 也读得动），饱和度/明度/不透明度按 0..1 夹住。
         ///

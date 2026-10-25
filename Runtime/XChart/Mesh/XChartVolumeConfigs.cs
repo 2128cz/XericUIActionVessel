@@ -126,45 +126,44 @@ namespace XericUI.XChart.Mesh
     /// <summary>
     /// 向量箭头（矢量场）元素的配置。
     ///
-    /// <para><b>一条记录怎么读</b>：前 3 维是"一个点"，后 3 维是"另一个点"，
-    /// 按 <see cref="VectorMode"/> 解释成一支箭头——</para>
+    /// <para><b>数据口径（2026-10-25 他澄清后定稿，规范 §25.2）</b>：</para>
     /// <list type="bullet">
-    /// <item><see cref="XChartArrowVectorMode.Absolute"/>（绝对）：后 3 维是<b>方向矢量</b>本身，
-    /// 起点 + 方向×倍率 = 箭头末端。螺旋点在这种读法下画出来是一片"刺猬"（每根朝外）。</item>
-    /// <item><see cref="XChartArrowVectorMode.Relative"/>（相对）：后 3 维是<b>第二个点</b>，
-    /// 箭头 ＝ 第一点指向第二点（差向量×倍率）。一串首尾相接的点在这种读法下就是"连着头往下转"。</item>
+    /// <item><b>前三维＝坐标 x/y/z</b>（立方体单位，与圆柱、散点同一套归一化）——不是"两组三维"。</item>
+    /// <item><b>一支箭头＝相邻两条记录</b>：第 i 条是起点，第 i+1 条按 <see cref="VectorMode"/> 解释成
+    /// "第二个点"或"方向矢量"（他原话："我们是 0 和 1，一个代表坐标，一个代表它的矢量的方向"）。</item>
+    /// <item><b>第 4~7 维是颜色</b>：色相（0..256 色环）/ 饱和度 / 明度 / 不透明度，全部可选。
+    /// 颜色随记录自带 ⇒ 一支箭头的起点色与终点色可以不同（七维信息的那个用法）。</item>
     /// </list>
     ///
-    /// <para><b>连续绘制</b>（<see cref="Continuous"/>）：把所有记录的点<b>按顺序连成一条折线</b>——
-    /// 这时"相对/绝对"没有意义（连起来的本来就是空间里的一条路径）⇒ 面板上那两个选项**隐藏**
+    /// <para><b>连续绘制</b>（<see cref="Continuous"/>）：把每条记录的坐标按顺序连成折线——
+    /// 这时"相对/绝对"没有意义（连起来的本来就是空间里的一条路径）⇒ 面板上那两项**隐藏**
     /// （互斥显示，见 <see cref="IsFieldHidden"/>）。</para>
-    ///
-    /// <para><b>颜色是可选的额外维度</b>：<c>[h, s, v]</c>（可选 <c>+a</c>）接在矢量后面读，
-    /// 于是"给每个点标颜色"不需要往表里塞非数值列——色相走 0..256 的色环，其余三个按 0..1。</para>
     /// </summary>
     [Serializable]
     [XChartElement("arrows", "向量箭头", 50)]
     public sealed class XChartArrowConfig : XChartElementConfig
     {
-        /// <summary>3 维起点 + 3 维方向/第二点</summary>
-        public const int VectorDimensionCount = 6;
+        /// <summary>坐标要占几个数值维（x/y/z）</summary>
+        public const int CoordinateDimensionCount = 3;
+        /// <summary>颜色要几个数值维（色相/饱和度/明度 [+不透明度]）</summary>
+        public const int ColorDimensionCount = 3;
 
         [Header("数据")]
-        [SerializeField, Tooltip("起点从第几个数值维开始（一条记录要占 6 维：起点 3 + 方向或第二点 3）")]
-        private int m_OriginDimension;
+        [SerializeField, Tooltip("坐标从第几个数值维开始（一条记录 3 维：x/y/z）；一支箭头由**相邻两条记录**构成")]
+        private int m_CoordinateDimension;
 
-        [SerializeField, Tooltip("绝对：后三维是方向矢量（起点→末端）。相对：后三维是第二个点，" +
-                                 "箭头＝第一点指向第二点。**连续绘制打开时这一项不适用**")]
+        [SerializeField, Tooltip("绝对：第二条记录的坐标当作方向矢量（起点→末端）。" +
+                                 "相对：它是第二个点，箭头＝第一点指向第二点。**连续绘制打开时这一项不适用**")]
         private XChartArrowVectorMode m_VectorMode = XChartArrowVectorMode.Absolute;
 
-        [SerializeField, Tooltip("把每条记录的点按顺序连成一条折线（只有最后一段带箭头）。" +
+        [SerializeField, Tooltip("把每条记录的坐标按顺序连成一条折线（只有最后一段带箭头）。" +
                                  "打开之后「相对/绝对」被隐藏——连起来的是一条空间路径，谈不到这两者")]
         private bool m_Continuous;
 
         [SerializeField, Tooltip("方向向量长度倍率（立方体单位）；相对模式下作用在差向量上")]
         private float m_DirectionScale = 0.25f;
 
-        [SerializeField, Range(0, 100000), Tooltip("最多画多少条（0=不限）；防止十万条记录一口气铺满")]
+        [SerializeField, Range(0, 100000), Tooltip("最多画多少支（0=不限）；防止十万条记录一口气铺满")]
         private int m_MaxArrowCount = 512;
 
         [SerializeField, Tooltip("箭头自己的变换（叠在图的空间之上）")]
@@ -174,9 +173,9 @@ namespace XericUI.XChart.Mesh
         [SerializeField, Tooltip("用额外的数值维给每支箭头上色。三个维依次是 色相(0..256 色环) / 饱和度(0..1) / 明度(0..1)")]
         private bool m_UseColorDimensions;
 
-        [SerializeField, Tooltip("颜色三维从第几维开始（默认 6＝紧跟在矢量后面）。" +
-                                 "这些维**不进**前面的数据语义，只是被读走做颜色")]
-        private int m_ColorDimension = VectorDimensionCount;
+        [SerializeField, Tooltip("颜色三维从第几维开始（默认 3＝紧跟在坐标后面）。" +
+                                 "这些维**不进**坐标语义，只是被读走做颜色；起止两端各自读自己那条记录的颜色")]
+        private int m_ColorDimension = 3;
 
         [SerializeField, Tooltip("再加一维不透明度（0..1），读颜色起点维 +3")]
         private bool m_HasAlphaDimension;
@@ -197,11 +196,14 @@ namespace XericUI.XChart.Mesh
 
         /// <summary>
         /// 这个元素要几个数值维才画得出来（面板据此报"表里只有几个"，不再"什么都不显示"）。
-        /// 不透明度那一维**不算硬需求**（多给就多读、没给退回单色 alpha）——算进去就成了
-        /// "勾一个开关，整个元素消失"。
+        /// 坐标 3 ＋（可选）颜色 3；**不透明度那一维不算硬需求**（多给就多读、没给退回单色 alpha）——
+        /// 算进门槛的话，勾一下"有不透明度"会让整个元素因维数不够突然消失。
         /// </summary>
         public override int RequiredNumericDimensions
-            => VectorDimensionCount + (m_UseColorDimensions ? 3 : 0);
+            => CoordinateDimensionCount + (m_UseColorDimensions ? ColorDimensionCount : 0);
+
+        /// <summary>一支箭头要两条记录 ⇒ 记录少于 2 条时一支都画不出来（面板/报表同样要印出来）</summary>
+        public override int RequiredRecordCount => 2;
 
         /// <summary>
         /// 互斥显示：连续绘制打开时「相对/绝对」没有意义（他 2026-10-25：勾一个就把排斥的那几个藏起来）。
@@ -221,7 +223,7 @@ namespace XericUI.XChart.Mesh
         {
             if (!(tool is ChartToolVectorArrows arrows)) return;
 
-            arrows.OriginDimension = m_OriginDimension;
+            arrows.CoordinateDimension = m_CoordinateDimension;
             arrows.VectorMode = m_VectorMode;
             arrows.Continuous = m_Continuous;
             arrows.DirectionScale = m_DirectionScale;

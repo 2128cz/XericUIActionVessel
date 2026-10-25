@@ -217,30 +217,41 @@ namespace XericUI.XChart.Editor
                     };
                     head.Add(orderText);
                     m_OrderReadouts.Add(new OrderReadout { Order = order, Draw = drawOrder, Text = orderText });
-                    head.Add(MakeTinyButton("↑", () => MoveElement(index, -1), "上移（与上一项交换注册位置）"));
-                    head.Add(MakeTinyButton("↓", () => MoveElement(index, 1), "下移（与下一项交换注册位置）"));
+                    head.Add(MakeTinyButton("↑", () => MoveElement(index, -1),
+                        "上移一位：它在表里更靠前 ⇒ 绘得更早，会被后面的元素盖住"));
+                    head.Add(MakeTinyButton("↓", () => MoveElement(index, 1),
+                        "下移一位：它在表里更靠后 ⇒ 绘得更晚，盖住前面的元素"));
                     head.Add(MakeTinyButton("-", () => RemoveElement(index),
                         "删除这个元素。默认元素（空间 / BG Cube Wire / BG Cube Grid）**也能删**——"
                         + "删了就是不要它；预设不会在之后又把它补回来（只在第一次读到这张表时补齐缺的那几件）"));
 
-                    // 序号的**写入口**在 Body 里（标题行只读）：改完标题那一行就地跟着变（见 OnValueChanged）
-                    var orderRow = new VisualElement { style = { flexDirection = FlexDirection.Row } };
-                    if (order != null) orderRow.Add(MakeField(order, "注册序"));
-                    if (drawOrder != null) orderRow.Add(MakeField(drawOrder, "绘制序"));
-                    block.Body.Add(orderRow);
+                    // ★ 序号没有写入口（他 2026-10-25）：注册序由类型定好、绘制序跟元素在表里的位置走（§24.5）。
+                    // 位置是唯一权威——再多两个手填的格子，就会出现"位置与数字各说一套"，
+                    // 而"上移之后绘制顺序到底变没变"这个问题就没人回答得了。
 
-                    // 这个元素要几个数值维、表里现在有几个——两个数一起印（§25）。
-                    // "加了工具但什么都没显示"最常见的原因就是这一对不上，而画面上两者长得一模一样。
+                    // 这个元素要几个数值维、几条记录，表里现在各有多少——**三个数一起印**（§25.1）。
+                    // "加了工具但什么都没显示"最常见的原因就是形状不够，而画面上两者长得一模一样。
                     if (config.RequiredNumericDimensions > 0)
                     {
-                        int have = chart != null && chart.DataModel != null
+                        int haveDims = chart != null && chart.DataModel != null
                             ? chart.DataModel.NumericDimensionCount
                             : 0;
-                        int need = config.RequiredNumericDimensions;
-                        block.Body.Add(MakeReadonly(have < need
-                            ? "需要 " + need + " 个数值维，表现在有 " + have + " 个　⇒ 一条都不画（报表里 dims="
-                              + have + "/" + need + "）"
-                            : "需要 " + need + " 个数值维，表现在有 " + have + " 个"));
+                        int haveRecords = chart != null && chart.DataModel != null
+                            ? chart.DataModel.RecordCount
+                            : 0;
+                        int needDims = config.RequiredNumericDimensions;
+                        int needRecords = config.RequiredRecordCount;
+
+                        string dimsPart = "需要 " + needDims + " 个数值维，表现在有 " + haveDims + " 个";
+                        string recordsPart = needRecords > 0
+                            ? "；需要 " + needRecords + " 条记录，表现在有 " + haveRecords + " 条"
+                            : string.Empty;
+                        bool shortOfShape = haveDims < needDims || haveRecords < needRecords;
+                        block.Body.Add(MakeReadonly(dimsPart + recordsPart
+                            + (shortOfShape
+                                ? "　⇒ 画不出来（报表里 dims=" + haveDims + "/" + needDims
+                                  + " records=" + haveRecords + "）"
+                                : string.Empty)));
                     }
 
                     AppendHeaderGroups(block.Body, elementProp, elementProp.propertyPath);
@@ -1079,11 +1090,35 @@ namespace XericUI.XChart.Editor
 
         private void AfterStructureChange()
         {
+            // 结构一变就把**绘制序按表内位置重排**（他 2026-10-25 的政策：位置就是层序，§24.5）
+            serializedObject.Update();
+            RenumberDrawOrder();
             m_ElementSignature = ComputeSignature(ElementsProp());
             var chart = target as XChartBase;
             if (chart != null) chart.RebuildElements();
             RebuildTree();
             Repaint();
+        }
+
+        /// <summary>
+        /// 把每个元素的**绘制序**重写成它在表里的位置（0,1,2…）：位置更靠后＝绘得更晚＝盖在上面。
+        /// 他只调位置（↑↓），不再有第二个手填的绘制序号——两条口径指向不同事实时，
+        /// "上移之后绘制顺序变没变"就没人回答得了（§24.5）。
+        /// </summary>
+        private void RenumberDrawOrder()
+        {
+            var list = ElementsProp();
+            if (list == null) return;
+
+            bool changed = false;
+            for (int i = 0; i < list.arraySize; i++)
+            {
+                var drawOrder = list.GetArrayElementAtIndex(i).FindPropertyRelative("m_DrawOrder");
+                if (drawOrder == null || drawOrder.intValue == i) continue;
+                drawOrder.intValue = i;
+                changed = true;
+            }
+            if (changed) serializedObject.ApplyModifiedProperties();
         }
 
         private static string ComputeSignature(SerializedProperty list)

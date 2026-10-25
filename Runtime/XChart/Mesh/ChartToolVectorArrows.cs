@@ -8,37 +8,40 @@ using XericUI.XChart.Space;
 namespace XericUI.XChart.Mesh
 {
     /// <summary>
-    /// 向量场 / 流形箭头元素：一条记录占 <b>6 个数值维</b>——两组三维，
-    /// 按 <see cref="VectorMode"/> 解释成一支箭头（绝对＝方向矢量 / 相对＝第二个点）。
-    /// 后面可以再接 3~4 维颜色（色相/饱和度/明度 [+不透明度]），见 <see cref="UseColorDimensions"/>。
+    /// 向量场 / 流形箭头元素。**数据口径（规范 §25.2，2026-10-25 他澄清后定稿）**：
+    /// <b>前三维＝坐标 x/y/z</b>（与圆柱、散点同一套归一化），<b>一支箭头＝相邻两条记录</b>
+    /// （第 i 条是起点，第 i+1 条按 <see cref="VectorMode"/> 解释成"第二个点"或"方向矢量"），
+    /// <b>第 4~7 维是颜色</b>（色相 0..256 色环 / 饱和度 / 明度 / 不透明度，可选）。
     ///
-    /// <para><b>两种读法</b>（他 2026-10-25 口述）：
-    /// 绝对 ⇒ 后三维是方向本身，起点加方向乘倍率就是末端（螺旋点画出来是一片"刺猬"）；
-    /// 相对 ⇒ 后三维是第二个点，箭头是第一点指向第二点（一串首尾相接的点读起来就是"连着头转"）。</para>
+    /// <para><b>两种读法</b>：绝对 ⇒ 第二条记录的坐标就是方向（起点 + 方向×倍率），螺旋点画出来是一片"刺猬"；
+    /// 相对 ⇒ 它是第二个点（起点 + 差向量×倍率），一串首尾相接的点读起来就是"连着头转"。</para>
     ///
-    /// <para><b>连续绘制</b>：把所有记录的<b>第一组三维</b>按顺序连成折线（只有最后一段带箭头）。
+    /// <para><b>连续绘制</b>：把每条记录的坐标按顺序连成折线（只有最后一段带箭头）；
     /// 这时"相对/绝对"不适用 ⇒ 配置里那一项隐藏（互斥显示）。</para>
     ///
-    /// <para><b>箭头是自己拼的，没有用库里的 ArrowShape</b>：那套箭头是给曲线的屏幕空间
-    /// 图元用的，而这里的箭头必须跟着立方体姿态走（投影后长短和方向都在变）。做法是
-    /// 只让空间负责两端的投影，杆和头都在<b>像素空间</b>里量出来：杆是一段等宽四边形，
-    /// 头是一个退化四边形（三角形），宽度恒定所以任何姿态下都不会塌成一条线。</para>
+    /// <para><b>两端各自的颜色</b>：起点读第 i 条记录、终点读第 i+1 条 ⇒ 两支记录颜色不同时，
+    /// 杆与头**各显一色**。真正的"沿杆逐顶点渐变"要等渲染器支持逐顶点双色（P18）。</para>
+    ///
+    /// <para><b>箭头是自己拼的，没有用库里的 ArrowShape</b>：那套箭头是给曲线的屏幕空间图元用的，
+    /// 而这里的箭头必须跟着立方体姿态走（投影后长短和方向都在变）。做法是只让空间负责两端的投影，
+    /// 杆和头都在<b>像素空间</b>里量出来：杆是一段等宽四边形，头是一个退化四边形（三角形），
+    /// 宽度恒定所以任何姿态下都不会塌成一条线。</para>
     ///
     /// <para><b>数据只经过中转接口</b>：按维度下标 <see cref="IXChartDataSource.GetValueAt"/> 逐条取，
-    /// 不碰记录数组；条数由 <see cref="MaxArrowCount"/> 兜住，免得十万条记录一口气投影。</para>
+    /// 不碰记录数组；支数由 <see cref="MaxArrowCount"/> 兜住，免得十万条记录一口气投影。</para>
     /// </summary>
     [AddComponentMenu(XericRegistrationPaths.Chart + "/Mesh/Vector Arrow Tool")]
     public sealed class ChartToolVectorArrows : XChartToolBase
     {
-        /// <summary>起点的维度下标（矢量再占三维，颜色再往后）</summary>
-        public int OriginDimension { get; set; }
-        /// <summary>两组三维怎么读成一支箭头</summary>
+        /// <summary>坐标的维度下标（x/y/z 三维）</summary>
+        public int CoordinateDimension { get; set; }
+        /// <summary>第二条记录怎么读成方向</summary>
         public XChartArrowVectorMode VectorMode { get; set; } = XChartArrowVectorMode.Absolute;
-        /// <summary>把每条记录的第一个点按顺序连成折线（此时相对/绝对不适用）</summary>
+        /// <summary>把每条记录的坐标按顺序连成折线（此时相对/绝对不适用）</summary>
         public bool Continuous { get; set; }
         /// <summary>方向向量的长度倍率（立方体单位）；相对模式下作用在差向量上</summary>
         public float DirectionScale { get; set; } = 0.25f;
-        /// <summary>最多画多少条（数据再多也只取前 N 条，避免一次性铺满）</summary>
+        /// <summary>最多画多少支（一支＝相邻两条记录）</summary>
         public int MaxArrowCount { get; set; } = 512;
 
         /// <summary>箭头自己的变换（叠在图的空间之上）</summary>
@@ -49,7 +52,7 @@ namespace XericUI.XChart.Mesh
         /// <summary>是否用额外的数值维给每支箭头上色</summary>
         public bool UseColorDimensions { get; set; }
         /// <summary>颜色维的起点（色相、饱和度、明度 [+不透明度]）</summary>
-        public int ColorDimension { get; set; } = 6;
+        public int ColorDimension { get; set; } = 3;
         /// <summary>是否多读一维不透明度</summary>
         public bool HasAlphaDimension { get; set; }
 
@@ -69,10 +72,11 @@ namespace XericUI.XChart.Mesh
 
         private readonly List<ArrowFace> m_Faces = new List<ArrowFace>(256);
 
-        // 本帧的自述读数：算了几支 / 表里几个数值维 / 够不够
+        // 本帧的自述读数：算了几支 / 表里几个数值维 / 需要几个 / 几条记录
         private int m_ArrowsBuilt;
         private int m_DimensionsHave;
         private int m_DimensionsNeed;
+        private int m_RecordsHave;
 
         private struct ArrowFace
         {
@@ -90,13 +94,16 @@ namespace XericUI.XChart.Mesh
         public void MarkDirty() => m_Dirty = true;
 
         /// <summary>
-        /// 这个元素要几个数值维：矢量 6 ＋（可选）颜色 3。
-        /// <b>不透明度那一维不算硬需求</b>：它多给就多读、没给就退回单色的 alpha——
-        /// 把它算进门槛的话，勾一下"有不透明度"会让整个元素突然一条都不画（维数不够），
+        /// 这个元素要几个数值维：坐标 3 ＋（可选）颜色 3。
+        /// <b>不透明度那一维不算硬需求</b>：多给就多读、没给退回单色 alpha——
+        /// 把它算进门槛的话，勾一下"有不透明度"会让整个元素突然一条都不画，
         /// 那是把这一个开关变成了总闸。
         /// </summary>
         public int RequiredDimensionCount
-            => XChartArrowConfig.VectorDimensionCount + (UseColorDimensions ? 3 : 0);
+            => XChartArrowConfig.CoordinateDimensionCount + (UseColorDimensions ? XChartArrowConfig.ColorDimensionCount : 0);
+
+        /// <summary>一支箭头要两条记录</summary>
+        public int RequiredRecordCount => 2;
 
         protected override void OnInitialize()
         {
@@ -145,19 +152,21 @@ namespace XericUI.XChart.Mesh
             m_Faces.Clear();
             m_ArrowsBuilt = 0;
             m_DimensionsHave = 0;
+            m_RecordsHave = 0;
             m_DimensionsNeed = RequiredDimensionCount;
 
             var source = Data;
             if (source == null || !source.HasData) return;
 
             m_DimensionsHave = source.NumericDimensionCount;
-            // 维数不够就一条都不画（现象是"加了工具但什么都没显示"）——需求与实际两个数都留在报表里，
-            // 面板也会印同一对（规范 §25）
-            if (m_DimensionsHave < OriginDimension + RequiredDimensionCount) return;
+            m_RecordsHave = source.RecordCount;
+            // 形状不够就一支都不画（现象是"加了工具但什么都没显示"）——需求与实际几个数都留在报表里，
+            // 面板也印同一对（规范 §25.1）
+            if (m_DimensionsHave < CoordinateDimension + RequiredDimensionCount) return;
+            if (m_RecordsHave < RequiredRecordCount) return;
 
-            int records = source.RecordCount;
-            int limit = records;
-            if (MaxArrowCount > 0 && MaxArrowCount < limit) limit = MaxArrowCount;
+            // 一支箭头＝相邻两条记录 ⇒ 支数由纯算术算（离线钉着：记录不够 vs 维数不够要分得清）
+            int limit = XChartVectorFieldMath.ArrowCount(m_RecordsHave, MaxArrowCount);
 
             if (Continuous)
             {
@@ -168,40 +177,42 @@ namespace XericUI.XChart.Mesh
 
             for (int i = 0; i < limit; i++)
             {
-                Vector3 first = ReadPoint(source, i, OriginDimension);
-                Vector3 second = ReadPoint(source, i, OriginDimension + 3);
-                // 两种读法的算式在纯算术里（离线钉着）：绝对＝后三维就是方向；相对＝后三维是第二个点
+                Vector3 first = ReadPoint(source, i);
+                Vector3 second = ReadPoint(source, i + 1);
+                // 两种读法的算式在纯算术里（离线钉着）：绝对＝第二条的坐标就是方向；相对＝它是第二个点
                 Vector3 tip = XChartVectorFieldMath.Tip(VectorMode, first, second, DirectionScale);
-
-                if (AddArrow(space, first, tip, ColorAt(source, i))) m_ArrowsBuilt++;
+                if (AddArrow(space, first, tip, ColorAt(source, i), ColorAt(source, i + 1))) m_ArrowsBuilt++;
             }
 
             m_Faces.Sort(s_FarToNear);
         }
 
         /// <summary>
-        /// 连续绘制：把所有记录的第一个点按顺序连成一条折线，<b>只有最后一段带箭头</b>。
-        /// 读的是每组的第一组三维（坐标），后面那几维（方向/第二点/颜色维）在这种模式下不参与——
-        /// 连起来的本来就是空间里的一条路径。
+        /// 连续绘制：把每条记录的坐标按顺序连成折线，<b>只有最后一段带箭头</b>。
+        /// 段与段之间是同一串坐标，所以"相对/绝对"在这里没有意义（配置里那一项也隐藏了）。
         /// </summary>
         private void BuildContinuous(IXChartDataSource source, ChartToolSpace space, int limit)
         {
-            if (limit < 2) return;
+            if (limit < 1) return;
 
-            Vector3 previous = ReadPoint(source, 0, OriginDimension);
-            for (int i = 1; i < limit; i++)
+            Vector3 previous = ReadPoint(source, 0);
+            for (int i = 1; i <= limit; i++)
             {
-                Vector3 current = ReadPoint(source, i, OriginDimension);
-                bool last = i == limit - 1;
-                // 段用"到达点"的颜色（最后一段的箭头也用它）：一串颜色维读下来就是沿路径渐变
-                AddArrow(space, previous, current, ColorAt(source, i), last);
+                Vector3 current = ReadPoint(source, i);
+                bool last = i == limit;
+                // 段用"到达点"的颜色（最后一段的箭头用终点色）：一串颜色维读下来就是沿路径渐变
+                AddArrow(space, previous, current, ColorAt(source, i - 1), ColorAt(source, i), last);
                 m_ArrowsBuilt++;
                 previous = current;
             }
         }
 
-        /// <summary>一支箭头 = 杆 +（可选）头。退化（零长度）时按开关画成一个小方块</summary>
-        private bool AddArrow(ChartToolSpace space, Vector3 origin, Vector3 tip, Color color, bool withHead = true)
+        /// <summary>
+        /// 一支箭头 = 杆（用起点色）+（可选）头（用终点色）。
+        /// <b>两端各显一色</b>是颜色维"随记录自带"的直接结果；真正的沿杆渐变要等渲染器支持逐顶点双色（P18）。
+        /// </summary>
+        private bool AddArrow(ChartToolSpace space, Vector3 origin, Vector3 tip, Color startColor, Color endColor,
+            bool withHead = true)
         {
             Vector2 from = space.Project(origin, m_Composed);
             Vector2 to = space.Project(tip, m_Composed);
@@ -220,30 +231,30 @@ namespace XericUI.XChart.Mesh
                     C = from + new Vector2(1f, 1f),
                     D = from + new Vector2(1f, -1f),
                     Depth = depth,
-                    Color = color,
+                    Color = startColor,
                 });
                 return true;
             }
 
             m_Faces.Add(new ArrowFace
             {
-                A = shaftA, B = shaftB, C = shaftC, D = shaftD, Depth = depth, Color = color,
+                A = shaftA, B = shaftB, C = shaftC, D = shaftD, Depth = depth, Color = startColor,
             });
             if (!withHead) return true;
 
             m_Faces.Add(new ArrowFace
             {
-                A = headA, B = headB, C = headC, D = headD, Depth = depth, Color = color,
+                A = headA, B = headB, C = headC, D = headD, Depth = depth, Color = endColor,
             });
             return true;
         }
 
-        private static Vector3 ReadPoint(IXChartDataSource source, int record, int dimension)
+        private Vector3 ReadPoint(IXChartDataSource source, int record)
         {
             return new Vector3(
-                (float)source.GetValueAt(record, dimension),
-                (float)source.GetValueAt(record, dimension + 1),
-                (float)source.GetValueAt(record, dimension + 2));
+                (float)source.GetValueAt(record, CoordinateDimension),
+                (float)source.GetValueAt(record, CoordinateDimension + 1),
+                (float)source.GetValueAt(record, CoordinateDimension + 2));
         }
 
         /// <summary>
@@ -255,7 +266,7 @@ namespace XericUI.XChart.Mesh
         private Color ColorAt(IXChartDataSource source, int record)
         {
             if (!UseColorDimensions) return ArrowColor;
-            if (source.NumericDimensionCount < ColorDimension + 3) return ArrowColor;
+            if (source.NumericDimensionCount < ColorDimension + XChartArrowConfig.ColorDimensionCount) return ArrowColor;
 
             float hue = (float)source.GetValueAt(record, ColorDimension);
             float saturation = (float)source.GetValueAt(record, ColorDimension + 1);
@@ -276,14 +287,15 @@ namespace XericUI.XChart.Mesh
 
 #if UNITY_EDITOR
         /// <summary>
-        /// 报表里点名这一帧：<b>维数（现有/需要）</b>＋算了几支＋读法＋面数/块数。
-        /// "加了工具什么都没显示"这件事只有这一行分得清是"维数不够"还是"算了但没提交"
-        /// （他 2026-10-25 现场；规范 §25）。
+        /// 报表里点名这一帧：<b>维数（现有/需要）与记录数</b>＋算了几支＋读法＋颜色来源＋面数/块数。
+        /// "加了工具什么都没显示"这件事只有这一行分得清是"维数不够"还是"记录不够"还是"算了但没提交"
+        /// （他 2026-10-25 现场；规范 §25.1）。
         /// </summary>
         internal override void AppendDebugLine(System.Text.StringBuilder sb)
         {
             base.AppendDebugLine(sb);
             sb.Append(" dims=").Append(m_DimensionsHave).Append('/').Append(m_DimensionsNeed)
+              .Append(" records=").Append(m_RecordsHave)
               .Append(" arrows=").Append(m_ArrowsBuilt)
               .Append(" mode=").Append(Continuous ? "continuous" : (VectorMode == XChartArrowVectorMode.Relative ? "relative" : "absolute"))
               .Append(" colors=").Append(UseColorDimensions ? (HasAlphaDimension ? "hsv+a" : "hsv") : "single")

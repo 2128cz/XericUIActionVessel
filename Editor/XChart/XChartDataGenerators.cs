@@ -12,8 +12,8 @@ namespace XericUI.XChart.Editor
     /// </summary>
     public static class XChartDataGenerators
     {
-        /// <summary>螺旋矢量场一条记录占的数值维：起点 3 + 第二点 3 + 颜色 3（色相/饱和/明度）</summary>
-        public const int VectorFieldDimensions = 9;
+        /// <summary>螺旋矢量场一条记录占的数值维：坐标 3 + 颜色 4（色相/饱和/明度/不透明度）</summary>
+        public const int VectorFieldDimensions = 7;
 
         /// <summary>螺旋上参数 t∈[0,1] 的那个点（一圈正弦/余弦配线性 x）</summary>
         private static void Spiral(float t, out float x, out float y, out float z)
@@ -41,15 +41,17 @@ namespace XericUI.XChart.Editor
         }
 
         /// <summary>
-        /// 螺旋矢量场：<b>一条记录 9 个数值维</b> <c>[x, y, z, nx, ny, nz, h, s, v]</c>——
-        /// 前三维是这一条的点，中三维是<b>下一个点</b>，后三维是颜色（色相 0..256 走色环，饱和/明度都是 1）。
+        /// 螺旋矢量场：一圈正弦/余弦点，**每条记录 7 个数值维** <c>[x, y, z, h, s, v, a]</c>——
+        /// 前三维是<b>这条记录的坐标</b>（与圆柱/散点同一套口径），后四维是颜色
+        /// （色相 0→256 走满一圈色环、饱和/明度 1、不透明度 1）。
         ///
-        /// <para>为什么中三维取"下一个点"：两种读法都能一眼分出来（他 2026-10-25 的描述）——
+        /// <para>箭头由**相邻两条记录**构成（规范 §25.2），所以两种读法在这份数据上一眼可辨（他 2026-10-25）：
         /// <b>相对</b>：箭头由本点指向下一点 ⇒ 一串首尾相接、顺着螺旋转；
-        /// <b>绝对</b>：后三维当方向矢量用 ⇒ 每根朝"下一点的坐标方向"散开，看起来像一片刺猬。</para>
+        /// <b>绝对</b>：下一点的坐标当方向矢量 ⇒ 每根朝"下一点的坐标方向"散开，看起来像一片刺猬。
+        /// 又因为颜色随记录自带，一串箭头的起点色与终点色**各自不同**。</para>
         ///
         /// <para>维数不够会先<b>把列补出来</b>（测试数据的判据是"点一下就能看到东西"，
-        /// 而不是"提示他先去加六列"）；表里原有的记录会被清掉——它就是一份示例数据。</para>
+        /// 而不是"提示他先去加四列"）；表里原有的记录会被清掉——它就是一份示例数据。</para>
         /// </summary>
         public static int AppendSpiralVectorField(XChartDataModel model, int count)
         {
@@ -64,12 +66,11 @@ namespace XericUI.XChart.Editor
             for (int i = 0; i < count; i++)
             {
                 float t = count > 1 ? i / (float)(count - 1) : 0f;
-                float tNext = count > 1 ? (i + 1) / (float)(count - 1) : 0f;
                 Spiral(t, out values[0], out values[1], out values[2]);
-                Spiral(tNext, out values[3], out values[4], out values[5]);
-                values[6] = 256f * t;   // 色相：0..256 正好走完一圈色环
-                values[7] = 1f;         // 饱和度
-                values[8] = 1f;         // 明度
+                values[3] = 256f * t;   // 色相：0..256 正好走完一圈色环
+                values[4] = 1f;         // 饱和度
+                values[5] = 1f;         // 明度
+                values[6] = 1f;         // 不透明度
                 if (!TryAppend(model, values)) break;
                 accepted++;
             }

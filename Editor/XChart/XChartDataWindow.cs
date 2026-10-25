@@ -129,7 +129,7 @@ namespace XericUI.XChart.Editor
             toolbar.Add(MakeMenu("清空", ("清空全部记录", (Action)ClearData)));
             toolbar.Add(MakeMenu("测试",
                 ("螺旋 32（一圈正弦/余弦）", AppendTestSpiral),
-                ("螺旋矢量场 32（9 维：起点+第二点+色相/饱和/明度）", AppendTestVectorField),
+                ("螺旋矢量场 32（7 维：坐标 + 色相/饱和/明度/不透明）", AppendTestVectorField),
                 ("平方和金字塔 30（1+4+9+16）", AppendTestPyramid)));
             toolbar.Add(new ToolbarButton(ForceRefreshNow) { text = "强制刷新", tooltip = "改完数据直接重画一次图，不用回界面乱点" });
 
