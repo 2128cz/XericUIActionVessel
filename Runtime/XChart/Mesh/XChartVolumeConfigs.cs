@@ -156,9 +156,17 @@ namespace XericUI.XChart.Mesh
                                  "相对：它是第二个点，箭头＝第一点指向第二点。**连续绘制打开时这一项不适用**")]
         private XChartArrowVectorMode m_VectorMode = XChartArrowVectorMode.Absolute;
 
-        [SerializeField, Tooltip("把每条记录的坐标按顺序连成一条折线（只有最后一段带箭头）。" +
+        [SerializeField, Tooltip("把每条记录的坐标按顺序连成一条路径（贝塞尔细分，接缝不断口）。" +
                                  "打开之后「相对/绝对」被隐藏——连起来的是一条空间路径，谈不到这两者")]
         private bool m_Continuous;
+
+        [SerializeField, Range(0f, 1f), Tooltip("连续绘制时箭头放在路径的哪个位置（0＝起点、1＝末端）：" +
+                                                "路径在这一处剪断，箭头顺那一点的切线。只有连续绘制用得上")]
+        private float m_HeadPosition = 1f;
+
+        [SerializeField, Range(2, 64), Tooltip("连续绘制时每段路径细分成几节（曲线渲染器的 tessellation）。" +
+                                               "越大越圆也越贵。只有连续绘制用得上")]
+        private int m_PathSegments = 12;
 
         [SerializeField, Tooltip("方向向量长度倍率（立方体单位）；相对模式下作用在差向量上")]
         private float m_DirectionScale = 0.25f;
@@ -212,6 +220,8 @@ namespace XericUI.XChart.Mesh
         public override bool IsFieldHidden(string fieldName)
         {
             if (fieldName == nameof(m_VectorMode)) return m_Continuous;
+            // 这两项是"路径上的箭头"才有的概念：一支一支画的时候头永远在末端
+            if (fieldName == nameof(m_HeadPosition) || fieldName == nameof(m_PathSegments)) return !m_Continuous;
             if (fieldName == nameof(m_ColorDimension) || fieldName == nameof(m_HasAlphaDimension))
                 return !m_UseColorDimensions;
             return false;
@@ -226,6 +236,8 @@ namespace XericUI.XChart.Mesh
             arrows.CoordinateDimension = m_CoordinateDimension;
             arrows.VectorMode = m_VectorMode;
             arrows.Continuous = m_Continuous;
+            arrows.HeadPosition = m_HeadPosition;
+            arrows.PathSegments = m_PathSegments;
             arrows.DirectionScale = m_DirectionScale;
             arrows.MaxArrowCount = m_MaxArrowCount;
             arrows.Transform = m_Transform;

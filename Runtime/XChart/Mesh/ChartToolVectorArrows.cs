@@ -65,6 +65,30 @@ namespace XericUI.XChart.Mesh
 
         public XChartMeshFillRenderer FillRenderer { get; private set; }
 
+        /// <summary>
+        /// 连续绘制用的曲线渲染器（库里的贝塞尔细分渲染器，圆柱弧段同一件）。
+        /// <b>折线渲染器只留给直线</b>——他 2026-10-23 的原话，而路径正是"会弯的那种线"（§10.4）。
+        /// </summary>
+        public UICurveRenderer CurveRenderer { get; private set; }
+
+        /// <summary>
+        /// 连续绘制时<b>画到路径的哪个位置</b>（0＝起点、1＝整条，默认 1）：
+        /// 箭头就放在这一处，路径在这一点被剪断（剪口之后不画）——
+        /// 不剪的话路径会从箭头底下穿出去，看着像"箭头朝里长"。
+        /// </summary>
+        public float HeadPosition { get; set; } = 1f;
+
+        /// <summary>连续绘制时每段贝塞尔细分成几节（曲线渲染器的 tessellation）</summary>
+        public int PathSegments { get; set; } = 12;
+
+        private readonly List<Vector2> m_Pixels = new List<Vector2>(64);
+        private string m_PathRenderer = "-";
+        private readonly Vector2[] m_Bezier = new Vector2[XChartArrowPathMath.ControlPointsPerSegment];
+        private readonly Vector2[] m_Left = new Vector2[XChartArrowPathMath.ControlPointsPerSegment];
+        private readonly Vector2[] m_Right = new Vector2[XChartArrowPathMath.ControlPointsPerSegment];
+        private readonly float[] m_Widths = new float[XChartArrowPathMath.ControlPointsPerSegment];
+        private int m_CurveEntries;
+
         private Matrix4x4 m_Composed = Matrix4x4.identity;
         private int m_LastSpaceVersion = -1;
         private long m_LastDataVersion = -1;
@@ -122,6 +146,18 @@ namespace XericUI.XChart.Mesh
                 rect.offsetMin = Vector2.zero;
                 rect.offsetMax = Vector2.zero;
             }
+
+            // 连续绘制走曲线渲染器（贝塞尔细分）；控制点每帧由本工具喂，别让它自己重建默认那条
+            CurveRenderer = CreateChildComponent<UICurveRenderer>("ArrowPath");
+            if (CurveRenderer != null)
+            {
+                CurveRenderer.autoRebuild = false;
+                var rect = CurveRenderer.rectTransform;
+                rect.anchorMin = Vector2.zero;
+                rect.anchorMax = Vector2.one;
+                rect.offsetMin = Vector2.zero;
+                rect.offsetMax = Vector2.zero;
+            }
             SetVisible(true);
         }
 
@@ -129,6 +165,7 @@ namespace XericUI.XChart.Mesh
         {
             base.OnRender();
             if (FillRenderer == null) return;
+            // 曲线渲染器不在位也要出图（退回直线段），所以它不是"能不能画"的前提
 
             var space = Context?.Space;
             if (space == null) return;
@@ -142,6 +179,7 @@ namespace XericUI.XChart.Mesh
             m_LastDataVersion = dataVersion;
             m_Composed = space.Compose(Transform);
 
+            if (CurveRenderer != null) CurveRenderer.ClearAll();
             BuildFaces(space);
 
             FillRenderer.ClearFaces();
@@ -154,6 +192,7 @@ namespace XericUI.XChart.Mesh
                     FillRenderer.AddFace(face.A, face.B, face.C, face.D, face.Color, face.Color);
             }
             FillRenderer.Apply();
+            if (CurveRenderer != null) CurveRenderer.RebuildAll();
         }
 
         private void BuildFaces(ChartToolSpace space)
@@ -163,6 +202,8 @@ namespace XericUI.XChart.Mesh
             m_DimensionsHave = 0;
             m_RecordsHave = 0;
             m_DimensionsNeed = RequiredDimensionCount;
+            m_CurveEntries = 0;
+            m_PathRenderer = Continuous ? (CurveRenderer != null ? "curve" : "fill") : "-";
 
             var source = Data;
             if (source == null || !source.HasData) return;
@@ -197,23 +238,94 @@ namespace XericUI.XChart.Mesh
         }
 
         /// <summary>
-        /// 连续绘制：把每条记录的坐标按顺序连成折线，<b>只有最后一段带箭头</b>。
-        /// 段与段之间是同一串坐标，所以"相对/绝对"在这里没有意义（配置里那一项也隐藏了）。
+        /// 连续绘制：一串途经点 → Catmull-Rom 贝塞尔链，交给曲线渲染器（贝塞尔细分，接缝不断口）；
+        /// 路径在 <see cref="HeadPosition"/> 处<b>剪断</b>，箭头放在剪口上、顺着那一点的<b>切线</b>。
+        /// 不剪的话路径会从箭头底下穿出去，看着像"箭头朝里长"。
+        /// 段与段之间是同一串坐标，所以"相对/绝对"在这里没有意义（配置里那一项也隐藏了）；
+        /// 曲线渲染器不在位时退回直线段（形状仍读得出来），报表里 <c>path=fill</c> 会说出来。
         /// </summary>
         private void BuildContinuous(IXChartDataSource source, ChartToolSpace space, int limit)
         {
-            if (limit < 1) return;
+            m_Pixels.Clear();
+            for (int i = 0; i <= limit; i++)
+                m_Pixels.Add(space.Project(ReadPoint(source, i), m_Composed));
 
-            Vector3 previous = ReadPoint(source, 0);
-            for (int i = 1; i <= limit; i++)
+            int segments = m_Pixels.Count - 1;
+            if (segments < 1) return;
+
+            XChartArrowPathMath.ResolvePosition(segments, HeadPosition, out int headSegment, out float headT);
+
+            Vector2 cut = Vector2.zero;
+            Vector2 cutTangent = Vector2.zero;
+
+            for (int s = 0; s <= headSegment; s++)
             {
-                Vector3 current = ReadPoint(source, i);
-                bool last = i == limit;
-                // 段用"到达点"的颜色（最后一段的箭头用终点色）：一串颜色维读下来就是沿路径渐变
-                AddArrow(space, previous, current, ColorAt(source, i - 1), ColorAt(source, i), last);
-                m_ArrowsBuilt++;
-                previous = current;
+                BuildSegmentBezier(s);
+                Vector2[] drawn = m_Bezier;
+                if (s == headSegment && headT < 1f)
+                {
+                    XChartArrowPathMath.Split(m_Bezier, headT, m_Left, m_Right);
+                    drawn = m_Left;
+                }
+
+                AddPathSegment(drawn, ColorAt(source, s), ColorAt(source, s + 1));
+
+                cut = XChartArrowPathMath.Evaluate(drawn, 1f);
+                cutTangent = XChartArrowPathMath.Tangent(drawn, 1f);
+                if (s == headSegment) break;
             }
+
+            AddHeadAt(cut, cutTangent, ColorAt(source, Mathf.Min(headSegment + 1, m_RecordsHave - 1)));
+            m_ArrowsBuilt = headSegment + 1;
+        }
+
+        /// <summary>段 s（点 s → 点 s+1）的贝塞尔控制点。端点之外重复端点：端点处切线指向段内。</summary>
+        private void BuildSegmentBezier(int s)
+        {
+            int last = m_Pixels.Count - 1;
+            XChartArrowPathMath.CatmullRomToBezier(
+                m_Pixels[s > 0 ? s - 1 : 0], m_Pixels[s], m_Pixels[s + 1],
+                m_Pixels[s + 2 <= last ? s + 2 : last], m_Bezier);
+        }
+
+        private void AddPathSegment(Vector2[] bezier, Color fromColor, Color toColor)
+        {
+            if (CurveRenderer != null)
+            {
+                for (int i = 0; i < m_Widths.Length; i++) m_Widths[i] = ShaftWidth;
+                CurveRenderer.AddCurve(new CurveCacheEntry
+                {
+                    startColor = fromColor,
+                    endColor = toColor,
+                    tessellationSegments = Mathf.Clamp(PathSegments, 2, 64),
+                }, bezier, m_Widths);
+                m_CurveEntries++;
+                return;
+            }
+
+            Vector2 a = bezier[0];
+            Vector2 b = bezier[3];
+            Vector2 side = new Vector2(-(b.y - a.y), b.x - a.x);
+            if (side.sqrMagnitude < 1e-6f) return;
+            side.Normalize();
+            float half = ShaftWidth * 0.5f;
+            m_Faces.Add(new ArrowFace
+            {
+                A = a + side * half, B = b + side * half, C = b - side * half, D = a - side * half,
+                Depth = 0f, Color = fromColor, ColorTo = toColor, Linear = true,
+            });
+        }
+
+        /// <summary>箭头放在剪口上，方向顺那一点的<b>切线</b>（不是两端连线——弯处会歪）。</summary>
+        private void AddHeadAt(Vector2 tip, Vector2 tangent, Color color)
+        {
+            if (tangent.sqrMagnitude < 1e-6f) return;
+            Vector2 unit = tangent.normalized;
+            Vector2 side = new Vector2(-unit.y, unit.x);
+            Vector2 baseCenter = tip - unit * HeadLength;
+            Vector2 a, b, c, d;
+            XChartArrowGeometry.BuildHead(baseCenter, tip, side, HeadWidth, out a, out b, out c, out d);
+            m_Faces.Add(new ArrowFace { A = a, B = b, C = c, D = d, Depth = 0f, Color = color });
         }
 
         /// <summary>
@@ -295,7 +407,9 @@ namespace XericUI.XChart.Mesh
         protected override void OnDispose()
         {
             FillRenderer = null;
+            CurveRenderer = null;
             m_Faces.Clear();
+            m_Pixels.Clear();
         }
 
 #if UNITY_EDITOR
@@ -312,6 +426,10 @@ namespace XericUI.XChart.Mesh
               .Append(" arrows=").Append(m_ArrowsBuilt)
               .Append(" mode=").Append(Continuous ? "continuous" : (VectorMode == XChartArrowVectorMode.Relative ? "relative" : "absolute"))
               .Append(" colors=").Append(UseColorDimensions ? (HasAlphaDimension ? "hsv+a" : "hsv") : "single")
+              .Append(" path=").Append(m_PathRenderer)
+              .Append(" at=").Append(HeadPosition.ToString("0.###"))
+              .Append(" curves=").Append(m_CurveEntries)
+              .Append(" curveVerts=").Append(CurveRenderer != null ? CurveRenderer.LiveVertexCount : 0)
               .Append(" arrowFaces=").Append(FillRenderer != null ? FillRenderer.FaceCount : 0)
               .Append(" fillChunks=").Append(FillRenderer != null ? FillRenderer.ChunkCount : 0)
               .Append(" fillMaxVerts=").Append(FillRenderer != null ? FillRenderer.MaxChunkVertices : 0);
