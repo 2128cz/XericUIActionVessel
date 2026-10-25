@@ -85,7 +85,13 @@ namespace XericUI.XChart.Mesh
             public Vector2 C;
             public Vector2 D;
             public float Depth;
+            /// <summary>00/10 这一对边的颜色（线性时＝起点色）</summary>
             public Color Color;
+            /// <summary>01/11 这一对边的颜色（只有线性用；＝终点色）</summary>
+            public Color ColorTo;
+            /// <summary>true＝沿杆渐变（杆），false＝单色（头、退化点）。
+        /// 必须 public：嵌套类型的 private 成员**外层类也读不到**（C# 的这条反直觉，本项目踩过）</summary>
+            public bool Linear;
         }
 
         private static readonly Comparison<ArrowFace> s_FarToNear =
@@ -142,7 +148,10 @@ namespace XericUI.XChart.Mesh
             for (int i = 0; i < m_Faces.Count; i++)
             {
                 ArrowFace face = m_Faces[i];
-                FillRenderer.AddFace(face.A, face.B, face.C, face.D, face.Color, face.Color);
+                if (face.Linear)
+                    FillRenderer.AddFaceLinear(face.A, face.B, face.C, face.D, face.Color, face.ColorTo);
+                else
+                    FillRenderer.AddFace(face.A, face.B, face.C, face.D, face.Color, face.Color);
             }
             FillRenderer.Apply();
         }
@@ -236,15 +245,19 @@ namespace XericUI.XChart.Mesh
                 return true;
             }
 
+            // 杆：沿杆渐变（起点一侧 ← 终点一侧）。BuildShaft 的绕序把 a/d 放在起点、b/c 放在末端，
+            // 而 AddFaceLinear 取的是"00/10 一色、01/11 一色"——这条配对由探针钉着，配错会横着染到杆宽上
             m_Faces.Add(new ArrowFace
             {
-                A = shaftA, B = shaftB, C = shaftC, D = shaftD, Depth = depth, Color = startColor,
+                A = shaftA, B = shaftB, C = shaftC, D = shaftD,
+                Depth = depth, Color = startColor, ColorTo = endColor, Linear = true,
             });
             if (!withHead) return true;
 
             m_Faces.Add(new ArrowFace
             {
-                A = headA, B = headB, C = headC, D = headD, Depth = depth, Color = endColor,
+                A = headA, B = headB, C = headC, D = headD,
+                Depth = depth, Color = endColor,
             });
             return true;
         }

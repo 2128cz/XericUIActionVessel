@@ -7,6 +7,23 @@ using XericUI.Core;
 namespace XericUI.XChart.Mesh
 {
     /// <summary>
+    /// 一个填充四边形怎么上色（<b>纯枚举</b>，住在预算算式旁边是为了让"几顶点"这条判据离线可验）。
+    ///
+    /// <list type="bullet">
+    /// <item><see cref="Flat"/>：四角同色（4 顶点 2 三角）。</item>
+    /// <item><see cref="Radial"/>：四角一色 + 中心一色（5 顶点 4 三角，做浅淡的立体感）。</item>
+    /// <item><see cref="Linear"/>：沿 00/10 ↔ 01/11 这一对边线性渐变（4 顶点 2 三角）——
+    /// 箭头杆"起点色 → 终点色"走的是这一档。</item>
+    /// </list>
+    /// </summary>
+    public enum XChartFaceFillKind
+    {
+        Flat = 0,
+        Radial = 1,
+        Linear = 2,
+    }
+
+    /// <summary>
     /// 顶点预算分块（纯算，离线可验）。
     ///
     /// <para><b>为什么要有它</b>：UGUI 的 65535 顶点上限是<b>每个 Graphic 各自</b>的，而有些元素是
@@ -68,6 +85,17 @@ namespace XericUI.XChart.Mesh
             }
             return max;
         }
+
+        /// <summary>
+        /// 一块面要几个顶点：只有<b>径向渐变</b>要多一个中心顶点（5 个、4 三角），
+        /// 平坦与线性渐变都是 4 顶点 2 三角。
+        ///
+        /// <para>分块预算吃的是这个数（65535 是<b>每个 Graphic 各自</b>的上限），所以它必须是单一定义：
+        /// 渲染侧按它写顶点、预算侧按它算块，两处各写一套就会出现"预算以为 4 个、实际发 5 个"
+        /// ——那种分块会在恰好卡线时撞上限。</para>
+        /// </summary>
+        public static int VerticesPerFace(XChartFaceFillKind kind)
+            => kind == XChartFaceFillKind.Radial ? 5 : 4;
     }
 
     /// <summary>
@@ -90,6 +118,8 @@ namespace XericUI.XChart.Mesh
             public Vector2 Corner10;
             public Color32 EdgeColor;
             public Color32 CenterColor;
+            /// <summary>怎么上色（平坦 / 径向 / 线性）。<see cref="XChartMeshBudget.VerticesPerFace"/> 吃它</summary>
+            public XChartFaceFillKind Kind;
         }
 
         /// <summary>一块：只画 [Start, End) 之间的面。顶点数受预算限制，所以不会撞 65535 上限。</summary>
@@ -138,6 +168,7 @@ namespace XericUI.XChart.Mesh
         public void AddFace(Vector2 corner00, Vector2 corner01, Vector2 corner11, Vector2 corner10,
             Color edgeColor, Color centerColor)
         {
+            bool gradient = edgeColor != centerColor;
             m_Faces.Add(new FaceQuad
             {
                 Corner00 = corner00,
@@ -146,6 +177,31 @@ namespace XericUI.XChart.Mesh
                 Corner10 = corner10,
                 EdgeColor = edgeColor,
                 CenterColor = centerColor,
+                Kind = gradient ? XChartFaceFillKind.Radial : XChartFaceFillKind.Flat,
+            });
+        }
+
+        /// <summary>
+        /// 追加一个<b>线性渐变</b>的四边形：<c>corner00</c> 与 <c>corner10</c> 取
+        /// <paramref name="fromColor"/>，<c>corner01</c> 与 <c>corner11</c> 取 <paramref name="toColor"/>
+        /// ——也就是"一对边一色"，渐变方向垂直于那两条边。
+        ///
+        /// <para>箭头杆用的就是这一档：<see cref="XChartArrowGeometry.BuildShaft"/> 绕出来的四角里
+        /// <b>a/d 在起点一侧、b/c 在末端一侧</b>（这条配对由探针钉着，配错就会横着染到杆的宽度上，
+        /// 画面上看是"杆的两侧各一色"而不是"沿杆渐变"）。顶点数与平坦一样（4 个、2 三角）。</para>
+        /// </summary>
+        public void AddFaceLinear(Vector2 corner00, Vector2 corner01, Vector2 corner11, Vector2 corner10,
+            Color fromColor, Color toColor)
+        {
+            m_Faces.Add(new FaceQuad
+            {
+                Corner00 = corner00,
+                Corner01 = corner01,
+                Corner11 = corner11,
+                Corner10 = corner10,
+                EdgeColor = fromColor,
+                CenterColor = toColor,
+                Kind = XChartFaceFillKind.Linear,
             });
         }
 
@@ -161,7 +217,7 @@ namespace XericUI.XChart.Mesh
         {
             if (m_FaceVertexCounts.Length < m_Faces.Count) m_FaceVertexCounts = new int[m_Faces.Count];
             for (int i = 0; i < m_Faces.Count; i++)
-                m_FaceVertexCounts[i] = IsGradient(m_Faces[i]) ? 5 : 4;
+                m_FaceVertexCounts[i] = XChartMeshBudget.VerticesPerFace(m_Faces[i].Kind);
 
             if (m_ChunkStarts.Length < m_Faces.Count + 1) m_ChunkStarts = new int[m_Faces.Count + 1];
             int chunks = XChartMeshBudget.Split(m_FaceVertexCounts, m_Faces.Count,
@@ -218,12 +274,18 @@ namespace XericUI.XChart.Mesh
                 FaceQuad face = m_Faces[i];
                 int first = vh.currentVertCount;
 
+                // 线性渐变：00/10 这一对取 from（EdgeColor），01/11 取 to（CenterColor）；
+                // 平坦与径向都是四角同色（径向另加一个中心顶点）
+                bool linear = face.Kind == XChartFaceFillKind.Linear;
+                Color32 corner01Color = linear ? face.CenterColor : face.EdgeColor;
+                Color32 corner11Color = linear ? face.CenterColor : face.EdgeColor;
+
                 vh.AddVert(face.Corner00, face.EdgeColor, new Vector2(0f, 0f));
-                vh.AddVert(face.Corner01, face.EdgeColor, new Vector2(0f, 1f));
-                vh.AddVert(face.Corner11, face.EdgeColor, new Vector2(1f, 1f));
+                vh.AddVert(face.Corner01, corner01Color, new Vector2(0f, 1f));
+                vh.AddVert(face.Corner11, corner11Color, new Vector2(1f, 1f));
                 vh.AddVert(face.Corner10, face.EdgeColor, new Vector2(1f, 0f));
 
-                if (IsGradient(face))
+                if (face.Kind == XChartFaceFillKind.Radial)
                 {
                     Vector2 center = (face.Corner00 + face.Corner01 + face.Corner11 + face.Corner10) * 0.25f;
                     vh.AddVert(center, face.CenterColor, new Vector2(0.5f, 0.5f));
