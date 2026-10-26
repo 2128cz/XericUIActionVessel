@@ -80,7 +80,7 @@ namespace XericUI.XChart.Pseudo3D
         }
 
         /// <summary>本元素的变换变了（或想强制重取空间）时调用</summary>
-        public void MarkDirty() => m_Dirty = true;
+        public override void MarkDirty() => m_Dirty = true;
 
         /// <summary>线框定义立方体的面（发布 <c>mesh.face.*</c> 四角）⇒ 归定义组、最先跑（规范 §11.4）</summary>
         public override XChartToolCategory Category => XChartToolCategory.Definition;

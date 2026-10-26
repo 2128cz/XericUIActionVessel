@@ -127,7 +127,7 @@ namespace XericUI.XChart.Radar
 
         // ── 标记脏 ────────────────────────────────────────────────
 
-        public void MarkDirty()
+        public override void MarkDirty()
         {
             m_DataDirty = true;
         }

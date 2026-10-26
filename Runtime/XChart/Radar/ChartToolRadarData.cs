@@ -71,7 +71,7 @@ namespace XericUI.XChart.Radar
         }
 
         /// <summary>标记数据为脏（下次渲染时刷新）</summary>
-        public void MarkDirty()
+        public override void MarkDirty()
         {
             m_DataDirty = true;
         }

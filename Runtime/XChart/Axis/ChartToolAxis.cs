@@ -182,7 +182,7 @@ namespace XericUI.XChart.Axis
         private double m_RangeMax = 1.0;
         private double m_RangeStep = 1.0;
 
-        public void MarkDirty()
+        public override void MarkDirty()
         {
             m_RangeDirty = true;
             m_GeometryDirty = true;

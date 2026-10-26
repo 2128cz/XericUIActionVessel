@@ -156,7 +156,10 @@ namespace XericUI.XChart.Pseudo3D
         }
 
         /// <summary>数据或变换变了（版本号比对才是真判据，这里只负责"再算一次"）</summary>
-        public void MarkDataDirty() => m_PointsDirty = true;
+        public override void MarkDirty() => m_PointsDirty = true;
+
+        /// <summary>旧名字：这个工具里"数据脏"和"参数脏"是同一个字段，所以留一个字段、两个名字</summary>
+        public void MarkDataDirty() => MarkDirty();
 
         // ── 渲染 ──────────────────────────────────────────────────
 

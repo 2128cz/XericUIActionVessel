@@ -121,7 +121,7 @@ namespace XericUI.XChart.Mesh
         private static readonly Comparison<ArrowFace> s_FarToNear =
             (left, right) => left.Depth.CompareTo(right.Depth);
 
-        public void MarkDirty() => m_Dirty = true;
+        public override void MarkDirty() => m_Dirty = true;
 
         /// <summary>
         /// 这个元素要几个数值维：坐标 3 ＋（可选）颜色 3。

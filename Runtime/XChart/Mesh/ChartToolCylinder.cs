@@ -122,7 +122,7 @@ namespace XericUI.XChart.Mesh
         /// <summary>本帧几何是怎么来的（报表用）：literal / data(groups …) / data-skipped(原因)</summary>
         private string m_GeometryNote = "literal";
 
-        public void MarkDirty() => m_Dirty = true;
+        public override void MarkDirty() => m_Dirty = true;
 
         protected override void OnInitialize()
         {

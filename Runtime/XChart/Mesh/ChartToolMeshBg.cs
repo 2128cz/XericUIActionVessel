@@ -137,7 +137,7 @@ namespace XericUI.XChart.Mesh
         public int GridDimensionT { get; set; } = -1;
 
         /// <summary>本元素的变换变了（或想强制重取空间）时调用</summary>
-        public void MarkDirty() => m_Dirty = true;
+        public override void MarkDirty() => m_Dirty = true;
 
         /// <summary>本工具定义网格（发布面/格线插槽、算范围）⇒ 归定义组、最先跑（规范 §11.4）；
         /// 它"画在底下"这件事由绘制序（默认最小）表达，与分组无关</summary>

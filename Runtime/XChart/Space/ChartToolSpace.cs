@@ -67,6 +67,9 @@ namespace XericUI.XChart.Space
         /// <summary>投影后的平移（图表局部像素）</summary>
         public Vector2 Offset { get { EnsureProjection(); return m_Offset; } }
 
+        /// <summary>空间的"脏"只有投影这一件事：走同一条路，不自立第二个脏位</summary>
+        public override void MarkDirty() => MarkProjectionDirty();
+
         public void MarkProjectionDirty()
         {
             m_ProjectionDirty = true;
