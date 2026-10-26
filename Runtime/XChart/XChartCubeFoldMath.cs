@@ -72,6 +72,31 @@ namespace XericUI.XChart
             return true;
         }
 
+        /// <summary>
+        /// <b>方向（差）的折法</b>：<c>delta / (max − min)</c> —— <b>不减 min</b>。
+        ///
+        /// <para>位置折的是"在这列数据里的位置"，所以要先减起点；方向折的是"多长、朝哪"，
+        /// 减起点会把一个朝向变成一个偏移量（全表 +50 之后所有箭头一起跑偏，而他改的只是单位）。
+        /// 也不吃 <see cref="XChartValueOutOfRange"/>：<b>钳制/隐藏是坐标的事</b>，
+        /// 方向只有"多长"，把它夹到盒子尺寸等于替数据改方向。</para>
+        ///
+        /// <para>跨度 ≤0 或非有限 ⇒ 拒答（这一档没有可用的尺度，画出来的长度只能是编的）。</para>
+        /// </summary>
+        public static bool TryFoldDelta(double dx, double dy, double dz,
+            double minX, double maxX, double minY, double maxY, double minZ, double maxZ,
+            out Vector3 cubeDelta)
+        {
+            cubeDelta = Vector3.zero;
+            double spanX = maxX - minX, spanY = maxY - minY, spanZ = maxZ - minZ;
+            if (!IsFinite(dx) || !IsFinite(dy) || !IsFinite(dz)) return false;
+            if (spanX <= 0d || spanY <= 0d || spanZ <= 0d) return false;
+            if (!IsFinite(spanX) || !IsFinite(spanY) || !IsFinite(spanZ)) return false;
+
+            // 一个跨度折成"一个盒子半径"（与位置那套同尺度：位置铺满 [-1,1]，方向的一个跨度＝2 个单位）
+            cubeDelta = new Vector3((float)(dx / spanX * 2d), (float)(dy / spanY * 2d), (float)(dz / spanZ * 2d));
+            return true;
+        }
+
         private static bool IsFinite(double value)
             => !double.IsNaN(value) && !double.IsInfinity(value);
     }

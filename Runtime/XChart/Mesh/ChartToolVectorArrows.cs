@@ -294,8 +294,9 @@ namespace XericUI.XChart.Mesh
         /// <summary>
         /// 按"方向从哪来"读出一支箭头需要的两个量。相邻两条那两档读两条记录的坐标（都折进盒子）；
         /// 自带方向那档读同一条的 3~5 维、分段那档读奇数号记录的 0~2 维——
-        /// <b>这两档的方向是原始矢量，绝不按位置的显示范围折</b>：折一次就把"朝哪"变成"在哪"
-        /// （一个 (0,1,0) 的方向会被折成一个偏移量，于是所有箭头一起跑偏）。它的尺度由 DirectionScale 说话。
+        /// <b>这两档的方向按跨度缩、不位移</b>（<c>delta / span</c>）：拿位置那套"减 min 再除"去折一个朝向，
+        /// 就把"朝哪"变成了"在哪"；而完全不折又是另一个错——他 2026-10-26 看到的"一根比终点还大的矢量"
+        /// 就是原始值(−93.5,10.1,49.0) 直接当立方体单位用的结果（约 23 个盒子单位 ≈ 2700 像素）。
         /// </summary>
         private bool TryReadArrow(IXChartDataSource source, int arrow, out Vector3 origin, out Vector3 second)
         {
@@ -309,9 +310,9 @@ namespace XericUI.XChart.Mesh
             switch (DirectionSource)
             {
                 case XChartArrowDirectionSource.ThisRecordCarriesVector:
-                    return TryReadRaw(source, firstRecord, XChartArrowConfig.CoordinateDimensionCount, out second);
+                    return TryReadDelta(source, firstRecord, XChartArrowConfig.CoordinateDimensionCount, out second);
                 case XChartArrowDirectionSource.AlternatingRecords:
-                    return TryReadRaw(source, secondRecord, 0, out second);
+                    return TryReadDelta(source, secondRecord, 0, out second);
                 default:
                     return TryReadFolded(source, secondRecord, 0, out second);
             }
@@ -483,22 +484,24 @@ namespace XericUI.XChart.Mesh
             => double.IsNaN(value) || double.IsInfinity(value);
 
         /// <summary>
-        /// 一条记录的三个<b>原始</b>值（方向用）：<b>不折进盒子、不位移</b>——方向是矢量，
-        /// 拿位置的显示范围去折它就是把"朝哪"变成"在哪"。这里只保证三个数都是有限数，
-        /// 尺度交给 <see cref="DirectionScale"/>（每数据单位给多少立方体单位）。
+        /// 一条记录的三个<b>原始</b>值（方向用）→ <b>立方体单位的差</b>：只除以跨度、<b>不位移</b>
+        /// （减 min 会把"朝哪"变成"在哪"），也不吃 <see cref="OutOfRange"/>——钳制与隐藏是坐标的事。
+        /// 尺度在这里统一：一个数据跨度＝2 个立方体单位，最后由 <see cref="DirectionScale"/> 调长短。
         /// </summary>
-        private bool TryReadRaw(IXChartDataSource source, int record, int offset, out Vector3 vector)
+        private bool TryReadDelta(IXChartDataSource source, int record, int offset, out Vector3 cubeDelta)
         {
-            vector = Vector3.zero;
+            cubeDelta = Vector3.zero;
             if (record < 0 || record >= m_RecordsHave) return false;
             int dim = CoordinateDimension + offset;
             double x = source.GetValueAt(record, dim);
             double y = source.GetValueAt(record, dim + 1);
             double z = source.GetValueAt(record, dim + 2);
-            if (double.IsNaN(x) || double.IsNaN(y) || double.IsNaN(z)
-                || double.IsInfinity(x) || double.IsInfinity(y) || double.IsInfinity(z)) return false;
-            vector = new Vector3((float)x, (float)y, (float)z);
-            return true;
+            if (XChartCubeFoldMath.TryFoldDelta(x, y, z,
+                    m_MinX, m_MaxX, m_MinY, m_MaxY, m_MinZ, m_MaxZ, out cubeDelta)) return true;
+            cubeDelta = Vector3.zero;
+            // 三个数都好却折不出来＝这一档没有可用尺度（整列同一个数）；坏数是数据不可用——两件事分开数
+            if (IsBad(x) || IsBad(y) || IsBad(z)) m_PointsSkipped++; else m_PointsHidden++;
+            return false;
         }
 
         /// <summary>
