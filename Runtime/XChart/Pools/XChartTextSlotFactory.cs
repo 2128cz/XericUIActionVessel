@@ -32,6 +32,47 @@ namespace XericUI.XChart.Pools
         /// <summary>池里闲置的槽位数（调试判据用：调度收敛后应当等于"曾经发落过又还回来的"）</summary>
         public int FreeCount => m_Free.Count;
 
+        /// <summary>
+        /// 槽位的<b>默认状态</b>只在这里定义一次。新建那件走它，<b>从空闲表里拿回来的那件也必须走它</b>——
+        /// 只在新建分支设默认的话，复用件会带着上一轮的字号、颜色、矩形和旋转走（轴线每帧写
+        /// <c>text/fontSize/color/sizeDelta/anchoredPosition/localEulerAngles</c> 这六样，别的需求也一样），
+        /// 症状是"标签的元素换了个顺序显示，字就莫名变大/歪了"，而这种错在画面上完全看不出来是谁写的。
+        /// </summary>
+        public static void ResetToDefaults(TMP_Text slot)
+        {
+            if (!IsAlive(slot)) return;
+
+            var tmp = slot as TextMeshProUGUI;
+            if (tmp != null)
+            {
+                tmp.text = string.Empty;
+                tmp.fontSize = k_DefaultFontSize;
+                tmp.color = k_DefaultColor;
+                tmp.fontStyle = FontStyles.Normal;
+                tmp.enableWordWrapping = false;
+                tmp.characterSpacing = 0f;
+                tmp.lineSpacing = 0f;
+                // 这版 TMP 的 outlineWidth 是 float（不是 Vector2），也没有 enableOutline 开关：
+                // 宽度归零就是不描边
+                tmp.outlineWidth = 0f;
+                tmp.alignment = TextAlignmentOptions.Center;
+            }
+
+            var rect = slot.rectTransform;
+            rect.anchorMin = k_DefaultAnchor;
+            rect.anchorMax = k_DefaultAnchor;
+            rect.pivot = k_DefaultPivot;
+            rect.sizeDelta = k_DefaultSize;
+            rect.anchoredPosition = Vector2.zero;
+            rect.localEulerAngles = Vector3.zero;
+        }
+
+        private const float k_DefaultFontSize = 14f;
+        private static readonly Color k_DefaultColor = Color.white;
+        private static readonly Vector2 k_DefaultAnchor = new Vector2(0.5f, 0.5f);
+        private static readonly Vector2 k_DefaultPivot = new Vector2(0.5f, 0.5f);
+        private static readonly Vector2 k_DefaultSize = new Vector2(0f, 0f);
+
         public TMP_Text Acquire()
         {
             var poolRoot = EnsurePoolRoot();
@@ -42,6 +83,8 @@ namespace XericUI.XChart.Pools
                 TMP_Text slot = m_Free.Pop();
                 // 空闲表里也可能有域重载留下的僵尸件：验不过就当场销毁，别发出去
                 if (!IsAlive(slot)) { DestroySlot(slot); continue; }
+                // 复用的件先擦回默认——这一句是这条路径上唯一的保证，别指望各元素"自己都会写全"
+                ResetToDefaults(slot);
                 slot.gameObject.SetActive(true);
                 return slot;
             }
@@ -52,13 +95,7 @@ namespace XericUI.XChart.Pools
             go.hideFlags = XChartBase.CurrentFlags;
 
             var tmp = go.AddComponent<TextMeshProUGUI>();
-            tmp.text = string.Empty;
-            tmp.enableWordWrapping = false;
-            tmp.alignment = TextAlignmentOptions.Center;
-            var rect = tmp.rectTransform;
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
+            ResetToDefaults(tmp);
             return tmp;
         }
 
