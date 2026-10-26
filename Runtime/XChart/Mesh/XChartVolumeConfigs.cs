@@ -1,23 +1,12 @@
 using System;
 using UnityEngine;
+using UnityEngine.Serialization;
 using XericUI.XChart.Space;
 
 namespace XericUI.XChart.Mesh
 {
-    /// <summary>
-    /// 一条记录里的两个点怎么变成一支箭头。
-    ///
-    /// <para><b>绝对</b>：后三点是方向矢量本身（起点 + 方向×倍率＝末端）。螺旋点这样画出来是"刺猬"。
-    /// <b>相对</b>：后三点是第二个点，箭头＝第一点指向第二点（差向量×倍率）。
-    /// 连续绘制模式下两者都不适用（连起来的是一条空间路径）。</para>
-    /// </summary>
-    public enum XChartArrowVectorMode
-    {
-        /// <summary>后三维＝方向矢量</summary>
-        Absolute = 0,
-        /// <summary>后三维＝第二个点（箭头由第一点指向它）</summary>
-        Relative = 1,
-    }
+    // 方向来源的枚举在 XChartVectorFieldMath.cs 里（XChartArrowDirectionSource）：
+    // 算箭数的四种算法也在那里，配置只存"选哪一种"——两边各写一遍就会答得不一样（§25.1 那一族）。
 
     /// <summary>圆柱元素的配置（几何单位都是立方体局部：±1 就是盒子边界）。</summary>
     [Serializable]
@@ -129,8 +118,9 @@ namespace XericUI.XChart.Mesh
     /// <para><b>数据口径（2026-10-25 他澄清后定稿，规范 §25.2）</b>：</para>
     /// <list type="bullet">
     /// <item><b>前三维＝坐标 x/y/z</b>（立方体单位，与圆柱、散点同一套归一化）——不是"两组三维"。</item>
-    /// <item><b>一支箭头＝相邻两条记录</b>：第 i 条是起点，第 i+1 条按 <see cref="VectorMode"/> 解释成
-    /// "第二个点"或"方向矢量"（他原话："我们是 0 和 1，一个代表坐标，一个代表它的矢量的方向"）。</item>
+    /// <item><b>一支箭头＝相邻两条记录</b>：第 i 条是起点，第 i+1 条按 <see cref="m_DirectionSource"/> 解释成
+    /// "第二个点"或"方向矢量"（他原话："我们是 0 和 1，一个代表坐标，一个代表它的矢量的方向"）。
+    /// 2026-10-26 又补了两档来源：本条记录自带方向（0~2 点、3~5 方向）、以及"偶数是点、奇数是方向"的分段存法。</item>
     /// <item><b>第 4~7 维是颜色</b>：色相（0..256 色环）/ 饱和度 / 明度 / 不透明度，全部可选。
     /// 颜色随记录自带 ⇒ 一支箭头的起点色与终点色可以不同（七维信息的那个用法）。</item>
     /// </list>
@@ -152,9 +142,11 @@ namespace XericUI.XChart.Mesh
         [SerializeField, Tooltip("坐标从第几个数值维开始（一条记录 3 维：x/y/z）；一支箭头由**相邻两条记录**构成")]
         private int m_CoordinateDimension;
 
-        [SerializeField, Tooltip("绝对：第二条记录的坐标当作方向矢量（起点→末端）。" +
-                                 "相对：它是第二个点，箭头＝第一点指向第二点。**连续绘制打开时这一项不适用**")]
-        private XChartArrowVectorMode m_VectorMode = XChartArrowVectorMode.Absolute;
+        [SerializeField, Tooltip("方向从哪来（旧「相对/绝对」就是这里的前两项，存的值不用重设）：" +
+                                 "相邻两条·下一条的坐标当方向 / 相邻两条·下一条是第二个点（首尾相接） / " +
+                                 "本条记录自带方向（0~2 是点、3~5 是方向） / 分段（偶数记录是点、奇数是方向）")]
+        [FormerlySerializedAs("m_VectorMode")]
+        private XChartArrowDirectionSource m_DirectionSource = XChartArrowDirectionSource.NextRecordAsVector;
 
         [SerializeField, Tooltip("把每条记录的坐标按顺序连成一条路径（贝塞尔细分，接缝不断口）。" +
                                  "打开之后「相对/绝对」被隐藏——连起来的是一条空间路径，谈不到这两者")]
@@ -164,6 +156,11 @@ namespace XericUI.XChart.Mesh
                                                 "它是曲线渲染器那个标记在曲线上的参数位置，路径不剪断、标记叠在线上。" +
                                                 "只有连续绘制用得上")]
         private float m_HeadPosition = 1f;
+
+        [SerializeField, Range(0f, 1f), Tooltip("头贴在矢量端点的哪一处：0＝尾部落在点上（向前伸）、" +
+                                               "0.5＝中心对点、1＝头尖落在点上（默认）。" +
+                                               "头的长短还会按这条矢量的投影比例缩放，指向屏幕里就会缩没")]
+        private float m_MarkerAnchor = 1f;
 
         [SerializeField, Range(2, 64), Tooltip("连续绘制时每段路径细分成几节（曲线渲染器的 tessellation）。" +
                                                "越大越圆也越贵。只有连续绘制用得上")]
@@ -205,22 +202,28 @@ namespace XericUI.XChart.Mesh
 
         /// <summary>
         /// 这个元素要几个数值维才画得出来（面板据此报"表里只有几个"，不再"什么都不显示"）。
-        /// 坐标 3 ＋（可选）颜色 3；**不透明度那一维不算硬需求**（多给就多读、没给退回单色 alpha）——
+        /// <b>坐标那一半随方向来源变</b>：本条自带方向那档要 6 个（0~2 点、3~5 方向），其余三档 3 个；
+        /// 再加（可选）颜色 3。<b>不透明度那一维不算硬需求</b>（多给就多读、没给退回单色 alpha）——
         /// 算进门槛的话，勾一下"有不透明度"会让整个元素因维数不够突然消失。
         /// </summary>
         public override int RequiredNumericDimensions
-            => CoordinateDimensionCount + (m_UseColorDimensions ? ColorDimensionCount : 0);
-
-        /// <summary>一支箭头要两条记录 ⇒ 记录少于 2 条时一支都画不出来（面板/报表同样要印出来）</summary>
-        public override int RequiredRecordCount => 2;
+            => XChartVectorFieldMath.RequiredCoordinateDimensions(m_DirectionSource)
+               + (m_UseColorDimensions ? ColorDimensionCount : 0);
 
         /// <summary>
-        /// 互斥显示：连续绘制打开时「相对/绝对」没有意义（他 2026-10-25：勾一个就把排斥的那几个藏起来）。
+        /// 一支箭头要几条记录：本条自带方向那档<b>一条就够</b>；
+        /// 相邻两条与"偶点奇向"那两档要两条（后者是同一支的两半，前者是重叠取）。
+        /// </summary>
+        public override int RequiredRecordCount
+            => m_DirectionSource == XChartArrowDirectionSource.ThisRecordCarriesVector ? 1 : 2;
+
+        /// <summary>
+        /// 互斥显示：连续绘制打开时"方向从哪来"没有意义（他 2026-10-25：勾一个就把排斥的那几个藏起来）。
         /// 判据只有一处，面板照着问，不在面板里写特例。
         /// </summary>
         public override bool IsFieldHidden(string fieldName)
         {
-            if (fieldName == nameof(m_VectorMode)) return m_Continuous;
+            if (fieldName == nameof(m_DirectionSource)) return m_Continuous;
             // 这两项是"路径上的箭头"才有的概念：一支一支画的时候头永远在末端
             if (fieldName == nameof(m_HeadPosition) || fieldName == nameof(m_PathSegments)) return !m_Continuous;
             if (fieldName == nameof(m_ColorDimension) || fieldName == nameof(m_HasAlphaDimension))
@@ -235,9 +238,10 @@ namespace XericUI.XChart.Mesh
             if (!(tool is ChartToolVectorArrows arrows)) return;
 
             arrows.CoordinateDimension = m_CoordinateDimension;
-            arrows.VectorMode = m_VectorMode;
+            arrows.DirectionSource = m_DirectionSource;
             arrows.Continuous = m_Continuous;
             arrows.HeadPosition = m_HeadPosition;
+            arrows.MarkerAnchor = m_MarkerAnchor;
             arrows.PathSegments = m_PathSegments;
             arrows.DirectionScale = m_DirectionScale;
             arrows.MaxArrowCount = m_MaxArrowCount;

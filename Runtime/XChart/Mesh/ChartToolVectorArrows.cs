@@ -10,7 +10,7 @@ namespace XericUI.XChart.Mesh
     /// 向量场 / 流形箭头元素。<b>数据口径（规范 §25.2，2026-10-25 他澄清后定稿）</b>：
     /// <b>前三维＝坐标 x/y/z</b>（与圆柱、散点同一套归一化，折法见
     /// <see cref="XChartVectorFieldMath.TryCubePoint"/> 与 §28），<b>一支箭头＝相邻两条记录</b>
-    /// （第 i 条是起点，第 i+1 条按 <see cref="VectorMode"/> 解释成"第二个点"或"方向矢量"），
+    /// （第 i 条是起点，第 i+1 条按 <see cref="DirectionSource"/> 解释成"第二个点"或"方向矢量"），
     /// <b>第 4~7 维是颜色</b>（色相 0..256 色环 / 饱和度 / 明度 / 不透明度，可选）。
     ///
     /// <para><b>两种读法</b>：绝对 ⇒ 第二条记录的坐标就是方向（起点 + 方向×倍率），螺旋点画出来是一片"刺猬"；
@@ -34,9 +34,13 @@ namespace XericUI.XChart.Mesh
         private int m_CoordinateDimension;
         /// <summary>坐标的维度下标（x/y/z 三维）</summary>
         public int CoordinateDimension { get => m_CoordinateDimension; set { m_CoordinateDimension = value; MarkDirty(); } }
-        private XChartArrowVectorMode m_VectorMode = XChartArrowVectorMode.Absolute;
-        /// <summary>第二条记录怎么读成方向</summary>
-        public XChartArrowVectorMode VectorMode { get => m_VectorMode; set { m_VectorMode = value; MarkDirty(); } }
+        private XChartArrowDirectionSource m_DirectionSource = XChartArrowDirectionSource.NextRecordAsVector;
+        /// <summary>方向从哪来（四档，箭数与维数需求都跟着它变；算式在 XChartVectorFieldMath 里）</summary>
+        public XChartArrowDirectionSource DirectionSource
+        {
+            get => m_DirectionSource;
+            set { m_DirectionSource = value; MarkDirty(); }
+        }
         private bool m_Continuous;
         /// <summary>把每条记录的坐标按顺序连成路径（此时相对/绝对不适用）</summary>
         public bool Continuous { get => m_Continuous; set { m_Continuous = value; MarkDirty(); } }
@@ -94,11 +98,20 @@ namespace XericUI.XChart.Mesh
         /// </summary>
         public float HeadPosition { get => m_HeadPosition; set { m_HeadPosition = value; MarkDirty(); } }
 
+        private float m_MarkerAnchor = 1f;
+        /// <summary>
+        /// 头贴在矢量端点的哪一处：0＝尾部落在点上（向前伸）、0.5＝中心对点、1＝<b>头尖落在点上</b>（默认）。
+        /// 它就是库那个标记的 <c>depthCompensation</c>（映射＝anchor×2−1，在纯算术里）。
+        /// </summary>
+        public float MarkerAnchor { get => m_MarkerAnchor; set { m_MarkerAnchor = value; MarkDirty(); } }
+
         private int m_PathSegments = 12;
         /// <summary>连续绘制时每段路径细分成几节（曲线渲染器的 tessellation）</summary>
         public int PathSegments { get => m_PathSegments; set { m_PathSegments = value; MarkDirty(); } }
 
         private readonly List<Vector2> m_Pixels = new List<Vector2>(64);
+        // 路径还要留着<b>立方体单位</b>的那一份：头的投影比例要用"这一节在 3D 里多长"作分母
+        private readonly List<Vector3> m_Cubes = new List<Vector3>(64);
         private readonly Vector2[] m_Bezier = new Vector2[XChartArrowPathMath.ControlPointsPerSegment];
         private readonly float[] m_Widths = new float[XChartArrowPathMath.ControlPointsPerSegment];
         // 一支箭头一个标记，所以一条曲线最多挂一个：数组长度 1 是刻意的（AddCurve 吃的是数组）
@@ -106,6 +119,7 @@ namespace XericUI.XChart.Mesh
         private string m_PathRenderer = "-";
         private int m_CurveEntries;
         private int m_Markers;
+        private float m_HeadScale = 1f;
 
         private Matrix4x4 m_Composed = Matrix4x4.identity;
         private int m_LastSpaceVersion = -1;
@@ -127,16 +141,20 @@ namespace XericUI.XChart.Mesh
         public override void MarkDirty() => m_Dirty = true;
 
         /// <summary>
-        /// 这个元素要几个数值维：坐标 3 ＋（可选）颜色 3。
-        /// <b>不透明度那一维不算硬需求</b>：多给就多读、没给退回单色 alpha——
-        /// 把它算进门槛的话，勾一下"有不透明度"会让整个元素突然一条都不画，
-        /// 那是把这一个开关变成了总闸。
+        /// 这个元素要几个数值维：坐标那一半<b>随方向来源变</b>（本条自带方向那档要 6：0~2 点、3~5 方向），
+        /// 再加（可选）颜色 3。<b>不透明度那一维不算硬需求</b>：多给就多读、没给退回单色 alpha——
+        /// 把它算进门槛的话，勾一下"有不透明度"会让整个元素突然一条都不画，那是把开关变成了总闸。
         /// </summary>
         public int RequiredDimensionCount
-            => XChartArrowConfig.CoordinateDimensionCount + (UseColorDimensions ? XChartArrowConfig.ColorDimensionCount : 0);
+            => XChartVectorFieldMath.RequiredCoordinateDimensions(DirectionSource)
+               + (UseColorDimensions ? XChartArrowConfig.ColorDimensionCount : 0);
 
-        /// <summary>一支箭头要两条记录</summary>
-        public int RequiredRecordCount => 2;
+        /// <summary>几条记录凑一支：本条自带方向那档一条就够，其余要两条</summary>
+        public int RequiredRecordCount
+            => DirectionSource == XChartArrowDirectionSource.ThisRecordCarriesVector ? 1 : 2;
+
+        /// <summary>这一支箭头在屏幕上的"像素／立方体单位"比例（头的尺寸吃它，§30）</summary>
+        public float LastHeadScale => m_HeadScale;
 
         protected override void OnInitialize()
         {
@@ -218,7 +236,7 @@ namespace XericUI.XChart.Mesh
             if (!m_HasDomains) return;
 
             // 一支箭头＝相邻两条记录 ⇒ 支数由纯算术算（离线钉着：记录不够 vs 维数不够要分得清）
-            int limit = XChartVectorFieldMath.ArrowCount(m_RecordsHave, MaxArrowCount);
+            int limit = XChartVectorFieldMath.ArrowCount(DirectionSource, m_RecordsHave, MaxArrowCount);
 
             if (Continuous)
             {
@@ -228,17 +246,60 @@ namespace XericUI.XChart.Mesh
 
             for (int i = 0; i < limit; i++)
             {
-                Vector3 first, second;
-                if (!TryReadPoint(source, i, out first) || !TryReadPoint(source, i + 1, out second))
+                Vector3 origin, second;
+                if (!TryReadArrow(source, i, out origin, out second))
                 {
                     m_PointsSkipped++;
                     continue;
                 }
-                // 两种读法的算式在纯算术里（离线钉着）：绝对＝第二条的坐标就是方向；相对＝它是第二个点
-                Vector3 tip = XChartVectorFieldMath.Tip(VectorMode, first, second, DirectionScale);
-                AddShaft(space.Project(first, m_Composed), space.Project(tip, m_Composed),
-                    ColorAt(source, i), ColorAt(source, i + 1));
+                // 读法在纯算术里：相邻两条·下一条是第二个点 ⇒ 作差；其余三档 ⇒ 第二量本身就是方向
+                Vector3 tip = XChartVectorFieldMath.Tip(DirectionSource, origin, second, DirectionScale);
+                AddShaft(space, origin, tip, ColorAt(source, FirstRecordOf(i)), ColorAt(source, SecondRecordOf(i)));
                 m_ArrowsBuilt++;
+            }
+        }
+
+        /// <summary>这支箭头的<b>第一条</b>记录号（起点、起点色都读它）</summary>
+        private int FirstRecordOf(int arrow)
+            => DirectionSource == XChartArrowDirectionSource.AlternatingRecords ? arrow * 2 : arrow;
+
+        /// <summary>
+        /// 这支箭头的<b>第二条</b>记录号（终点色读它）。"本条自带方向"那档没有第二条，就是它自己——
+        /// 那一档两端同色是数据的说法，不是画错了。
+        /// </summary>
+        private int SecondRecordOf(int arrow)
+        {
+            switch (DirectionSource)
+            {
+                case XChartArrowDirectionSource.AlternatingRecords: return arrow * 2 + 1;
+                case XChartArrowDirectionSource.ThisRecordCarriesVector: return arrow;
+                default: return arrow + 1;
+            }
+        }
+
+        /// <summary>
+        /// 按"方向从哪来"读出一支箭头需要的两个量。相邻两条那两档读两条记录的坐标（都折进盒子）；
+        /// 自带方向那档读同一条的 3~5 维、分段那档读奇数号记录的 0~2 维——
+        /// <b>这两档的方向是原始矢量，绝不按位置的显示范围折</b>：折一次就把"朝哪"变成"在哪"
+        /// （一个 (0,1,0) 的方向会被折成一个偏移量，于是所有箭头一起跑偏）。它的尺度由 DirectionScale 说话。
+        /// </summary>
+        private bool TryReadArrow(IXChartDataSource source, int arrow, out Vector3 origin, out Vector3 second)
+        {
+            origin = Vector3.zero;
+            second = Vector3.zero;
+            int firstRecord = FirstRecordOf(arrow);
+            int secondRecord = SecondRecordOf(arrow);
+            if (firstRecord < 0 || secondRecord >= m_RecordsHave) return false;
+            if (!TryReadFolded(source, firstRecord, 0, out origin)) return false;
+
+            switch (DirectionSource)
+            {
+                case XChartArrowDirectionSource.ThisRecordCarriesVector:
+                    return TryReadRaw(source, firstRecord, XChartArrowConfig.CoordinateDimensionCount, out second);
+                case XChartArrowDirectionSource.AlternatingRecords:
+                    return TryReadRaw(source, secondRecord, 0, out second);
+                default:
+                    return TryReadFolded(source, secondRecord, 0, out second);
             }
         }
 
@@ -251,12 +312,14 @@ namespace XericUI.XChart.Mesh
         private void BuildContinuous(IXChartDataSource source, ChartToolSpace space, int limit)
         {
             m_Pixels.Clear();
+            m_Cubes.Clear();
             for (int i = 0; i <= limit; i++)
             {
                 Vector3 cube;
                 // 跳过的点要报出来：路径按"活下来的点"连，颜色仍按记录号取——数据里有非有限值时
                 // 这两者会错开，不印出来的话就只能靠猜（skipped= 那一读数的全部意义）
-                if (!TryReadPoint(source, i, out cube)) { m_PointsSkipped++; continue; }
+                if (!TryReadFolded(source, i, 0, out cube)) { m_PointsSkipped++; continue; }
+                m_Cubes.Add(cube);
                 m_Pixels.Add(space.Project(cube, m_Composed));
             }
 
@@ -271,7 +334,13 @@ namespace XericUI.XChart.Mesh
                 bool withHead = s == headSegment;
                 if (withHead)
                 {
-                    m_Heads[0] = ToHeadData(XChartVectorFieldMath.Head(HeadLength, HeadWidth, headT,
+                    // 连续绘制没有"一支矢量"那个长度可折，就用<b>这一节自己</b>的投影比例
+                    // （画了多少像素 ÷ 它在立方体单位里该有多少像素）：弯到背面去的那一节，头跟着一起缩
+                    m_HeadScale = XChartVectorFieldMath.ProjectedScale(
+                        Vector2.Distance(m_Pixels[s], m_Pixels[s + 1]),
+                        Vector3.Distance(m_Cubes[s], m_Cubes[s + 1]), space.CubeToPixel);
+                    m_Heads[0] = ToHeadData(XChartVectorFieldMath.Head(
+                        HeadLength * m_HeadScale, HeadWidth * m_HeadScale, headT, MarkerAnchor,
                         ColorAt(source, Mathf.Min(s + 1, m_RecordsHave - 1))));
                     m_Markers++;
                     m_ArrowsBuilt = 1;      // 连续绘制是"一条路径 + 一支箭头"
@@ -294,22 +363,33 @@ namespace XericUI.XChart.Mesh
         /// 零向量不投一条零长曲线（库在零长输入上的细分没有承诺），改画一个圆点标记；
         /// 开关关掉就整条不画——<c>arrows=/skipped=</c> 说得出为什么少了一支。
         /// </summary>
-        private void AddShaft(Vector2 from, Vector2 to, Color startColor, Color endColor)
+        private void AddShaft(ChartToolSpace space, Vector3 originCube, Vector3 tipCube,
+            Color startColor, Color endColor)
         {
+            Vector2 from = space.Project(originCube, m_Composed);
+            Vector2 to = space.Project(tipCube, m_Composed);
+
+            // 头的尺寸吃"这条矢量自己的投影比例"：库的标记是<b>固定像素</b>的（库里那行
+            // pos += tangent * arrow.width * 0.5f * depthCompensation），不乘它就等于
+            // "转个身所有箭头还是同样长"（他 2026-10-26 的判决：圆周方向投到 2D 不可能都等长）
+            m_HeadScale = XChartVectorFieldMath.ProjectedScale(Vector2.Distance(from, to),
+                Vector3.Distance(originCube, tipCube), space.CubeToPixel);
+
             if ((to - from).sqrMagnitude < 1e-4f)
             {
                 if (!ShowZeroVectorsAsDots) return;
                 // 一像素的极短直线只为让条目存在，真正画出来的东西是这个圆点
                 XChartArrowPathMath.Straight(from, from + new Vector2(1f, 0f), m_Bezier);
                 m_Heads[0] = ToHeadData(XChartVectorFieldMath.Dot(
-                    Mathf.Max(ShaftWidth, 1f), Mathf.Max(HeadWidth, 1f), endColor));
+                    Mathf.Max(ShaftWidth, 1f), Mathf.Max(HeadWidth * m_HeadScale, 1f), endColor));
                 AddEntry(m_Bezier, endColor, endColor, true);
                 m_Markers++;
                 return;
             }
 
             XChartArrowPathMath.Straight(from, to, m_Bezier);
-            m_Heads[0] = ToHeadData(XChartVectorFieldMath.Head(HeadLength, HeadWidth, 1f, endColor));
+            m_Heads[0] = ToHeadData(XChartVectorFieldMath.Head(
+                HeadLength * m_HeadScale, HeadWidth * m_HeadScale, 1f, MarkerAnchor, endColor));
             AddEntry(m_Bezier, startColor, endColor, true);
             m_Markers++;
         }
@@ -364,20 +444,40 @@ namespace XericUI.XChart.Mesh
         }
 
         /// <summary>
-        /// 一条记录 → <b>立方体单位</b>的点。原始值先按各维范围折进 [-1,1] 再投影
-        /// （折法在纯算术里，离线钉着：<see cref="XChartVectorFieldMath.TryCubePoint"/>）。
+        /// 一条记录的第 <c>offset~offset+2</c> 维（相对坐标起点）→ <b>立方体单位</b>的点：原始值先按各维
+        /// 范围折进 [-1,1] 再投影（折法在纯算术里，离线钉着：<see cref="XChartVectorFieldMath.TryCubePoint"/>）。
         /// 折不出来（值非有限、或那一维跨度为 0）就返回 false，调用方计入 <c>skipped=</c>——
         /// <b>不是"静默少一支"，是"少几支当场说"</b>。
         /// </summary>
-        private bool TryReadPoint(IXChartDataSource source, int record, out Vector3 cube)
+        private bool TryReadFolded(IXChartDataSource source, int record, int offset, out Vector3 cube)
         {
             cube = Vector3.zero;
             if (record < 0 || record >= m_RecordsHave) return false;
+            int dim = CoordinateDimension + offset;
             return XChartVectorFieldMath.TryCubePoint(
-                source.GetValueAt(record, CoordinateDimension),
-                source.GetValueAt(record, CoordinateDimension + 1),
-                source.GetValueAt(record, CoordinateDimension + 2),
+                source.GetValueAt(record, dim),
+                source.GetValueAt(record, dim + 1),
+                source.GetValueAt(record, dim + 2),
                 m_MinX, m_MaxX, m_MinY, m_MaxY, m_MinZ, m_MaxZ, out cube);
+        }
+
+        /// <summary>
+        /// 一条记录的三个<b>原始</b>值（方向用）：<b>不折进盒子、不位移</b>——方向是矢量，
+        /// 拿位置的显示范围去折它就是把"朝哪"变成"在哪"。这里只保证三个数都是有限数，
+        /// 尺度交给 <see cref="DirectionScale"/>（每数据单位给多少立方体单位）。
+        /// </summary>
+        private bool TryReadRaw(IXChartDataSource source, int record, int offset, out Vector3 vector)
+        {
+            vector = Vector3.zero;
+            if (record < 0 || record >= m_RecordsHave) return false;
+            int dim = CoordinateDimension + offset;
+            double x = source.GetValueAt(record, dim);
+            double y = source.GetValueAt(record, dim + 1);
+            double z = source.GetValueAt(record, dim + 2);
+            if (double.IsNaN(x) || double.IsNaN(y) || double.IsNaN(z)
+                || double.IsInfinity(x) || double.IsInfinity(y) || double.IsInfinity(z)) return false;
+            vector = new Vector3((float)x, (float)y, (float)z);
+            return true;
         }
 
         /// <summary>
@@ -390,6 +490,10 @@ namespace XericUI.XChart.Mesh
         {
             if (!UseColorDimensions) return ArrowColor;
             if (source.NumericDimensionCount < ColorDimension + XChartArrowConfig.ColorDimensionCount) return ArrowColor;
+            // 颜色维压到了坐标／方向那几列上（自带方向那档要 6 列，颜色起点默认还是 3）：
+            // 那不是"一种颜色"，那是把方向当色相读——退回单色，并让 colors=overlap 说出来
+            if (ColorDimension < XChartVectorFieldMath.RequiredCoordinateDimensions(DirectionSource))
+                return ArrowColor;
 
             float hue = (float)source.GetValueAt(record, ColorDimension);
             float saturation = (float)source.GetValueAt(record, ColorDimension + 1);
@@ -406,6 +510,7 @@ namespace XericUI.XChart.Mesh
         {
             CurveRenderer = null;
             m_Pixels.Clear();
+            m_Cubes.Clear();
         }
 
 #if UNITY_EDITOR
@@ -428,8 +533,13 @@ namespace XericUI.XChart.Mesh
                   : "-")
               .Append(" arrows=").Append(m_ArrowsBuilt)
               .Append(" skipped=").Append(m_PointsSkipped)
-              .Append(" mode=").Append(Continuous ? "continuous" : (VectorMode == XChartArrowVectorMode.Relative ? "relative" : "absolute"))
-              .Append(" colors=").Append(UseColorDimensions ? (HasAlphaDimension ? "hsv+a" : "hsv") : "single")
+              .Append(" src=").Append(Continuous ? "continuous" : DirectionSource.ToString().ToLower())
+              .Append(" anchor=").Append(MarkerAnchor.ToString("0.###"))
+              .Append(" headScale=").Append(m_HeadScale.ToString("0.###"))
+              // colors=overlap：颜色维的起点压到了坐标／方向那几列上 ⇒ 实际画的是单色（不是"颜色没生效"，是配置撞了）
+              .Append(" colors=").Append(!UseColorDimensions ? "single"
+                  : (ColorDimension < XChartVectorFieldMath.RequiredCoordinateDimensions(DirectionSource) ? "overlap"
+                     : (HasAlphaDimension ? "hsv+a" : "hsv")))
               .Append(" path=").Append(m_PathRenderer)
               .Append(" at=").Append(HeadPosition.ToString("0.###"))
               .Append(" curves=").Append(m_CurveEntries)
