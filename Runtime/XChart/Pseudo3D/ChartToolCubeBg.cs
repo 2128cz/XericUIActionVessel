@@ -74,6 +74,9 @@ namespace XericUI.XChart.Pseudo3D
         // 本帧提交了多少：线框"整块不见了"要能分清是没空间、没提交还是提交了 0 条
         private int m_EdgesDrawn;
         private int m_FacesPublished;
+        // 面边插槽（6×4＝24）发出去几个、卡在哪儿（§31）：发不出去比发错更难查，所以留名字与原因
+        private int m_SidesPublished;
+        private string m_SidesRefused;
 
         // ── 对外出口 ──────────────────────────────────────────────
 
@@ -114,6 +117,8 @@ namespace XericUI.XChart.Pseudo3D
         {
             IXChartSlotBoard board = Context?.Slots;
             m_FacesPublished = 0;
+            m_SidesPublished = 0;
+            m_SidesRefused = null;
             if (board == null) return;
 
             for (int i = 0; i < XChartCubeGeometry.FaceCount; i++)
@@ -130,6 +135,22 @@ namespace XericUI.XChart.Pseudo3D
                 board.Publish(XChartCubeGeometry.FaceSlotId(face), XChartSlotMode.Quad3D,
                     XChartSlotAccess.ReadOnly, m_SlotValues, out string _);
                 m_FacesPublished++;
+
+                // 同一个面的 4 条边各发一份（旋到底边的那个四角，仍是 Quad3D）——
+                // 一根棱被两个面共享，"贴哪一面的哪条棱"必须能从 id 里说出来（§31）
+                for (int side = 0; side < XChartCubeGeometry.SideCount; side++)
+                {
+                    XChartCubeGeometry.GetSideQuad(face, side, out c00, out c01, out c11, out c10);
+                    m_SlotValues[0] = c00.x; m_SlotValues[1] = c00.y; m_SlotValues[2] = c00.z;
+                    m_SlotValues[3] = c01.x; m_SlotValues[4] = c01.y; m_SlotValues[5] = c01.z;
+                    m_SlotValues[6] = c11.x; m_SlotValues[7] = c11.y; m_SlotValues[8] = c11.z;
+                    m_SlotValues[9] = c10.x; m_SlotValues[10] = c10.y; m_SlotValues[11] = c10.z;
+
+                    string why;
+                    if (board.Publish(XChartCubeGeometry.SideSlotId(face, side), XChartSlotMode.Quad3D,
+                            XChartSlotAccess.ReadOnly, m_SlotValues, out why)) m_SidesPublished++;
+                    else m_SidesRefused = why;
+                }
             }
         }
 
@@ -247,6 +268,8 @@ namespace XericUI.XChart.Pseudo3D
                 if (m_FaceFrames[i].IsValid) valid++;
             sb.Append(" edges=").Append(m_EdgesDrawn)
               .Append(" faces=").Append(m_FacesPublished)
+              .Append(" sides=").Append(m_SidesPublished)
+              .Append(m_SidesRefused == null ? "" : " sideRefuse=" + m_SidesRefused)
               .Append(" frames=").Append(valid).Append('/').Append(m_FaceFrames.Length)
               .Append(" backEdges=").Append(ShowBackEdges ? "on" : "off")
               .Append(" space=").Append(Context != null && Context.Space != null ? "ok" : "NULL")

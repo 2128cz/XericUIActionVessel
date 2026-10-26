@@ -272,6 +272,13 @@ namespace XericUI.XChart.Axis
         }
 
         /// <summary>
+        /// 什么样的插槽能当轴的<b>宿主</b>：要给出一个面的四条边（<c>Quad3D</c>）才谈得上"沿哪条、往哪边刻度"。
+        /// 这条只有一个定义——面板列清单（滤掉格线那类比例数组）与这里的解析共用它，
+        /// 否则会出现"下拉里选了、线上画不出"那种两边都对的样子（§31）。
+        /// </summary>
+        public static bool CanHostAxis(XChartSlotMode mode) => mode == XChartSlotMode.Quad3D;
+
+        /// <summary>
         /// 面帧从**定义网格发布的插槽**里取（规范 §11.2）：网格是定义者，其余工具跟随——
         /// 消费者拿到的是四个点，不是"第几个面"，所以换成异形网格也不用改这里。
         /// 取不到就回落到老路径（自己从立方几何推），并把**走的是哪条**印进报表（`frame=`）：
@@ -283,7 +290,7 @@ namespace XericUI.XChart.Axis
             IXChartSlotBoard board = Context?.Slots;
             XChartSlotView slot;
             if (board != null && board.TryRead(SlotId, out slot)
-                && slot.Mode == XChartSlotMode.Quad3D)
+                && CanHostAxis(slot.Mode))
             {
                 Vector3 c00, c01, c11, c10;
                 if (slot.TryGetQuad(0, out c00, out c01, out c11, out c10))

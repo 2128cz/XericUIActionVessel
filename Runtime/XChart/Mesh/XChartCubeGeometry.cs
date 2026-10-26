@@ -217,6 +217,53 @@ namespace XericUI.XChart.Mesh
             => FaceSlotPrefix + (int)face + (alongS ? ".grid.S" : ".grid.T");
 
         /// <summary>
+        /// 一条棱插槽 id：<c>mesh.face.&lt;面号&gt;.side.&lt;边号&gt;</c>，一个面 4 条 ⇒ 全立方体 6×4＝24 个。
+        ///
+        /// <para><b>为什么是 24 而不是 12</b>（他 2026-10-26 数的）：一根立方体棱被两个面共享，而"轴贴着这条棱画"
+        /// 需要的是<b>面内</b>的两件事——沿棱的方向、以及从棱往面内走的横方向。同一根棱从不同面看，
+        /// 后者完全不同，所以 12 条棱表达不出"哪一面的那条棱"。命名按 <c>面 + 边</c> 来，边号见
+        /// <see cref="GetSideQuad"/>（0＝底、1＝左、2＝顶、3＝右，绕序逆时针）。</para>
+        ///
+        /// <para>插槽的<b>值</b>还是同一个面的四个角、只是把选中的那条边旋到面帧的底边（S 轴、t=0）——
+        /// 于是它仍是一个 <c>Quad3D</c>，消费者（轴线）的 AlongS／CrossRatio 一行都不用改。</para>
+        /// </summary>
+        public const int SideCount = 4;
+
+        public static string SideSlotId(CubeFace face, int side)
+            => FaceSlotPrefix + (int)face + ".side." + side;
+
+        /// <summary>边的名字（面板与报表用；绕序逆时针，0 是面帧 S 轴那条底边）</summary>
+        public static string SideName(int side)
+        {
+            switch (side)
+            {
+                case 0: return "底边";
+                case 1: return "左边";
+                case 2: return "顶边";
+                case 3: return "右边";
+                default: return "边" + side;
+            }
+        }
+
+        /// <summary>
+        /// 第 <paramref name="side"/> 条边旋到面帧底边后的四角（仍是 <c>ST00/ST01/ST11/ST10</c> 顺序，
+        /// 因此新面帧的 <b>S 轴就是那条棱</b>、<b>T 轴就是"从棱往面内走"</b>；绕序不变 ⇒ 不会镜像）。
+        /// 做法是纯旋转：<see cref="GetFaceCorners"/> 的四角按 00→01→11→10 成环，环上转 side 格。
+        /// </summary>
+        public static void GetSideQuad(CubeFace face, int side, out Vector3 cornerST00, out Vector3 cornerST01,
+            out Vector3 cornerST11, out Vector3 cornerST10)
+        {
+            Vector3 c00, c01, c11, c10;
+            GetFaceCorners(face, out c00, out c01, out c11, out c10);
+            var ring = new[] { c00, c01, c11, c10 };
+            int step = ((side % SideCount) + SideCount) % SideCount;
+            cornerST00 = ring[step];
+            cornerST01 = ring[(step + 1) % SideCount];
+            cornerST11 = ring[(step + 2) % SideCount];
+            cornerST10 = ring[(step + 3) % SideCount];
+        }
+
+        /// <summary>
         /// 一组格线要占多少个 float（<paramref name="lineCount"/> 组 × 每组两个端点 × 3 个分量）：
         /// 两个背景都按它开缓冲，"值布局"只有这一个来源。
         /// </summary>

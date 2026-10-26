@@ -98,7 +98,7 @@ public float Radius { get => m_Radius; set { m_Radius = value; MarkDirty(); } }
 | `ChartToolMeshBg`（`BG Cube Grid`） | `FillFaces/FillColor/FillCenterColor` · `GridFaces/GridColor/GridThickness/GridDivisions/GridDivisionsS/T` · `GridDimensionS/T`（格线绑到哪一维） · `ShowFaceOutline/OnlyVisibleFaces/OutlineColor` |
 | `ChartToolCubeBg`（`BG Cube Wire`） | `FrontEdgeColor/BackEdgeColor/EdgeThickness/ShowBackEdges` |
 | `ChartToolScatterPoints` | `AutoFromData/DimensionX/Y/Z` · 外观 10 个（`PointSize/PointType/PointSizeMode/PointColor/CenterColor/BorderColor/BorderThickness/SideCount/ChamferSize/PointAngle`，走 `SyncShapeParams`） · `EnableColorMapping/ColorMapMin/ColorMapMax/ColorMapDimension` |
-| `ChartToolAxis` | `SlotId`（宿主面） · `AlignToGrid/Direction/StartRatio/EndRatio/CrossRatio` · 刻度（`Dimension/Scale/AutoStep/ManualStep/TargetMajorCount/MinorTickCount`） · 线与标签（`LineColor/LineThickness/Major…/Minor…/LabelSource/LabelFormat/CustomLabels/Label…`） |
+| `ChartToolAxis` | `SlotId`（**宿主**：板上现在发 `mesh.face.<0..5>` 与 `mesh.face.<f>.side.<0..3>` 共 30 个可当选；边号 0 底·1 左·2 顶·3 右，见规范 §31。下拉里不会再出现 `…grid.S/T`，那是「对齐格线」的输入） · `AlignToGrid/Direction/StartRatio/EndRatio/CrossRatio` · 刻度（`Dimension/Scale/AutoStep/ManualStep/TargetMajorCount/MinorTickCount`） · 线与标签（`LineColor/LineThickness/Major…/Minor…/LabelSource/LabelFormat/CustomLabels/Label…`） |
 
 ## 5. 矢量场（箭头）：方向从哪来、头贴在哪、尺寸怎么算
 

@@ -802,6 +802,7 @@ namespace XericUI.XChart.Editor
             if (slotProp == null) return;
 
             var available = new List<string>();
+            int notHost = 0;
             var board = chart != null && chart.ToolManager != null && chart.ToolManager.Context != null
                 ? chart.ToolManager.Context.Slots
                 : null;
@@ -812,6 +813,9 @@ namespace XericUI.XChart.Editor
                     string id;
                     XChartSlotMode mode;
                     if (!board.TryGetSlotAt(i, out id, out mode)) continue;
+                    // 只列"能当宿主的"：比例数组那类（格线的 mesh.face.N.grid.S/T）在这个下拉里永远是死项
+                    // ——轴线认的是四条边的面帧，判据只有一处：ChartToolAxis.CanHostAxis
+                    if (!ChartToolAxis.CanHostAxis(mode)) { notHost++; continue; }
                     if (!available.Contains(id)) available.Add(id);
                 }
             }
@@ -820,6 +824,12 @@ namespace XericUI.XChart.Editor
             choices.AddRange(available);
             int current = available.IndexOf(slotProp.stringValue);
 
+            // 边号 0~3 对人来说不是话，但下拉的选项文本就是写回的值（加后缀会写坏 id），
+            // 所以翻译只能放在下面这一行——SideName 与轴、与发布的是同一个来源。
+            // 面板在值变化时故意不重建树（那会换掉正在拖的控件），所以这一行**自己跟着回调改**，
+            // 否则它就是一条会停在旧值上的静态读数（§24.1 那一族）。
+            var slotHint = MakeReadonly(SlotIdHint(slotProp.stringValue));
+
             var dropdown = new DropdownField("已发布插槽", choices, current < 0 ? 0 : current + 1);
             dropdown.RegisterValueChangedCallback(evt =>
             {
@@ -827,15 +837,54 @@ namespace XericUI.XChart.Editor
                 serializedObject.Update();
                 slotProp.stringValue = evt.newValue;
                 serializedObject.ApplyModifiedProperties();
+                slotHint.text = SlotIdHint(evt.newValue);
                 OnValueChanged();
             });
 
             host.Add(dropdown);
             host.Add(MakeField(slotProp, "宿主面（可手填）"));
-            host.Add(MakeReadonly("已发布插槽 " + available.Count + " 个"));
+            host.Add(slotHint);
+            host.Add(MakeReadonly("可当宿主的插槽 " + available.Count + " 个"
+                + (notHost > 0 ? "（另有 " + notHost + " 个比例数组插槽，那是「对齐格线」的输入，不当宿主）" : "")));
             LogDetailOnce("slots", "XChart 面板：板上已发布的插槽 id —— " + (available.Count == 0
                 ? "（一个都没有：定义网格的元素还没跑，或本图没有网格元素）"
                 : string.Join(", ", available.ToArray())));
+        }
+
+        /// <summary>
+        /// 把插槽 id 翻成人话（<c>mesh.face.2.side.1</c> → "面 Top · 左边"）。**认得的形状才翻译**，
+        /// 认不得的原样印出来并说为什么不能当宿主——这一行是给人核对的，编一个听起来对的名字比不翻更坏。
+        /// </summary>
+        private static string SlotIdHint(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return "当前宿主：（空）";
+
+            const string prefix = XericUI.XChart.Mesh.XChartCubeGeometry.FaceSlotPrefix;
+            if (!id.StartsWith(prefix, StringComparison.Ordinal))
+                return "当前宿主：" + id + "（不是 " + prefix + "* 的形状，原样交给插槽板）";
+
+            string rest = id.Substring(prefix.Length);
+            int dot = rest.IndexOf('.');
+            int face;
+            if (!int.TryParse(dot < 0 ? rest : rest.Substring(0, dot), out face))
+                return "当前宿主：" + id + "（面号读不出来）";
+
+            var faceType = typeof(XericUI.XChart.Mesh.XChartCubeGeometry.CubeFace);
+            string faceName = System.Enum.IsDefined(faceType, face)
+                ? ((XericUI.XChart.Mesh.XChartCubeGeometry.CubeFace)face).ToString()
+                : "第" + face + "面";
+            if (dot < 0) return "当前宿主：面 " + faceName + "（四角，轴可以贴它的任一条边）";
+
+            string tail = rest.Substring(dot + 1);
+            if (tail.StartsWith("side.", StringComparison.Ordinal))
+            {
+                int side;
+                return int.TryParse(tail.Substring(5), out side)
+                    ? "当前宿主：面 " + faceName + " · "
+                      + XericUI.XChart.Mesh.XChartCubeGeometry.SideName(side) + "（side." + side + "）"
+                    : "当前宿主：" + id + "（边号读不出来）";
+            }
+            return "当前宿主：" + id + "（这是比例数组，不能当宿主——换下拉里的一条边）";
         }
 
         /// <summary>
