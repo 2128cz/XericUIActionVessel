@@ -57,6 +57,22 @@ namespace XericUI.XChart.Pseudo3D
         /// <summary>桶内取哪个统计量当这个点（抽稀 First/Last 不造新值；趋势 Mean/Median；包络 Minimum/Maximum）</summary>
         public XChartAggregateKind BucketReduce { get => m_BucketReduce; set { m_BucketReduce = value; MarkDirty(); } }
 
+        private XChartValueOutOfRange m_OutOfRange = XChartValueOutOfRange.RenderAsIs;
+        /// <summary>
+        /// 数据落在显示范围之外时怎么办。<b>这一档从"夹住"改成了"原样画"（2026-10-26，§32）</b>：
+        /// 以前散点把超范围的点钉在盒壁上，看着像"数据到边就停"，而矢量/圆柱是按比例投出去的——
+        /// 同一张表两幅画。要恢复旧观感就把这一档调成 <see cref="XChartValueOutOfRange.ClampToRange"/>。
+        /// </summary>
+        public XChartValueOutOfRange OutOfRange
+        {
+            get => m_OutOfRange;
+            set { m_OutOfRange = value; MarkDirty(); }
+        }
+
+        /// <summary>这一帧按策略隐掉了几个点（与"数据不可用"的坏值分开，§32）</summary>
+        public int HiddenCount => m_Hidden;
+        private int m_Hidden;
+
         // ── 外观 ──────────────────────────────────────────────────
 
         public float PointSize { get => m_PointSize; set { m_PointSize = Mathf.Max(0.5f, value); if (IsInitialized) SyncShapeParams(); } }
@@ -255,6 +271,7 @@ namespace XericUI.XChart.Pseudo3D
             double minX, maxX, minY, maxY, minZ, maxZ;
             ResolveRange(DimensionX, out minX, out maxX);
             ResolveRange(DimensionY, out minY, out maxY);
+            m_Hidden = 0;
             ResolveRange(DimensionZ, out minZ, out maxZ);
             double colorMin, colorMax;
             ResolveRange(ColorMapDimension, out colorMin, out colorMax);
@@ -274,14 +291,26 @@ namespace XericUI.XChart.Pseudo3D
                     continue;
                 }
 
-                m_CubePoints[written] = ChartToolSpace.NormalizedToCube(new Vector3(
-                    Normalize(x, minX, maxX), Normalize(y, minY, maxY), Normalize(z, minZ, maxZ)));
+                // 坐标：折法与"超范围怎么办"走唯一那份（XChartCubeFoldMath）。
+                // 全有或全无——只夹一轴会画出一个"数据里不存在"的位置，所以 Hide 时整条不画并计数。
+                float fx, fy, fz;
+                if (!XChartCubeFoldMath.TryRatio01(x, minX, maxX, OutOfRange, out fx)
+                    || !XChartCubeFoldMath.TryRatio01(y, minY, maxY, OutOfRange, out fy)
+                    || !XChartCubeFoldMath.TryRatio01(z, minZ, maxZ, OutOfRange, out fz))
+                {
+                    // 三个数都可用却被拒 ⇒ 是策略隐掉的；否则是坏数据（本来就不该画，另算）
+                    if (!IsBad(x) && !IsBad(y) && !IsBad(z)) m_Hidden++;
+                    continue;
+                }
+                m_CubePoints[written] = ChartToolSpace.NormalizedToCube(new Vector3(fx, fy, fz));
 
                 if (EnableColorMapping)
                 {
                     double color;
                     if (!XChartBucketMath.TryReduce(source, ColorMapDimension, first, end, BucketReduce, m_BucketScratch, out color))
                         continue;
+                    // 颜色映射**不吃上面的开关**：越界的颜色取端色是常态（clamp），
+                    // "隐藏超出范围的点"是坐标的事，不该把颜色梯度也变成洞
                     m_ColorValues[written] = Normalize(color, colorMin, colorMax);
                 }
                 written++;
@@ -332,6 +361,10 @@ namespace XericUI.XChart.Pseudo3D
             return Mathf.Clamp01((float)((value - min) / span));
         }
 
+        /// <summary>坏数据（非有限）与"按策略隐藏"要分得开：前者是数据不可用，后者是我们主动不画</summary>
+        private static bool IsBad(double value)
+            => double.IsNaN(value) || double.IsInfinity(value);
+
         private void ApplyColorMapping()
         {
             if (m_ColorValues == null || m_PointColors == null) return;
@@ -358,7 +391,10 @@ namespace XericUI.XChart.Pseudo3D
               // 桶采样读数：画了几个点、源有多少条、取的是哪个统计量——"少画了多少"必须能看到
               .Append(" buckets=").Append(m_BucketCount)
               .Append(" records=").Append(m_SourceRecords)
-              .Append(" reduce=").Append(BucketReduce);
+              .Append(" reduce=").Append(BucketReduce)
+              // 超范围的两类"少画"分开印：hidden=策略隐的，out=这一档选的是什么（§32）
+              .Append(" hidden=").Append(m_Hidden)
+              .Append(" out=").Append(OutOfRange.ToString().ToLower());
         }
 #endif
     }

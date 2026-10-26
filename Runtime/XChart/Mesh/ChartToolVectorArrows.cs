@@ -9,7 +9,7 @@ namespace XericUI.XChart.Mesh
     /// <summary>
     /// 向量场 / 流形箭头元素。<b>数据口径（规范 §25.2，2026-10-25 他澄清后定稿）</b>：
     /// <b>前三维＝坐标 x/y/z</b>（与圆柱、散点同一套归一化，折法见
-    /// <see cref="XChartVectorFieldMath.TryCubePoint"/> 与 §28），<b>一支箭头＝相邻两条记录</b>
+    /// <see cref="XChartCubeFoldMath.TryFoldCube"/> 与 §28/§32），<b>一支箭头＝相邻两条记录</b>
     /// （第 i 条是起点，第 i+1 条按 <see cref="DirectionSource"/> 解释成"第二个点"或"方向矢量"），
     /// <b>第 4~7 维是颜色</b>（色相 0..256 色环 / 饱和度 / 明度 / 不透明度，可选）。
     ///
@@ -54,6 +54,17 @@ namespace XericUI.XChart.Mesh
         private XChartToolTransform m_Transform = XChartToolTransform.Identity;
         /// <summary>箭头自己的变换（叠在图的空间之上）</summary>
         public XChartToolTransform Transform { get => m_Transform; set { m_Transform = value; MarkDirty(); } }
+
+        private XChartValueOutOfRange m_OutOfRange = XChartValueOutOfRange.RenderAsIs;
+        /// <summary>
+        /// 数据落在显示范围之外时怎么办（默认<b>原样画</b>——显示范围的本分是定标尺，不是决定数据画不画，§32）。
+        /// <see cref="XChartValueOutOfRange.HideOutOfRange"/> 是整条记录不画（不是只藏越轴的那一半）。
+        /// </summary>
+        public XChartValueOutOfRange OutOfRange
+        {
+            get => m_OutOfRange;
+            set { m_OutOfRange = value; MarkDirty(); }
+        }
 
         // ── 颜色：可选的三到四个数值维 ────────────────────────────
 
@@ -132,6 +143,8 @@ namespace XericUI.XChart.Mesh
         private int m_DimensionsNeed;
         private int m_RecordsHave;
         private int m_PointsSkipped;
+        // 坏数据（非有限）与"按策略隐藏"是两件事：前者是数据不可用，后者是我们主动不画（§32）
+        private int m_PointsHidden;
 
         // 三条坐标轴各自的显示范围（每帧现问上下文要：覆盖优先、否则该维聚合）。
         // 数据值必须经它们折成立方体单位才投影——直接当立方体单位用会把整场箭头投到盒子外面（§28）
@@ -217,6 +230,7 @@ namespace XericUI.XChart.Mesh
             m_DimensionsHave = 0;
             m_RecordsHave = 0;
             m_PointsSkipped = 0;
+            m_PointsHidden = 0;
             m_DimensionsNeed = RequiredDimensionCount;
             m_HasDomains = false;
 
@@ -445,7 +459,7 @@ namespace XericUI.XChart.Mesh
 
         /// <summary>
         /// 一条记录的第 <c>offset~offset+2</c> 维（相对坐标起点）→ <b>立方体单位</b>的点：原始值先按各维
-        /// 范围折进 [-1,1] 再投影（折法在纯算术里，离线钉着：<see cref="XChartVectorFieldMath.TryCubePoint"/>）。
+        /// 范围折进 [-1,1] 再投影（折法与"超范围怎么办"在纯算术里，离线钉着：<see cref="XChartCubeFoldMath"/>）。
         /// 折不出来（值非有限、或那一维跨度为 0）就返回 false，调用方计入 <c>skipped=</c>——
         /// <b>不是"静默少一支"，是"少几支当场说"</b>。
         /// </summary>
@@ -454,12 +468,19 @@ namespace XericUI.XChart.Mesh
             cube = Vector3.zero;
             if (record < 0 || record >= m_RecordsHave) return false;
             int dim = CoordinateDimension + offset;
-            return XChartVectorFieldMath.TryCubePoint(
-                source.GetValueAt(record, dim),
-                source.GetValueAt(record, dim + 1),
-                source.GetValueAt(record, dim + 2),
-                m_MinX, m_MaxX, m_MinY, m_MaxY, m_MinZ, m_MaxZ, out cube);
+            double x = source.GetValueAt(record, dim);
+            double y = source.GetValueAt(record, dim + 1);
+            double z = source.GetValueAt(record, dim + 2);
+            if (XChartCubeFoldMath.TryFoldCube(x, y, z,
+                    m_MinX, m_MaxX, m_MinY, m_MaxY, m_MinZ, m_MaxZ, OutOfRange, out cube)) return true;
+            // 分得清"数据不可用"与"按策略主动不画"：两者在画面上同形（都少一支），只有这一对数分得开
+            if (IsBad(x) || IsBad(y) || IsBad(z)) m_PointsSkipped++; else m_PointsHidden++;
+            cube = Vector3.zero;
+            return false;
         }
+
+        private static bool IsBad(double value)
+            => double.IsNaN(value) || double.IsInfinity(value);
 
         /// <summary>
         /// 一条记录的三个<b>原始</b>值（方向用）：<b>不折进盒子、不位移</b>——方向是矢量，
@@ -533,6 +554,8 @@ namespace XericUI.XChart.Mesh
                   : "-")
               .Append(" arrows=").Append(m_ArrowsBuilt)
               .Append(" skipped=").Append(m_PointsSkipped)
+              .Append(" hidden=").Append(m_PointsHidden)
+              .Append(" out=").Append(OutOfRange.ToString().ToLower())
               .Append(" src=").Append(Continuous ? "continuous" : DirectionSource.ToString().ToLower())
               .Append(" anchor=").Append(MarkerAnchor.ToString("0.###"))
               .Append(" headScale=").Append(m_HeadScale.ToString("0.###"))

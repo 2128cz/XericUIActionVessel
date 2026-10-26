@@ -68,6 +68,14 @@ namespace XericUI.XChart.Mesh
         /// <summary>最多画几根</summary>
         public int MaxCylinders { get => m_MaxCylinders; set { m_MaxCylinders = value; MarkDirty(); } }
 
+        private XChartValueOutOfRange m_OutOfRange = XChartValueOutOfRange.RenderAsIs;
+        /// <summary>数据落在显示范围之外时怎么办（默认原样画，§32）；隐藏是<b>整根</b>不画，不画一半坐标</summary>
+        public XChartValueOutOfRange OutOfRange
+        {
+            get => m_OutOfRange;
+            set { m_OutOfRange = value; MarkDirty(); }
+        }
+
         // ── 呈现（各有开关） ──────────────────────────────────────
 
         private bool m_ShowOutline = true;
@@ -378,11 +386,12 @@ namespace XericUI.XChart.Mesh
                 return false;
 
             float x, y, z;
-            if (!XChartBindingMath.TryNormalize(raw.x, minX, maxX, out x)
-                || !XChartBindingMath.TryNormalize(raw.y, minY, maxY, out y)
-                || !XChartBindingMath.TryNormalize(raw.z, minZ, maxZ, out z)) return false;
+            // 折法与"超范围怎么办"只有一处定义（XChartCubeFoldMath），散点/矢量/圆柱同源（§32）
+            if (!XChartCubeFoldMath.TryRatio01(raw.x, minX, maxX, OutOfRange, out x)
+                || !XChartCubeFoldMath.TryRatio01(raw.y, minY, maxY, OutOfRange, out y)
+                || !XChartCubeFoldMath.TryRatio01(raw.z, minZ, maxZ, OutOfRange, out z)) return false;
 
-            unit = new Vector3(x, y, z);
+            unit = new Vector3(x * 2f - 1f, y * 2f - 1f, z * 2f - 1f);
             return true;
         }
 

@@ -188,6 +188,8 @@ chart.Space.CenterOffset = new Vector2(0, 40f);
 7. **`UICurveRenderer.LiveVertexCount` 不是本实例的数**（报表里 `curveVerts=` 是"库里一共活着多少顶点"，P23 待办）；要判自己那份，读 `curves=`/`markers=`。
 8. **雷达图与伪 3D 图是两套空间**：`XRadarChart` 用自己的 `XChartRadarDataModel`（2D 极坐标），不吃立方体的 `TryResolveDomain` 那套。
 9. **别在元素自己的对象上做手脚**：工具与它生成的节点是运行时的（`HideAndDontSave`），重建一次就换一批——把状态存在你自己的组件或配置里。
+10. **显示范围只定标尺，不决定数据画不画**（§32）：散点／矢量／圆柱各有一个 `OutOfRange` 三档（`RenderAsIs` 默认＝超范围的点画到盒子外面、`ClampToRange`＝贴回盒壁、`HideOutOfRange`＝整条不画），轴与格线**永远**按范围、没有这个开关。想让点"限定在网格内"就把那一档调成 `ClampToRange`——默认已经不是了。报表里 `hidden=`（策略隐的）与 `skipped=`（数据不可用的）是两个数。
+11. **从对象池拿到的文本件是干净的**（§P26a）：颜色/字号/旋转/矩形在复用时会恢复默认，所以你的元素"没写的属性"不会继承上一个元素写过的值；反过来，**你在元素上没设的属性就是那一份默认**（14 号字、白色、不换行、居中对齐）。
 
 ## 10. 端到端：一个"掘进姿态"箭头
 

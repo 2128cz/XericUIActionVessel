@@ -32,6 +32,10 @@ namespace XericUI.XChart.Mesh
         [SerializeField, Min(1), Tooltip("最多画几根（记录多时按组数上限截断，报表会点名截了多少）")]
         private int m_MaxCylinders = 64;
 
+        [SerializeField, Tooltip("数据落在显示范围之外时怎么办：原样画（默认）/ 夹到范围端点 / 整根隐藏。" +
+                                 "显示范围的本分是定标尺（网格多大、轴到哪儿），不该顺手决定数据画不画")]
+        private XChartValueOutOfRange m_OutOfRange = XChartValueOutOfRange.RenderAsIs;
+
         [SerializeField, Min(0.001f), Tooltip("半径（立方体单位）")]
         private float m_Radius = 0.22f;
         [SerializeField, Range(8, 256), Tooltip("一圈分多少段（轮廓与十字的采样精度）")]
@@ -85,6 +89,7 @@ namespace XericUI.XChart.Mesh
             cylinder.DimensionZ = m_DimensionZ;
             cylinder.GroupSize = m_GroupSize;
             cylinder.MaxCylinders = m_MaxCylinders;
+            cylinder.OutOfRange = m_OutOfRange;
             cylinder.Radius = m_Radius;
             cylinder.SegmentCount = m_SegmentCount;
             cylinder.StartNormal = m_StartNormal;
@@ -169,6 +174,11 @@ namespace XericUI.XChart.Mesh
         [SerializeField, Tooltip("方向向量长度倍率（立方体单位）；相对模式下作用在差向量上")]
         private float m_DirectionScale = 0.25f;
 
+        [SerializeField, Tooltip("数据落在显示范围之外时怎么办：原样画（默认——显示范围只管定标尺，" +
+                                 "不该决定数据画不画）/ 夹到范围端点 / 整条隐藏。" +
+                                 "隐藏与\"数据不可用\"分得开：报表里 hidden= 与 skipped= 是两个数")]
+        private XChartValueOutOfRange m_OutOfRange = XChartValueOutOfRange.RenderAsIs;
+
         [SerializeField, Range(0, 100000), Tooltip("最多画多少支（0=不限）；防止十万条记录一口气铺满")]
         private int m_MaxArrowCount = 512;
 
@@ -245,6 +255,7 @@ namespace XericUI.XChart.Mesh
             arrows.PathSegments = m_PathSegments;
             arrows.DirectionScale = m_DirectionScale;
             arrows.MaxArrowCount = m_MaxArrowCount;
+            arrows.OutOfRange = m_OutOfRange;
             arrows.Transform = m_Transform;
 
             arrows.UseColorDimensions = m_UseColorDimensions;

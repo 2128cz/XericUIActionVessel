@@ -36,6 +36,10 @@ namespace XericUI.XChart.Space
         [SerializeField, Tooltip("桶内取哪个统计量当这个点：抽稀用 First/Last（不造新值），看趋势用 Mean/Median，看包络用 Minimum/Maximum")]
         private XChartAggregateKind m_BucketReduce = XChartAggregateKind.Last;
 
+        [SerializeField, Tooltip("点落在显示范围之外时怎么办：原样画（默认，2026-10-26 起；以前散点总是夹住，" +
+                                 "与矢量/圆柱不一致）/ 夹到范围端点 / 整条隐藏。颜色映射那一档总是夹（越界取端色）")]
+        private XChartValueOutOfRange m_OutOfRange = XChartValueOutOfRange.RenderAsIs;
+
         [Header("外观")]
         [SerializeField, Min(0.5f), Tooltip("点的大小（像素）")]
         private float m_PointSize = 8f;
@@ -86,6 +90,7 @@ namespace XericUI.XChart.Space
             scatter.Transform = m_Transform;
             scatter.BucketTargetPoints = m_BucketTargetPoints;
             scatter.BucketReduce = m_BucketReduce;
+            scatter.OutOfRange = m_OutOfRange;
 
             scatter.PointSize = m_PointSize;
             scatter.PointType = m_PointType;
