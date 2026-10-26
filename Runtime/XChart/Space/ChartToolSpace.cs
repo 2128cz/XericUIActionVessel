@@ -35,18 +35,22 @@ namespace XericUI.XChart.Space
 
         // ── 基变换 ────────────────────────────────────────────────
 
-        /// <summary>图表级姿态（四元数，唯一的旋转权威量）</summary>
-        public Quaternion Rotation { get; set; } =
+        private Quaternion m_Rotation =
             XChartCubeView.RotationOf(XChartCubeViewPreset.Isometric);
+        /// <summary>图表级姿态（四元数，唯一的旋转权威量）</summary>
+        public Quaternion Rotation { get => m_Rotation; set { m_Rotation = value; MarkDirty(); } }
 
+        private float m_HalfEdge = 120f;
         /// <summary>半边长（UI 像素）</summary>
-        public float HalfEdge { get; set; } = 120f;
+        public float HalfEdge { get => m_HalfEdge; set { m_HalfEdge = value; MarkDirty(); } }
 
+        private XChartCubeSizeMode m_SizeMode = XChartCubeSizeMode.HalfEdgeLength;
         /// <summary>尺寸口径（默认半边长：尺度不随旋转变化）</summary>
-        public XChartCubeSizeMode SizeMode { get; set; } = XChartCubeSizeMode.HalfEdgeLength;
+        public XChartCubeSizeMode SizeMode { get => m_SizeMode; set { m_SizeMode = value; MarkDirty(); } }
 
+        private Vector2 m_CenterOffset;
         /// <summary>立方体中心在图表局部像素里的偏移</summary>
-        public Vector2 CenterOffset { get; set; }
+        public Vector2 CenterOffset { get => m_CenterOffset; set { m_CenterOffset = value; MarkDirty(); } }
 
         // ── 派生状态 ──────────────────────────────────────────────
 

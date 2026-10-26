@@ -27,50 +27,65 @@ namespace XericUI.XChart.Radar
     {
         // ── 配置 ──────────────────────────────────────────────────
 
+        private float m_Radius = 120f;
         /// <summary>雷达图半径（像素）</summary>
-        public float Radius { get; set; } = 120f;
+        public float Radius { get => m_Radius; set { m_Radius = value; MarkDirty(); } }
 
+        private Vector2 m_Center = Vector2.zero;
         /// <summary>中心位置</summary>
-        public Vector2 Center { get; set; } = Vector2.zero;
+        public Vector2 Center { get => m_Center; set { m_Center = value; MarkDirty(); } }
 
+        private int m_DimensionCount = 5;
         /// <summary>维度数量</summary>
-        public int DimensionCount { get; set; } = 5;
+        public int DimensionCount { get => m_DimensionCount; set { m_DimensionCount = value; MarkDirty(); } }
 
+        private string[] m_DimensionNames = new string[0];
         /// <summary>维度名称列表</summary>
-        public string[] DimensionNames { get; set; } = new string[0];
+        public string[] DimensionNames { get => m_DimensionNames; set { m_DimensionNames = value; MarkDirty(); } }
 
+        private int m_RingCount = 4;
         /// <summary>网格环数量（含外圈）</summary>
-        public int RingCount { get; set; } = 4;
+        public int RingCount { get => m_RingCount; set { m_RingCount = value; MarkDirty(); } }
 
+        private Color m_GridColor = new Color(0.5f, 0.5f, 0.5f, 0.3f);
         /// <summary>网格颜色</summary>
-        public Color GridColor { get; set; } = new Color(0.5f, 0.5f, 0.5f, 0.3f);
+        public Color GridColor { get => m_GridColor; set { m_GridColor = value; MarkDirty(); } }
 
+        private Color m_AxisColor = new Color(0.5f, 0.5f, 0.5f, 0.2f);
         /// <summary>轴线颜色</summary>
-        public Color AxisColor { get; set; } = new Color(0.5f, 0.5f, 0.5f, 0.2f);
+        public Color AxisColor { get => m_AxisColor; set { m_AxisColor = value; MarkDirty(); } }
 
+        private float m_GridThickness = 1f;
         /// <summary>网格线宽</summary>
-        public float GridThickness { get; set; } = 1f;
+        public float GridThickness { get => m_GridThickness; set { m_GridThickness = value; MarkDirty(); } }
 
+        private float m_AxisThickness = 1f;
         /// <summary>轴线宽</summary>
-        public float AxisThickness { get; set; } = 1f;
+        public float AxisThickness { get => m_AxisThickness; set { m_AxisThickness = value; MarkDirty(); } }
 
+        private bool m_ShowGrid = true;
         /// <summary>是否显示网格</summary>
-        public bool ShowGrid { get; set; } = true;
+        public bool ShowGrid { get => m_ShowGrid; set { m_ShowGrid = value; MarkDirty(); } }
 
+        private bool m_ShowAxis = true;
         /// <summary>是否显示轴线</summary>
-        public bool ShowAxis { get; set; } = true;
+        public bool ShowAxis { get => m_ShowAxis; set { m_ShowAxis = value; MarkDirty(); } }
 
+        private bool m_ShowLabels = true;
         /// <summary>是否显示标签</summary>
-        public bool ShowLabels { get; set; } = true;
+        public bool ShowLabels { get => m_ShowLabels; set { m_ShowLabels = value; MarkDirty(); } }
 
+        private float m_LabelFontSize = 14f;
         /// <summary>标签字体大小</summary>
-        public float LabelFontSize { get; set; } = 14f;
+        public float LabelFontSize { get => m_LabelFontSize; set { m_LabelFontSize = value; MarkDirty(); } }
 
+        private Color m_LabelColor = Color.white;
         /// <summary>标签颜色</summary>
-        public Color LabelColor { get; set; } = Color.white;
+        public Color LabelColor { get => m_LabelColor; set { m_LabelColor = value; MarkDirty(); } }
 
+        private float m_LabelOffset = 10f;
         /// <summary>标签相对端点的偏移量（像素）</summary>
-        public float LabelOffset { get; set; } = 10f;
+        public float LabelOffset { get => m_LabelOffset; set { m_LabelOffset = value; MarkDirty(); } }
 
         // ── 内部组件 ──────────────────────────────────────────────
 

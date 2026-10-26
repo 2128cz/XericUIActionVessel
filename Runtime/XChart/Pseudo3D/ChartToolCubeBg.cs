@@ -32,20 +32,25 @@ namespace XericUI.XChart.Pseudo3D
     {
         // ── 外观配置 ──────────────────────────────────────────────
 
+        private XChartToolTransform m_Transform = XChartToolTransform.Identity;
         /// <summary>线框自己的变换（立方体局部单位）；默认恒等，即和图的空间重合</summary>
-        public XChartToolTransform Transform { get; set; } = XChartToolTransform.Identity;
+        public XChartToolTransform Transform { get => m_Transform; set { m_Transform = value; MarkDirty(); } }
 
+        private Color m_FrontEdgeColor = new Color(0.7f, 0.7f, 0.7f, 1f);
         /// <summary>前向棱颜色</summary>
-        public Color FrontEdgeColor { get; set; } = new Color(0.7f, 0.7f, 0.7f, 1f);
+        public Color FrontEdgeColor { get => m_FrontEdgeColor; set { m_FrontEdgeColor = value; MarkDirty(); } }
 
+        private Color m_BackEdgeColor = new Color(0.4f, 0.4f, 0.4f, 0.4f);
         /// <summary>后向棱颜色</summary>
-        public Color BackEdgeColor { get; set; } = new Color(0.4f, 0.4f, 0.4f, 0.4f);
+        public Color BackEdgeColor { get => m_BackEdgeColor; set { m_BackEdgeColor = value; MarkDirty(); } }
 
+        private float m_EdgeThickness = 2f;
         /// <summary>棱线宽度</summary>
-        public float EdgeThickness { get; set; } = 2f;
+        public float EdgeThickness { get => m_EdgeThickness; set { m_EdgeThickness = value; MarkDirty(); } }
 
+        private bool m_ShowBackEdges = true;
         /// <summary>是否显示后向棱</summary>
-        public bool ShowBackEdges { get; set; } = true;
+        public bool ShowBackEdges { get => m_ShowBackEdges; set { m_ShowBackEdges = value; MarkDirty(); } }
 
         // ── 内部组件 ──────────────────────────────────────────────
 

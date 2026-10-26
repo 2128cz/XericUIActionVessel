@@ -20,14 +20,17 @@ namespace XericUI.XChart.Radar
     {
         // ── 配置 ──────────────────────────────────────────────────
 
+        private float m_Radius = 120f;
         /// <summary>雷达图半径（像素）</summary>
-        public float Radius { get; set; } = 120f;
+        public float Radius { get => m_Radius; set { m_Radius = value; MarkDirty(); } }
 
+        private Vector2 m_Center = Vector2.zero;
         /// <summary>中心位置</summary>
-        public Vector2 Center { get; set; } = Vector2.zero;
+        public Vector2 Center { get => m_Center; set { m_Center = value; MarkDirty(); } }
 
+        private int m_DimensionCount = 5;
         /// <summary>维度数量</summary>
-        public int DimensionCount { get; set; } = 5;
+        public int DimensionCount { get => m_DimensionCount; set { m_DimensionCount = value; MarkDirty(); } }
 
         // ── 内部组件 ──────────────────────────────────────────────
 

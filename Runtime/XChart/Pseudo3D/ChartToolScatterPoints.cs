@@ -30,25 +30,32 @@ namespace XericUI.XChart.Pseudo3D
     {
         // ── 数据装配 ──────────────────────────────────────────────
 
+        private bool m_AutoFromData = true;
         /// <summary>真=从图的数据源按维度下标读；假=用 <see cref="SetCubePoints"/> 喂的点</summary>
-        public bool AutoFromData { get; set; } = true;
+        public bool AutoFromData { get => m_AutoFromData; set { m_AutoFromData = value; MarkDirty(); } }
 
+        private int m_DimensionX;
         /// <summary>三个维度在数据源里的下标（绑定：点云画哪三路数据；范围归 chart 的维度行）</summary>
-        public int DimensionX { get; set; }
-        public int DimensionY { get; set; } = 1;
-        public int DimensionZ { get; set; } = 2;
+        public int DimensionX { get => m_DimensionX; set { m_DimensionX = value; MarkDirty(); } }
+        private int m_DimensionY = 1;
+        public int DimensionY { get => m_DimensionY; set { m_DimensionY = value; MarkDirty(); } }
+        private int m_DimensionZ = 2;
+        public int DimensionZ { get => m_DimensionZ; set { m_DimensionZ = value; MarkDirty(); } }
 
+        private XChartToolTransform m_Transform = XChartToolTransform.Identity;
         /// <summary>点云自己的变换（立方体单位），用来把点整体缩进盒子里或挪一角</summary>
-        public XChartToolTransform Transform { get; set; } = XChartToolTransform.Identity;
+        public XChartToolTransform Transform { get => m_Transform; set { m_Transform = value; MarkDirty(); } }
 
+        private int m_BucketTargetPoints;
         /// <summary>
         /// 桶采样目标点数：<c>0</c> 或 ≥ 记录数＝不聚合；否则把记录按桶归约成这么多个点。
         /// 目的是"几万条记录也只画 N 个点"，同时让每个点代表它那一段时间。
         /// </summary>
-        public int BucketTargetPoints { get; set; }
+        public int BucketTargetPoints { get => m_BucketTargetPoints; set { m_BucketTargetPoints = value; MarkDirty(); } }
 
+        private XChartAggregateKind m_BucketReduce = XChartAggregateKind.Last;
         /// <summary>桶内取哪个统计量当这个点（抽稀 First/Last 不造新值；趋势 Mean/Median；包络 Minimum/Maximum）</summary>
-        public XChartAggregateKind BucketReduce { get; set; } = XChartAggregateKind.Last;
+        public XChartAggregateKind BucketReduce { get => m_BucketReduce; set { m_BucketReduce = value; MarkDirty(); } }
 
         // ── 外观 ──────────────────────────────────────────────────
 
@@ -82,14 +89,18 @@ namespace XericUI.XChart.Pseudo3D
         public float PointAngle { get => m_PointAngle; set { m_PointAngle = value; if (IsInitialized) SyncShapeParams(); } }
         private float m_PointAngle;
 
+        private bool m_EnableColorMapping;
         /// <summary>按某一维的数值做颜色渐变</summary>
-        public bool EnableColorMapping { get; set; }
+        public bool EnableColorMapping { get => m_EnableColorMapping; set { m_EnableColorMapping = value; MarkDirty(); } }
 
-        public Color ColorMapMin { get; set; } = Color.blue;
-        public Color ColorMapMax { get; set; } = Color.red;
+        private Color m_ColorMapMin = Color.blue;
+        public Color ColorMapMin { get => m_ColorMapMin; set { m_ColorMapMin = value; MarkDirty(); } }
+        private Color m_ColorMapMax = Color.red;
+        public Color ColorMapMax { get => m_ColorMapMax; set { m_ColorMapMax = value; MarkDirty(); } }
 
+        private int m_ColorMapDimension = 2;
         /// <summary>拿哪一维的数值做映射</summary>
-        public int ColorMapDimension { get; set; } = 2;
+        public int ColorMapDimension { get => m_ColorMapDimension; set { m_ColorMapDimension = value; MarkDirty(); } }
 
         // ── 内部 ──────────────────────────────────────────────────
 

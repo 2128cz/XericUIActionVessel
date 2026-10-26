@@ -27,56 +27,69 @@ namespace XericUI.XChart.Mesh
     {
         // ── 工具变换（在图的空间之上再叠一层） ────────────────────
 
+        private XChartToolTransform m_Transform = XChartToolTransform.Identity;
         /// <summary>
         /// 背景自己的变换（立方体局部单位）。默认恒等——背景通常就占满图的空间。
         /// 想画一个"小一号/偏一角"的背景格子时才用它。
         /// </summary>
-        public XChartToolTransform Transform { get; set; } = XChartToolTransform.Identity;
+        public XChartToolTransform Transform { get => m_Transform; set { m_Transform = value; MarkDirty(); } }
 
         // ── 填充 ──────────────────────────────────────────────────
 
+        private XChartCubeFaceMask m_FillFaces = XChartCubeFaceMask.None;
         /// <summary>要填充哪些面</summary>
-        public XChartCubeFaceMask FillFaces { get; set; } = XChartCubeFaceMask.None;
+        public XChartCubeFaceMask FillFaces { get => m_FillFaces; set { m_FillFaces = value; MarkDirty(); } }
 
+        private Color m_FillColor = new Color(0.16f, 0.19f, 0.24f, 0.85f);
         /// <summary>填充色（面边缘）</summary>
-        public Color FillColor { get; set; } = new Color(0.16f, 0.19f, 0.24f, 0.85f);
+        public Color FillColor { get => m_FillColor; set { m_FillColor = value; MarkDirty(); } }
 
+        private Color m_FillCenterColor = new Color(0.16f, 0.19f, 0.24f, 0.85f);
         /// <summary>填充面中心色；与 <see cref="FillColor"/> 不同时走径向渐变</summary>
-        public Color FillCenterColor { get; set; } = new Color(0.16f, 0.19f, 0.24f, 0.85f);
+        public Color FillCenterColor { get => m_FillCenterColor; set { m_FillCenterColor = value; MarkDirty(); } }
 
         // ── 面内网格 ──────────────────────────────────────────────
 
+        private XChartCubeFaceMask m_GridFaces = XChartCubeFaceMask.None;
         /// <summary>要画网格的面</summary>
-        public XChartCubeFaceMask GridFaces { get; set; } = XChartCubeFaceMask.None;
+        public XChartCubeFaceMask GridFaces { get => m_GridFaces; set { m_GridFaces = value; MarkDirty(); } }
 
+        private Color m_GridColor = new Color(0.55f, 0.6f, 0.7f, 0.35f);
         /// <summary>网格线颜色</summary>
-        public Color GridColor { get; set; } = new Color(0.55f, 0.6f, 0.7f, 0.35f);
+        public Color GridColor { get => m_GridColor; set { m_GridColor = value; MarkDirty(); } }
 
+        private float m_GridThickness = 1f;
         /// <summary>网格线宽</summary>
-        public float GridThickness { get; set; } = 1f;
+        public float GridThickness { get => m_GridThickness; set { m_GridThickness = value; MarkDirty(); } }
 
+        private int m_GridDivisions = 5;
         /// <summary>每个方向的网格分割数（统一值；S/T 各自给了正数时按各自的来）</summary>
-        public int GridDivisions { get; set; } = 5;
+        public int GridDivisions { get => m_GridDivisions; set { m_GridDivisions = value; MarkDirty(); } }
 
+        private int m_GridDivisionsS;
         /// <summary>S 方向分格数。0＝跟随 <see cref="GridDivisions"/>。
         /// 等分时"沿 S 的线由 T 的分格数决定"（算式在 <see cref="XChartGridDivisions"/>，探针钉着）；
         /// 绑了维度时这个数是<b>那一族线的目标刻度条数</b>（不是分格数，规范 §22）。</summary>
-        public int GridDivisionsS { get; set; }
+        public int GridDivisionsS { get => m_GridDivisionsS; set { m_GridDivisionsS = value; MarkDirty(); } }
 
+        private int m_GridDivisionsT;
         /// <summary>T 方向分格数。0＝跟随 <see cref="GridDivisions"/></summary>
-        public int GridDivisionsT { get; set; }
+        public int GridDivisionsT { get => m_GridDivisionsT; set { m_GridDivisionsT = value; MarkDirty(); } }
 
+        private bool m_ShowFaceOutline = true;
         /// <summary>是否同时描出面轮廓（没有线框元素时也能看清面的边界）</summary>
-        public bool ShowFaceOutline { get; set; } = true;
+        public bool ShowFaceOutline { get => m_ShowFaceOutline; set { m_ShowFaceOutline = value; MarkDirty(); } }
 
+        private bool m_OnlyVisibleFaces;
         /// <summary>
         /// 只画朝向观察者的面。默认 false——背景网格本就常画在背朝观察者的那几面（后墙/底面）；
         /// 想要"实体盒子"的观感时打开它。
         /// </summary>
-        public bool OnlyVisibleFaces { get; set; }
+        public bool OnlyVisibleFaces { get => m_OnlyVisibleFaces; set { m_OnlyVisibleFaces = value; MarkDirty(); } }
 
+        private Color m_OutlineColor = new Color(0.7f, 0.75f, 0.85f, 0.6f);
         /// <summary>网格与轮廓的颜色与线宽（轮廓更实一点）</summary>
-        public Color OutlineColor { get; set; } = new Color(0.7f, 0.75f, 0.85f, 0.6f);
+        public Color OutlineColor { get => m_OutlineColor; set { m_OutlineColor = value; MarkDirty(); } }
 
         // ── 内部组件 ──────────────────────────────────────────────
 
@@ -130,11 +143,13 @@ namespace XericUI.XChart.Mesh
         private float[] m_RatioScratchT;
         private readonly List<double> m_TickScratch = new List<double>();
 
+        private int m_GridDimensionS = -1;
         /// <summary>沿 S 的线绑哪一维（&lt;0 ＝ 不绑，等分）</summary>
-        public int GridDimensionS { get; set; } = -1;
+        public int GridDimensionS { get => m_GridDimensionS; set { m_GridDimensionS = value; MarkDirty(); } }
 
+        private int m_GridDimensionT = -1;
         /// <summary>沿 T 的线绑哪一维（&lt;0 ＝ 不绑，等分）</summary>
-        public int GridDimensionT { get; set; } = -1;
+        public int GridDimensionT { get => m_GridDimensionT; set { m_GridDimensionT = value; MarkDirty(); } }
 
         /// <summary>本元素的变换变了（或想强制重取空间）时调用</summary>
         public override void MarkDirty() => m_Dirty = true;

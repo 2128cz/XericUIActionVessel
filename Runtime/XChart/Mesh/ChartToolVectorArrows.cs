@@ -33,35 +33,49 @@ namespace XericUI.XChart.Mesh
     [AddComponentMenu(XericRegistrationPaths.Chart + "/Mesh/Vector Arrow Tool")]
     public sealed class ChartToolVectorArrows : XChartToolBase
     {
+        private int m_CoordinateDimension;
         /// <summary>坐标的维度下标（x/y/z 三维）</summary>
-        public int CoordinateDimension { get; set; }
+        public int CoordinateDimension { get => m_CoordinateDimension; set { m_CoordinateDimension = value; MarkDirty(); } }
+        private XChartArrowVectorMode m_VectorMode = XChartArrowVectorMode.Absolute;
         /// <summary>第二条记录怎么读成方向</summary>
-        public XChartArrowVectorMode VectorMode { get; set; } = XChartArrowVectorMode.Absolute;
+        public XChartArrowVectorMode VectorMode { get => m_VectorMode; set { m_VectorMode = value; MarkDirty(); } }
+        private bool m_Continuous;
         /// <summary>把每条记录的坐标按顺序连成折线（此时相对/绝对不适用）</summary>
-        public bool Continuous { get; set; }
+        public bool Continuous { get => m_Continuous; set { m_Continuous = value; MarkDirty(); } }
+        private float m_DirectionScale = 0.25f;
         /// <summary>方向向量的长度倍率（立方体单位）；相对模式下作用在差向量上</summary>
-        public float DirectionScale { get; set; } = 0.25f;
+        public float DirectionScale { get => m_DirectionScale; set { m_DirectionScale = value; MarkDirty(); } }
+        private int m_MaxArrowCount = 512;
         /// <summary>最多画多少支（一支＝相邻两条记录）</summary>
-        public int MaxArrowCount { get; set; } = 512;
+        public int MaxArrowCount { get => m_MaxArrowCount; set { m_MaxArrowCount = value; MarkDirty(); } }
 
+        private XChartToolTransform m_Transform = XChartToolTransform.Identity;
         /// <summary>箭头自己的变换（叠在图的空间之上）</summary>
-        public XChartToolTransform Transform { get; set; } = XChartToolTransform.Identity;
+        public XChartToolTransform Transform { get => m_Transform; set { m_Transform = value; MarkDirty(); } }
 
         // ── 颜色：可选的三到四个数值维 ────────────────────────────
 
+        private bool m_UseColorDimensions;
         /// <summary>是否用额外的数值维给每支箭头上色</summary>
-        public bool UseColorDimensions { get; set; }
+        public bool UseColorDimensions { get => m_UseColorDimensions; set { m_UseColorDimensions = value; MarkDirty(); } }
+        private int m_ColorDimension = 3;
         /// <summary>颜色维的起点（色相、饱和度、明度 [+不透明度]）</summary>
-        public int ColorDimension { get; set; } = 3;
+        public int ColorDimension { get => m_ColorDimension; set { m_ColorDimension = value; MarkDirty(); } }
+        private bool m_HasAlphaDimension;
         /// <summary>是否多读一维不透明度</summary>
-        public bool HasAlphaDimension { get; set; }
+        public bool HasAlphaDimension { get => m_HasAlphaDimension; set { m_HasAlphaDimension = value; MarkDirty(); } }
 
-        public Color ArrowColor { get; set; } = new Color(0.95f, 0.6f, 0.25f, 0.9f);
-        public float ShaftWidth { get; set; } = 2f;
-        public float HeadLength { get; set; } = 10f;
-        public float HeadWidth { get; set; } = 7f;
+        private Color m_ArrowColor = new Color(0.95f, 0.6f, 0.25f, 0.9f);
+        public Color ArrowColor { get => m_ArrowColor; set { m_ArrowColor = value; MarkDirty(); } }
+        private float m_ShaftWidth = 2f;
+        public float ShaftWidth { get => m_ShaftWidth; set { m_ShaftWidth = value; MarkDirty(); } }
+        private float m_HeadLength = 10f;
+        public float HeadLength { get => m_HeadLength; set { m_HeadLength = value; MarkDirty(); } }
+        private float m_HeadWidth = 7f;
+        public float HeadWidth { get => m_HeadWidth; set { m_HeadWidth = value; MarkDirty(); } }
+        private bool m_ShowZeroVectorsAsDots;
         /// <summary>方向为零向量时什么都不画；给个数就画成一个点</summary>
-        public bool ShowZeroVectorsAsDots { get; set; }
+        public bool ShowZeroVectorsAsDots { get => m_ShowZeroVectorsAsDots; set { m_ShowZeroVectorsAsDots = value; MarkDirty(); } }
 
         public XChartMeshFillRenderer FillRenderer { get; private set; }
 
@@ -71,15 +85,17 @@ namespace XericUI.XChart.Mesh
         /// </summary>
         public UICurveRenderer CurveRenderer { get; private set; }
 
+        private float m_HeadPosition = 1f;
         /// <summary>
         /// 连续绘制时<b>画到路径的哪个位置</b>（0＝起点、1＝整条，默认 1）：
         /// 箭头就放在这一处，路径在这一点被剪断（剪口之后不画）——
         /// 不剪的话路径会从箭头底下穿出去，看着像"箭头朝里长"。
         /// </summary>
-        public float HeadPosition { get; set; } = 1f;
+        public float HeadPosition { get => m_HeadPosition; set { m_HeadPosition = value; MarkDirty(); } }
 
+        private int m_PathSegments = 12;
         /// <summary>连续绘制时每段贝塞尔细分成几节（曲线渲染器的 tessellation）</summary>
-        public int PathSegments { get; set; } = 12;
+        public int PathSegments { get => m_PathSegments; set { m_PathSegments = value; MarkDirty(); } }
 
         private readonly List<Vector2> m_Pixels = new List<Vector2>(64);
         private string m_PathRenderer = "-";

@@ -30,55 +30,80 @@ namespace XericUI.XChart.Mesh
     {
         // ── 几何（立方体单位，±1 就是盒子边界） ───────────────────
 
-        public Vector3 Start { get; set; } = new Vector3(-0.6f, -0.6f, -0.6f);
-        public Vector3 End { get; set; } = new Vector3(0.6f, 0.6f, 0.6f);
-        public float Radius { get; set; } = 0.22f;
-        public int SegmentCount { get; set; } = 48;
+        private Vector3 m_Start = new Vector3(-0.6f, -0.6f, -0.6f);
+        public Vector3 Start { get => m_Start; set { m_Start = value; MarkDirty(); } }
+        private Vector3 m_End = new Vector3(0.6f, 0.6f, 0.6f);
+        public Vector3 End { get => m_End; set { m_End = value; MarkDirty(); } }
+        private float m_Radius = 0.22f;
+        public float Radius { get => m_Radius; set { m_Radius = value; MarkDirty(); } }
+        private int m_SegmentCount = 48;
+        public int SegmentCount { get => m_SegmentCount; set { m_SegmentCount = value; MarkDirty(); } }
 
+        private Vector3 m_StartNormal;
         /// <summary>起点端面的法线。<b>零向量＝沿两端连线</b>（与旧行为一致）</summary>
-        public Vector3 StartNormal { get; set; }
+        public Vector3 StartNormal { get => m_StartNormal; set { m_StartNormal = value; MarkDirty(); } }
+        private Vector3 m_EndNormal;
         /// <summary>终点端面的法线。零向量＝沿两端连线</summary>
-        public Vector3 EndNormal { get; set; }
+        public Vector3 EndNormal { get => m_EndNormal; set { m_EndNormal = value; MarkDirty(); } }
 
+        private XChartToolTransform m_Transform = XChartToolTransform.Identity;
         /// <summary>圆柱自己的变换（叠在图的空间之上）</summary>
-        public XChartToolTransform Transform { get; set; } = XChartToolTransform.Identity;
+        public XChartToolTransform Transform { get => m_Transform; set { m_Transform = value; MarkDirty(); } }
 
         // ── 几何来源：常量 / 数据（一组记录一根圆柱） ──
 
+        private bool m_DriveByData;
         /// <summary>关＝用 <see cref="Start"/>/<see cref="End"/> 的常量坐标；开＝从数据源取</summary>
-        public bool DriveByData { get; set; }
-        public int DimensionX { get; set; }
-        public int DimensionY { get; set; } = 1;
-        public int DimensionZ { get; set; } = 2;
+        public bool DriveByData { get => m_DriveByData; set { m_DriveByData = value; MarkDirty(); } }
+        private int m_DimensionX;
+        public int DimensionX { get => m_DimensionX; set { m_DimensionX = value; MarkDirty(); } }
+        private int m_DimensionY = 1;
+        public int DimensionY { get => m_DimensionY; set { m_DimensionY = value; MarkDirty(); } }
+        private int m_DimensionZ = 2;
+        public int DimensionZ { get => m_DimensionZ; set { m_DimensionZ = value; MarkDirty(); } }
+        private int m_GroupSize = 2;
         /// <summary>几条记录凑一根圆柱；2＝两两一组（记录 0-1、2-3…，不重叠也不并入上一组）</summary>
-        public int GroupSize { get; set; } = 2;
+        public int GroupSize { get => m_GroupSize; set { m_GroupSize = value; MarkDirty(); } }
+        private int m_MaxCylinders = 64;
         /// <summary>最多画几根</summary>
-        public int MaxCylinders { get; set; } = 64;
+        public int MaxCylinders { get => m_MaxCylinders; set { m_MaxCylinders = value; MarkDirty(); } }
 
         // ── 呈现（各有开关） ──────────────────────────────────────
 
+        private bool m_ShowOutline = true;
         /// <summary>外轮廓包边</summary>
-        public bool ShowOutline { get; set; } = true;
-        public Color OutlineColor { get; set; } = new Color(0.75f, 0.85f, 1f, 0.9f);
-        public float OutlineThickness { get; set; } = 2f;
+        public bool ShowOutline { get => m_ShowOutline; set { m_ShowOutline = value; MarkDirty(); } }
+        private Color m_OutlineColor = new Color(0.75f, 0.85f, 1f, 0.9f);
+        public Color OutlineColor { get => m_OutlineColor; set { m_OutlineColor = value; MarkDirty(); } }
+        private float m_OutlineThickness = 2f;
+        public float OutlineThickness { get => m_OutlineThickness; set { m_OutlineThickness = value; MarkDirty(); } }
 
+        private bool m_ShowFill = true;
         /// <summary>轮廓填充（同一个凸包多边形）</summary>
-        public bool ShowFill { get; set; } = true;
-        public Color FillColor { get; set; } = new Color(0.34f, 0.55f, 0.85f, 0.35f);
+        public bool ShowFill { get => m_ShowFill; set { m_ShowFill = value; MarkDirty(); } }
+        private Color m_FillColor = new Color(0.34f, 0.55f, 0.85f, 0.35f);
+        public Color FillColor { get => m_FillColor; set { m_FillColor = value; MarkDirty(); } }
 
+        private bool m_ShowCapCross;
         /// <summary>端面十字：用端面自己的采样顶点连，所以它**永远与实际端面对得上**，能看出滚转</summary>
-        public bool ShowCapCross { get; set; }
-        public Color CrossColor { get; set; } = new Color(0.9f, 0.95f, 1f, 0.85f);
-        public float CrossThickness { get; set; } = 1.5f;
+        public bool ShowCapCross { get => m_ShowCapCross; set { m_ShowCapCross = value; MarkDirty(); } }
+        private Color m_CrossColor = new Color(0.9f, 0.95f, 1f, 0.85f);
+        public Color CrossColor { get => m_CrossColor; set { m_CrossColor = value; MarkDirty(); } }
+        private float m_CrossThickness = 1.5f;
+        public float CrossThickness { get => m_CrossThickness; set { m_CrossThickness = value; MarkDirty(); } }
 
+        private bool m_ShowStartRing;
         /// <summary>起点端面的闭合圆环（画满一整圈端面椭圆，＝端面自己的边界）</summary>
-        public bool ShowStartRing { get; set; }
+        public bool ShowStartRing { get => m_ShowStartRing; set { m_ShowStartRing = value; MarkDirty(); } }
+        private bool m_ShowEndRing;
         /// <summary>终点端面的闭合圆环</summary>
-        public bool ShowEndRing { get; set; }
+        public bool ShowEndRing { get => m_ShowEndRing; set { m_ShowEndRing = value; MarkDirty(); } }
 
+        private int m_GeneratrixCount;
         /// <summary>内部母线数量（把两端对应点连起来；0＝不画）。<b>默认 0</b>：轮廓之外的东西要显式要</summary>
-        public int GeneratrixCount { get; set; }
-        public Color GeneratrixColor { get; set; } = new Color(0.75f, 0.85f, 1f, 0.35f);
+        public int GeneratrixCount { get => m_GeneratrixCount; set { m_GeneratrixCount = value; MarkDirty(); } }
+        private Color m_GeneratrixColor = new Color(0.75f, 0.85f, 1f, 0.35f);
+        public Color GeneratrixColor { get => m_GeneratrixColor; set { m_GeneratrixColor = value; MarkDirty(); } }
 
         // ── 内部 ──────────────────────────────────────────────────
 

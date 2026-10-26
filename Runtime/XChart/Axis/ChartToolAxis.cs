@@ -43,62 +43,90 @@ namespace XericUI.XChart.Axis
     {
         // ── 宿主与走向 ────────────────────────────────────────────
 
+        private string m_SlotId = XChartCubeGeometry.FaceSlotId(XChartCubeGeometry.CubeFace.Bottom);
         /// <summary>
         /// 宿主面用**插槽 id** 指定（规范 §11.2）：默认取定义网格发布的 <c>mesh.face.&lt;面号&gt;</c>。
         /// 不再认"第几个面"——拿到的是点，所以异形网格只要发布同 id 的插槽就能用。
         /// </summary>
-        public string SlotId { get; set; } = XChartCubeGeometry.FaceSlotId(XChartCubeGeometry.CubeFace.Bottom);
+        public string SlotId { get => m_SlotId; set { m_SlotId = value; MarkDirty(); } }
 
+        private bool m_AlignToGrid;
         /// <summary>
         /// 对齐格线（P9）：开启后每条主刻度的位置会<b>吸附到网格发布的那组线上</b>
         /// （轴沿 S 走读 <c>grid.T</c>、沿 T 走读 <c>grid.S</c>），偏移超过"相邻两条线间距的一半"
         /// 就不吸。网格是定义方，这里只是跟随。
         /// </summary>
-        public bool AlignToGrid { get; set; }
-        public XChartAxisDirection Direction { get; set; } = XChartAxisDirection.AlongS;
-        public float StartRatio { get; set; }
-        public float EndRatio { get; set; } = 1f;
-        public float CrossRatio { get; set; }
-        public XChartToolTransform Transform { get; set; } = XChartToolTransform.Identity;
+        public bool AlignToGrid { get => m_AlignToGrid; set { m_AlignToGrid = value; MarkDirty(); } }
+        private XChartAxisDirection m_Direction = XChartAxisDirection.AlongS;
+        public XChartAxisDirection Direction { get => m_Direction; set { m_Direction = value; MarkDirty(); } }
+        private float m_StartRatio;
+        public float StartRatio { get => m_StartRatio; set { m_StartRatio = value; MarkDirty(); } }
+        private float m_EndRatio = 1f;
+        public float EndRatio { get => m_EndRatio; set { m_EndRatio = value; MarkDirty(); } }
+        private float m_CrossRatio;
+        public float CrossRatio { get => m_CrossRatio; set { m_CrossRatio = value; MarkDirty(); } }
+        private XChartToolTransform m_Transform = XChartToolTransform.Identity;
+        public XChartToolTransform Transform { get => m_Transform; set { m_Transform = value; MarkDirty(); } }
 
         // ── 值域与刻度 ────────────────────────────────────────────
 
+        private int m_Dimension;
         /// <summary>
         /// 轴读哪一维——这是<b>绑定</b>（这条轴画的是哪一路数据），不是范围。
         /// 范围与"这一维现在有没有数据"归 chart 的数据板块（每个维度一行），
         /// 工具只呈现（规范 §1）。
         /// </summary>
-        public int Dimension { get; set; }
+        public int Dimension { get => m_Dimension; set { m_Dimension = value; MarkDirty(); } }
 
-        public XChartAxisScale Scale { get; set; } = XChartAxisScale.Linear;
-        public double ExponentialStrength { get; set; } = 2.0;
-        public bool AutoStep { get; set; } = true;
-        public double ManualStep { get; set; } = 1.0;
-        public int TargetMajorCount { get; set; } = 5;
-        public int MinorTickCount { get; set; } = 4;
+        private XChartAxisScale m_Scale = XChartAxisScale.Linear;
+        public XChartAxisScale Scale { get => m_Scale; set { m_Scale = value; MarkDirty(); } }
+        private double m_ExponentialStrength = 2.0;
+        public double ExponentialStrength { get => m_ExponentialStrength; set { m_ExponentialStrength = value; MarkDirty(); } }
+        private bool m_AutoStep = true;
+        public bool AutoStep { get => m_AutoStep; set { m_AutoStep = value; MarkDirty(); } }
+        private double m_ManualStep = 1.0;
+        public double ManualStep { get => m_ManualStep; set { m_ManualStep = value; MarkDirty(); } }
+        private int m_TargetMajorCount = 5;
+        public int TargetMajorCount { get => m_TargetMajorCount; set { m_TargetMajorCount = value; MarkDirty(); } }
+        private int m_MinorTickCount = 4;
+        public int MinorTickCount { get => m_MinorTickCount; set { m_MinorTickCount = value; MarkDirty(); } }
 
         // ── 外观 ──────────────────────────────────────────────────
 
-        public Color LineColor { get; set; } = new Color(0.85f, 0.88f, 0.95f, 0.9f);
-        public float LineThickness { get; set; } = 2f;
-        public float MajorTickLength { get; set; } = 8f;
-        public float MinorTickLength { get; set; } = 4f;
-        public float TickThickness { get; set; } = 1.5f;
+        private Color m_LineColor = new Color(0.85f, 0.88f, 0.95f, 0.9f);
+        public Color LineColor { get => m_LineColor; set { m_LineColor = value; MarkDirty(); } }
+        private float m_LineThickness = 2f;
+        public float LineThickness { get => m_LineThickness; set { m_LineThickness = value; MarkDirty(); } }
+        private float m_MajorTickLength = 8f;
+        public float MajorTickLength { get => m_MajorTickLength; set { m_MajorTickLength = value; MarkDirty(); } }
+        private float m_MinorTickLength = 4f;
+        public float MinorTickLength { get => m_MinorTickLength; set { m_MinorTickLength = value; MarkDirty(); } }
+        private float m_TickThickness = 1.5f;
+        public float TickThickness { get => m_TickThickness; set { m_TickThickness = value; MarkDirty(); } }
+        private float m_TickSide = -1f;
         /// <summary>刻度朝哪边：+1 朝面参数增大方向，-1 朝减小方向</summary>
-        public float TickSide { get; set; } = -1f;
+        public float TickSide { get => m_TickSide; set { m_TickSide = value; MarkDirty(); } }
 
         // ── 标签 ──────────────────────────────────────────────────
 
-        public XChartAxisLabelSource LabelSource { get; set; } = XChartAxisLabelSource.TickValue;
+        private XChartAxisLabelSource m_LabelSource = XChartAxisLabelSource.TickValue;
+        public XChartAxisLabelSource LabelSource { get => m_LabelSource; set { m_LabelSource = value; MarkDirty(); } }
+        private string m_LabelFormat;
         /// <summary>数值格式化串（如 "0.00" 或 "0.#"）；留空走自适应</summary>
-        public string LabelFormat { get; set; }
-        public string[] CustomLabels { get; set; }
-        public float LabelGap { get; set; } = 6f;
-        public float LabelFontSize { get; set; } = 14f;
-        public Color LabelColor { get; set; } = new Color(0.85f, 0.88f, 0.95f, 0.95f);
-        public Vector2 LabelSize { get; set; } = new Vector2(90f, 24f);
+        public string LabelFormat { get => m_LabelFormat; set { m_LabelFormat = value; MarkDirty(); } }
+        private string[] m_CustomLabels;
+        public string[] CustomLabels { get => m_CustomLabels; set { m_CustomLabels = value; MarkDirty(); } }
+        private float m_LabelGap = 6f;
+        public float LabelGap { get => m_LabelGap; set { m_LabelGap = value; MarkDirty(); } }
+        private float m_LabelFontSize = 14f;
+        public float LabelFontSize { get => m_LabelFontSize; set { m_LabelFontSize = value; MarkDirty(); } }
+        private Color m_LabelColor = new Color(0.85f, 0.88f, 0.95f, 0.95f);
+        public Color LabelColor { get => m_LabelColor; set { m_LabelColor = value; MarkDirty(); } }
+        private Vector2 m_LabelSize = new Vector2(90f, 24f);
+        public Vector2 LabelSize { get => m_LabelSize; set { m_LabelSize = value; MarkDirty(); } }
+        private bool m_RotateLabelsWithAxis = true;
         /// <summary>标签跟着轴的方向转（斜面上读起来才不拧着）</summary>
-        public bool RotateLabelsWithAxis { get; set; } = true;
+        public bool RotateLabelsWithAxis { get => m_RotateLabelsWithAxis; set { m_RotateLabelsWithAxis = value; MarkDirty(); } }
 
         // ── 内部 ──────────────────────────────────────────────────
 
