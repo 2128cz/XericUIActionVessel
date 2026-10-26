@@ -3,8 +3,8 @@ using UnityEngine;
 namespace XericUI.XChart.Mesh
 {
     /// <summary>
-    /// 矢量场"连续绘制"那条路径的<b>纯算术</b>：一串点 → 一条平滑折线（三次贝塞尔链），
-    /// 以及在链上取点/取切线、在某个参数处把链剪成两段。
+    /// 矢量场"连续绘制"那条路径的<b>纯算术</b>：一串点 → 一条平滑折线（三次贝塞尔链）、
+    /// 在链上取点/取切线、把"路径上的位置"换成"第几节的哪个参数"，以及把两点写成一条直线贝塞尔。
     ///
     /// <para><b>为什么要单独一个文件</b>：这几条是"画出来对不对"唯一能离线判的部分——
     /// 曲线渲染器那一层（库里的 <c>UICurveRenderer</c>）吃的是<b>控制点</b>，
@@ -66,39 +66,16 @@ namespace XericUI.XChart.Mesh
         }
 
         /// <summary>
-        /// 在参数 t 处把一段三次贝塞尔<b>剪成两段</b>（de Casteljau 分裂）：
-        /// <paramref name="left"/> 是 [0,t] 那半、<paramref name="right"/> 是 [t,1] 那半，
-        /// 两者各 4 个控制点。<b>两段接回去必须与原段逐点一致</b>——这条由探针判据钉住
-        /// （剪错了画面上是"箭头前面那段路挪了位"，很不容易看出来）。
+        /// 两点之间的<b>共线</b>三次贝塞尔控制点（内控制点落在 1/3、2/3）——细分多少节都是那条直线。
+        /// 一支箭头的杆走这一条：杆和路径用同一个渲染器、同一套宽度与起止色，
+        /// 就不需要"填充四边形"那第二套画法（他 2026-10-26 的纠正，§29）。
         /// </summary>
-        public static void Split(Vector2[] bezier, float t, Vector2[] left, Vector2[] right)
+        public static void Straight(Vector2 from, Vector2 to, Vector2[] bezier)
         {
-            if (bezier == null || bezier.Length < ControlPointsPerSegment) return;
-            if (left != null && left.Length < ControlPointsPerSegment) return;
-            if (right != null && right.Length < ControlPointsPerSegment) return;
-            t = Mathf.Clamp01(t);
-
-            Vector2 a = Vector2.Lerp(bezier[0], bezier[1], t);
-            Vector2 b = Vector2.Lerp(bezier[1], bezier[2], t);
-            Vector2 c = Vector2.Lerp(bezier[2], bezier[3], t);
-            Vector2 d = Vector2.Lerp(a, b, t);
-            Vector2 e = Vector2.Lerp(b, c, t);
-            Vector2 f = Vector2.Lerp(d, e, t);   // = 曲线在 t 处的点
-
-            if (left != null)
-            {
-                left[0] = bezier[0];
-                left[1] = a;
-                left[2] = d;
-                left[3] = f;
-            }
-            if (right != null)
-            {
-                right[0] = f;
-                right[1] = e;
-                right[2] = c;
-                right[3] = bezier[3];
-            }
+            bezier[0] = from;
+            bezier[1] = Vector2.Lerp(from, to, 1f / 3f);
+            bezier[2] = Vector2.Lerp(from, to, 2f / 3f);
+            bezier[3] = to;
         }
 
         /// <summary>

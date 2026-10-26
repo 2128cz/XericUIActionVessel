@@ -4,6 +4,37 @@ using XericUI.XChart;
 namespace XericUI.XChart.Mesh
 {
     /// <summary>
+    /// 曲线渲染器的箭头标记长什么样（离线侧的形状，接线时一对一映射到库的 <c>ArrowShape</c>）。
+    /// 只列我们真用的两档：三角形＝有方向的箭头，圆形＝零向量那种"就是一个点"。
+    /// </summary>
+    public enum XChartMarkerShape
+    {
+        Triangle,
+        Circle,
+    }
+
+    /// <summary>
+    /// 一支箭头的<b>头</b>：位置（在曲线上的参数 0..1）、尺寸（沿切线／垂直切线）、颜色。
+    ///
+    /// <para>这是<b>我们自己的</b>纯算术写法，不是库的结构体——离线探针引不到库那个 assembly，
+    /// 所以判据打在这个结构上，工具里只做"对号入座"的映射（§29）。尺寸在 <see cref="XChartVectorFieldMath.Head"/>
+    /// 里夹住而不是原样传："头长 0"进库里就是画不出来的东西，而那里的调用方是面板上的数字框。</para>
+    /// </summary>
+    public struct XChartArrowMarker
+    {
+        public XChartMarkerShape Shape;
+        /// <summary>在曲线上的位置（0＝起点、1＝末端），已夹进 [0,1]</summary>
+        public float Progress;
+        /// <summary>沿切线方向的尺寸（库里叫 width）</summary>
+        public float AlongTangent;
+        /// <summary>垂直切线方向的尺寸（库里叫 height）</summary>
+        public float AcrossTangent;
+        /// <summary>+1＝头尖对准那个点；0＝中心对准（圆点用这个）</summary>
+        public float TipAtPoint;
+        public Color32 Color;
+    }
+
+    /// <summary>
     /// 矢量场（箭头）的<b>纯算术</b>：一条记录的两组三维怎么变成一支箭头，以及一组颜色维怎么变成颜色。
     /// 单独拎出来是因为这两条是"看图看不出来"的判据——
     /// 他 2026-10-25 现场："我把它添加进来了，之后它并没有显示出来"，以及"相对和绝对就是这两种区别"。
@@ -36,6 +67,38 @@ namespace XericUI.XChart.Mesh
 
             cube = new Vector3(nx, ny, nz);
             return true;
+        }
+
+        /// <summary>
+        /// 三角形头。<paramref name="progress"/> 夹进 [0,1]；<b>不是有限数就落在末端</b>（1）——
+        /// NaN 一路传进库里会得到一个位置未知、也报不出错的东西，那正是"画面和读数对不上"的来路。
+        /// 两个尺寸都兜住最小值：0 长的头等于没画，而"没画"该由开关说话，不该由算术偷偷决定。
+        /// </summary>
+        public static XChartArrowMarker Head(float length, float width, float progress, Color color)
+        {
+            return new XChartArrowMarker
+            {
+                Shape = XChartMarkerShape.Triangle,
+                Progress = IsFinite(progress) ? Mathf.Clamp01(progress) : 1f,
+                AlongTangent = Mathf.Max(0.1f, length),
+                AcrossTangent = Mathf.Max(0.1f, width),
+                TipAtPoint = 1f,
+                Color = color,
+            };
+        }
+
+        /// <summary>零向量的圆点：位置在条目中间（0.5）、中心对准那个点。</summary>
+        public static XChartArrowMarker Dot(float diameter, float width, Color color)
+        {
+            return new XChartArrowMarker
+            {
+                Shape = XChartMarkerShape.Circle,
+                Progress = 0.5f,
+                AlongTangent = Mathf.Max(0.1f, diameter),
+                AcrossTangent = Mathf.Max(0.1f, width),
+                TipAtPoint = 0f,
+                Color = color,
+            };
         }
 
         /// <summary>

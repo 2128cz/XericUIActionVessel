@@ -161,7 +161,8 @@ namespace XericUI.XChart.Mesh
         private bool m_Continuous;
 
         [SerializeField, Range(0f, 1f), Tooltip("连续绘制时箭头放在路径的哪个位置（0＝起点、1＝末端）：" +
-                                                "路径在这一处剪断，箭头顺那一点的切线。只有连续绘制用得上")]
+                                                "它是曲线渲染器那个标记在曲线上的参数位置，路径不剪断、标记叠在线上。" +
+                                                "只有连续绘制用得上")]
         private float m_HeadPosition = 1f;
 
         [SerializeField, Range(2, 64), Tooltip("连续绘制时每段路径细分成几节（曲线渲染器的 tessellation）。" +

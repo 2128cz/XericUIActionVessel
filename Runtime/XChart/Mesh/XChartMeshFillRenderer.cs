@@ -186,9 +186,9 @@ namespace XericUI.XChart.Mesh
         /// <paramref name="fromColor"/>，<c>corner01</c> 与 <c>corner11</c> 取 <paramref name="toColor"/>
         /// ——也就是"一对边一色"，渐变方向垂直于那两条边。
         ///
-        /// <para>箭头杆用的就是这一档：<see cref="XChartArrowGeometry.BuildShaft"/> 绕出来的四角里
-        /// <b>a/d 在起点一侧、b/c 在末端一侧</b>（这条配对由探针钉着，配错就会横着染到杆的宽度上，
-        /// 画面上看是"杆的两侧各一色"而不是"沿杆渐变"）。顶点数与平坦一样（4 个、2 三角）。</para>
+        /// <para>这一档是"一对边一色"，渐变方向垂直于那两条边，顶点数与平坦一样（4 个、2 三角）。
+        /// <b>矢量场的箭头已经不用它了</b>（§29：杆改走曲线渲染器的共线贝塞尔，头用库的标记），
+        /// 这里留着是因为它是这个渲染器本身的一种上色模式，别的元素要用渐变填充时不必再写第二套。</para>
         /// </summary>
         public void AddFaceLinear(Vector2 corner00, Vector2 corner01, Vector2 corner11, Vector2 corner10,
             Color fromColor, Color toColor)
