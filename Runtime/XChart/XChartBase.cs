@@ -458,6 +458,16 @@ namespace XericUI.XChart
 
         public void RemoveAllTools() => ToolManager?.RemoveAllTools();
 
+        /// <summary>
+        /// 按类型取<b>已加载的元素实例</b>（同类多条时用 <paramref name="toolName"/> 点名，名字见
+        /// <see cref="ElementNameFor"/>）。没初始化、没找到都答 null——不抛，因为"图里现在有没有这一类"
+        /// 是现场状态，调用方要能问出"没有"这个答案。
+        ///
+        /// <para>取到之后直接写它的公开旋钮就行：每个 setter 自己置脏（规范 §27），不用补 <c>MarkDirty()</c>。</para>
+        /// </summary>
+        public T Tool<T>(string toolName = null) where T : XChartToolBase
+            => ToolManager != null ? ToolManager.FindTool<T>(toolName) : null;
+
         // ── 元素（配置路径） ──────────────────────────────────────
 
         /// <summary>元素配置表（[SerializeReference]，Inspector 里逐项展开自己类型的字段）</summary>
@@ -465,6 +475,14 @@ namespace XericUI.XChart
 
         /// <summary>当前已加载的元素实例（与配置表同序、只含启用的项）</summary>
         public IReadOnlyList<XChartToolBase> ElementTools => m_ElementTools;
+
+        /// <summary>
+        /// 按类型取表里<b>第一份</b>这一类的配置，没有则 null。
+        /// "哪一条是这一类"只许有这一个答法（与 <see cref="XChartElementTable.IndexOfKind"/> 同源），
+        /// 面板、默认元素去重、外部写配置都读这一条。
+        /// </summary>
+        public T Element<T>() where T : XChartElementConfig
+            => XChartElementTable.FirstOfKind(m_Elements, typeof(T)) as T;
 
         private readonly List<XChartToolBase> m_ElementTools = new List<XChartToolBase>();
 
