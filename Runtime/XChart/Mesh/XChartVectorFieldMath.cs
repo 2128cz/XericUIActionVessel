@@ -1,4 +1,5 @@
 using UnityEngine;
+using XericUI.XChart;
 
 namespace XericUI.XChart.Mesh
 {
@@ -10,6 +11,33 @@ namespace XericUI.XChart.Mesh
     /// </summary>
     public static class XChartVectorFieldMath
     {
+        /// <summary>
+        /// 一条记录的原始三值 → <b>立方体单位</b>：每一维按<b>它自己的显示范围</b>映到 [-1,1]
+        /// （±1 就是盒子边界），与散点、圆柱走的是同一套（<see cref="XChartBindingMath.TryNormalize"/>）。
+        ///
+        /// <para><b>为什么单独有这么一个函数</b>：箭头以前把数据值<b>直接当成立方体单位</b>用了，
+        /// 于是一份 x∈[-100,50] 的表把所有箭头投到一万多像素之外——支数在算、面在提交、画面什么都没有
+        /// （他 2026-10-26："矢量场现在没有在渲染"）。散点和圆柱一直归一化、只有箭头没归，
+        /// 这就是"同一件事两套口径"的又一种形状：它不报错，只是看不见。</para>
+        ///
+        /// <para><b>任何一维给不出有效范围（跨度 ≤0、或值/端点非有限）就整体拒答</b>——
+        /// 半归一化的坐标比不归一化的更难查：它会画出"看着像个箭头但方向不对"的东西。</para>
+        /// </summary>
+        public static bool TryCubePoint(double x, double y, double z,
+            double minX, double maxX, double minY, double maxY, double minZ, double maxZ,
+            out Vector3 cube)
+        {
+            cube = Vector3.zero;
+
+            float nx, ny, nz;
+            if (!XChartBindingMath.TryNormalize(x, minX, maxX, out nx)
+                || !XChartBindingMath.TryNormalize(y, minY, maxY, out ny)
+                || !XChartBindingMath.TryNormalize(z, minZ, maxZ, out nz)) return false;
+
+            cube = new Vector3(nx, ny, nz);
+            return true;
+        }
+
         /// <summary>
         /// 末端位置。<paramref name="mode"/>＝<see cref="XChartArrowVectorMode.Absolute"/> 时
         /// <paramref name="second"/> 是<b>方向矢量</b>本身（起点 + 方向×倍率）；

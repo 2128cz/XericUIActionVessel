@@ -117,6 +117,12 @@ namespace XericUI.XChart.Mesh
         private int m_DimensionsHave;
         private int m_DimensionsNeed;
         private int m_RecordsHave;
+        private int m_PointsSkipped;
+
+        // 三条坐标轴各自的显示范围（每帧现问上下文要：覆盖优先、否则该维聚合）。
+        // 数据值必须经它们折成立方体单位才投影——直接当立方体单位用会把整场箭头投到盒子外面（§28）
+        private double m_MinX, m_MaxX, m_MinY, m_MaxY, m_MinZ, m_MaxZ;
+        private bool m_HasDomains;
 
         private struct ArrowFace
         {
@@ -217,8 +223,10 @@ namespace XericUI.XChart.Mesh
             m_ArrowsBuilt = 0;
             m_DimensionsHave = 0;
             m_RecordsHave = 0;
+            m_PointsSkipped = 0;
             m_DimensionsNeed = RequiredDimensionCount;
             m_CurveEntries = 0;
+            m_HasDomains = false;
             m_PathRenderer = Continuous ? (CurveRenderer != null ? "curve" : "fill") : "-";
 
             var source = Data;
@@ -230,6 +238,11 @@ namespace XericUI.XChart.Mesh
             // 面板也印同一对（规范 §25.1）
             if (m_DimensionsHave < CoordinateDimension + RequiredDimensionCount) return;
             if (m_RecordsHave < RequiredRecordCount) return;
+
+            // 坐标得按各维的显示范围折进盒子（±1＝盒子边界）。折不出来就一支都不画，
+            // 而不是拿原始值硬投影——后者是"计数全对、画面空无一物"的那条路（§28）
+            m_HasDomains = TryResolveDomains();
+            if (!m_HasDomains) return;
 
             // 一支箭头＝相邻两条记录 ⇒ 支数由纯算术算（离线钉着：记录不够 vs 维数不够要分得清）
             int limit = XChartVectorFieldMath.ArrowCount(m_RecordsHave, MaxArrowCount);
@@ -243,8 +256,12 @@ namespace XericUI.XChart.Mesh
 
             for (int i = 0; i < limit; i++)
             {
-                Vector3 first = ReadPoint(source, i);
-                Vector3 second = ReadPoint(source, i + 1);
+                Vector3 first, second;
+                if (!TryReadPoint(source, i, out first) || !TryReadPoint(source, i + 1, out second))
+                {
+                    m_PointsSkipped++;
+                    continue;
+                }
                 // 两种读法的算式在纯算术里（离线钉着）：绝对＝第二条的坐标就是方向；相对＝它是第二个点
                 Vector3 tip = XChartVectorFieldMath.Tip(VectorMode, first, second, DirectionScale);
                 if (AddArrow(space, first, tip, ColorAt(source, i), ColorAt(source, i + 1))) m_ArrowsBuilt++;
@@ -264,7 +281,13 @@ namespace XericUI.XChart.Mesh
         {
             m_Pixels.Clear();
             for (int i = 0; i <= limit; i++)
-                m_Pixels.Add(space.Project(ReadPoint(source, i), m_Composed));
+            {
+                Vector3 cube;
+                // 跳过的点要报出来：曲线的位置按"活下来的点"排，颜色仍按记录号取——数据里
+                // 有非有限值时这两者会错开，不印出来的话就只能靠猜（skipped= 那一读数的全部意义）
+                if (!TryReadPoint(source, i, out cube)) { m_PointsSkipped++; continue; }
+                m_Pixels.Add(space.Project(cube, m_Composed));
+            }
 
             int segments = m_Pixels.Count - 1;
             if (segments < 1) return;
@@ -390,12 +413,36 @@ namespace XericUI.XChart.Mesh
             return true;
         }
 
-        private Vector3 ReadPoint(IXChartDataSource source, int record)
+        /// <summary>
+        /// 三条坐标轴各自的显示范围——<b>每帧现问上下文要</b>（覆盖优先，否则该维聚合；规则在
+        /// <see cref="XChartDomainMath"/>）。范围不归元素存：元素只说要哪几维，自己再存一份就是
+        /// "点和轴对不上"的来路（与散点同一条规矩，§16）。
+        /// </summary>
+        private bool TryResolveDomains()
         {
-            return new Vector3(
-                (float)source.GetValueAt(record, CoordinateDimension),
-                (float)source.GetValueAt(record, CoordinateDimension + 1),
-                (float)source.GetValueAt(record, CoordinateDimension + 2));
+            m_MinX = m_MaxX = m_MinY = m_MaxY = m_MinZ = m_MaxZ = 0d;
+            var context = Context;
+            if (context == null) return false;
+            return context.TryResolveDomain(CoordinateDimension, out m_MinX, out m_MaxX)
+                && context.TryResolveDomain(CoordinateDimension + 1, out m_MinY, out m_MaxY)
+                && context.TryResolveDomain(CoordinateDimension + 2, out m_MinZ, out m_MaxZ);
+        }
+
+        /// <summary>
+        /// 一条记录 → <b>立方体单位</b>的点。原始值先按各维范围折进 [-1,1] 再投影
+        /// （折法在纯算术里，离线钉着：<see cref="XChartVectorFieldMath.TryCubePoint"/>）。
+        /// 折不出来（值非有限、或那一维跨度为 0）就返回 false，调用方计入 <c>skipped=</c>——
+        /// <b>不是"静默少一支"，是"少几支当场说"</b>。
+        /// </summary>
+        private bool TryReadPoint(IXChartDataSource source, int record, out Vector3 cube)
+        {
+            cube = Vector3.zero;
+            if (record < 0 || record >= m_RecordsHave) return false;
+            return XChartVectorFieldMath.TryCubePoint(
+                source.GetValueAt(record, CoordinateDimension),
+                source.GetValueAt(record, CoordinateDimension + 1),
+                source.GetValueAt(record, CoordinateDimension + 2),
+                m_MinX, m_MaxX, m_MinY, m_MaxY, m_MinZ, m_MaxZ, out cube);
         }
 
         /// <summary>
@@ -439,7 +486,15 @@ namespace XericUI.XChart.Mesh
             base.AppendDebugLine(sb);
             sb.Append(" dims=").Append(m_DimensionsHave).Append('/').Append(m_DimensionsNeed)
               .Append(" records=").Append(m_RecordsHave)
+              // 坐标按这三个范围折进盒子；dom=- 就是"折不出来 ⇒ 一支都不画"，
+              // 而 arrows>0 而 dom=- 不可能同时出现（那道门在算支数之前）
+              .Append(" dom=").Append(m_HasDomains
+                  ? "x[" + m_MinX.ToString("0.###") + ".." + m_MaxX.ToString("0.###") + "] y["
+                    + m_MinY.ToString("0.###") + ".." + m_MaxY.ToString("0.###") + "] z["
+                    + m_MinZ.ToString("0.###") + ".." + m_MaxZ.ToString("0.###") + "]"
+                  : "-")
               .Append(" arrows=").Append(m_ArrowsBuilt)
+              .Append(" skipped=").Append(m_PointsSkipped)
               .Append(" mode=").Append(Continuous ? "continuous" : (VectorMode == XChartArrowVectorMode.Relative ? "relative" : "absolute"))
               .Append(" colors=").Append(UseColorDimensions ? (HasAlphaDimension ? "hsv+a" : "hsv") : "single")
               .Append(" path=").Append(m_PathRenderer)
