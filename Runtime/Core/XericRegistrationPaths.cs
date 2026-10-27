@@ -27,8 +27,12 @@ namespace XericUI.Core
     /// </summary>
     public static class XericRegistrationPaths
     {
-        /// <summary>总根：所有注册路径的公共前缀</summary>
-        public const string Root = "Xeric Library";
+        /// <summary>
+        /// 总根：所有注册路径的公共前缀。<b>不带空格</b>（"XericLibrary"，不是 "Xeric Library"）——
+        /// 他 2026-10-26 点名"Xeric Library"是错的：菜单路径是给人敲/看的一串标识，空格会把
+        /// 它切成分层看得见的两段，也让"搜 XericLibrary"漏掉一半。
+        /// </summary>
+        public const string Root = "XericLibrary";
 
         // ── 产品族（菜单栏与组件菜单共用同一套前缀） ──────────────
 
