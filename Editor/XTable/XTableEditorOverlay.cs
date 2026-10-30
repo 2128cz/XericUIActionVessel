@@ -18,7 +18,7 @@ namespace XericUIEditor.XTable
 		/// <summary>是否启用覆盖层（可通过菜单开关）</summary>
 		private static bool s_Enabled = true;
 
-		internal const string MENU_PATH = XericRegistrationPaths.Table + "/Table Editor Override Layer";
+		internal const string MENU_PATH = XericRegistrationPaths.TableBar + "/Table Editor Override Layer";
 
 		[MenuItem(MENU_PATH, false, 200)]
 		private static void ToggleOverlay()

@@ -5,6 +5,7 @@
 添加图片组件的四顶点变形（错切 / 倾斜 / 平行四边形 / 伪投影），带场景编辑手柄
 添加立方体网格背景元素、元素组件框架、数据访问中转层，以及网格渲染预览图
 统一注册路径到 XericRegistrationPaths（根 Xeric Library，产品族 Chart / Table / UI / …）
+注册路径按界面分成两套根：工具栏走 XericLibrary/Action Vessel（品牌根不带空格，只有真挂菜单项的族另配 *Bar 常量），Hierarchy（GameObject/…）、Project（CreateAssetMenu 的 menuName）、Add Component 三个右键上下文面走 Xeric Library/Action Vessel（带空格）；族常量本身归上下文侧，所以 58 处 AddComponentMenu 与 4 处 CreateAssetMenu 只改表就跟着走，只有 3 处工具栏调用点（数据窗口 / 表格编辑器覆盖层开关 / 场景变形手柄开关）改成 *Bar
 XChart 基类补全生命周期：集中注册工具、分档初始化、渲染/数据/编辑器重置、无条件强制刷新，并带 ExecuteAlways 让编辑器里直接跑
 预制体编辑模式下创建图表会挂进预制体根（原来建在预制体外，退出即丢），且不再自动补 Canvas
 立方体背景/线框的姿态改成单个四元数（新增 XChartCubeView，含等距 45° 预设，轮廓为正六边形），尺寸改成半边长口径，旋转不再让立方体越转越小

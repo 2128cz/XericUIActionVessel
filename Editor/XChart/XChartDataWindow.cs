@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
+using XericUI.Core;
 
 namespace XericUI.XChart.Editor
 {
@@ -71,7 +72,7 @@ namespace XericUI.XChart.Editor
             "一列两行：标题是名字与值下标 [n]，第二行是这一列的真实统计；两端各一个开关带一个格子。"
             + "勾上才生效，没勾的那端跟着数据跑；钉住的那端会盖住自动值域。";
 
-        [MenuItem("Tools/XChart/数据窗口")]
+        [MenuItem(XericRegistrationPaths.ChartBar + "/数据窗口")]
         private static void OpenFromMenu()
         {
             var window = GetWindow<XChartDataWindow>("XChart 数据");
