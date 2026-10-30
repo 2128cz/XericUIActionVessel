@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.UI;
 using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator

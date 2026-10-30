@@ -7,6 +7,7 @@ using UnityEngine.Serialization;
 using UnityEngine.UI;
 using XericLibrary.Runtime.Debuger;
 using XericLibrary.Runtime.MacroLibrary;
+using XericUI.Core;
 using XericUI.Core.Interface;
 using XericUI.Helper;
 
@@ -16,7 +17,6 @@ using XericLibraryEditor.Debug;
 #endif
 #if ODIN_INSPECTOR
 using Sirenix.OdinInspector;
-using XericUI.Core;
 #endif
 
 namespace XericUI.OverrideLayout
