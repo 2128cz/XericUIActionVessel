@@ -74,8 +74,9 @@ SyncItemList → 动画插件(按Order) → 物理积分 → 约束插件(按Ord
 using System.Collections.Generic;
 using UnityEngine;
 using XericUI.BubbleLayout;
+using XericUI.Core;
 
-[AddComponentMenu("Xeric UI Vessel/Layout/My Animation Plugin", 60)]
+[AddComponentMenu(XericRegistrationPaths.Layout + "/My Animation Plugin", 60)]
 public class MyAnimationPlugin : MonoBehaviour, IBubbleAnimationPlugin
 {
     // ── 必须实现：Enabled 和 Order ──
@@ -120,8 +121,9 @@ public class MyAnimationPlugin : MonoBehaviour, IBubbleAnimationPlugin
 using System.Collections.Generic;
 using UnityEngine;
 using XericUI.BubbleLayout;
+using XericUI.Core;
 
-[AddComponentMenu("Xeric UI Vessel/Layout/My Constraint Plugin", 61)]
+[AddComponentMenu(XericRegistrationPaths.Layout + "/My Constraint Plugin", 61)]
 public class MyConstraintPlugin : MonoBehaviour, IBubbleConstraintPlugin
 {
     [SerializeField] private bool m_Enabled = true;
