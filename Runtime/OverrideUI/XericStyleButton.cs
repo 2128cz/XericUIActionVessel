@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using XericLibrary.Runtime.SuperStyleSheet;
 using XericUI.Core.StyleSheetUI;
 using XericUI.Helper;
+using XericUI.Core;
 
 namespace XericUI.OverrideUI
 {
@@ -12,7 +13,7 @@ namespace XericUI.OverrideUI
     /// 通过 TransitionMode 选择颜色切换、纹理切换或两者并用，
     /// 替代 Unity 内置的 ColorBlock 和 SpriteState。
     /// </summary>
-    [AddComponentMenu("Xeric UI Vessel/UI/Style Button", 51)]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Style Button", 51)]
     public class XericStyleButton : Button, IStyleRefreshable
     {
         /// <summary>样式过渡模式</summary>
@@ -176,17 +177,17 @@ namespace XericUI.OverrideUI
         #region 组件替换
 
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/XericStyleButton/Xeric UI/强制刷新样式", false, 1)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "XericStyleButton/Xeric UI/强制刷新样式", false, 1)]
         private static void ForceRefreshStyle(UnityEditor.MenuCommand command)
         {
             StyleRefreshManager.ForceRefreshAll();
         }
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Xeric (Style)", true)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Button/Replace To/Xeric (Style)", true)]
         private static bool ValidateReplaceToStyleButton(UnityEditor.MenuCommand command)
             => command.context is Button and not XericStyleButton;
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Xeric (Style)", false, 11)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Button/Replace To/Xeric (Style)", false, 11)]
         private static void ReplaceToStyleButton(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<Button, XericStyleButton,
                 (Graphic targetGraphic, ButtonClickedEvent onClick, Navigation navigation)>(
@@ -198,11 +199,11 @@ namespace XericUI.OverrideUI
                     t.navigation = d.navigation;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button (Style)", true)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Button/Replace To/Unity Button (Style)", true)]
         private static bool ValidateReplaceStyleToUnity(UnityEditor.MenuCommand command)
             => command.context is XericStyleButton;
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button (Style)", false, 100)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Button/Replace To/Unity Button (Style)", false, 100)]
         private static void ReplaceStyleToUnity(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<XericStyleButton, Button,
                 (Graphic targetGraphic, ButtonClickedEvent onClick, Navigation navigation)>(

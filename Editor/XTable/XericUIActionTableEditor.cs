@@ -5,6 +5,7 @@ using XericLibrary.Runtime.MacroLibrary;
 using XericLibrary.Runtime.SuperStyleSheet;
 using XericUI.XTable.Core;
 using XericUI.XTable.Rendering.Component;
+using XericUI.Core;
 
 namespace XericUIEditor.XTable
 {
@@ -28,7 +29,7 @@ namespace XericUIEditor.XTable
         private SerializedProperty m_SelectionAutoScrollMaxSpeedProp;
         private SerializedProperty m_SelectionAutoScrollAccelerationProp;
 
-        internal const string MENU_PATH = "GameObject/Xeric Library/Table/Xeric UI Action Table";
+        internal const string MENU_PATH = XericRegistrationPaths.TableCreate + "/Xeric UI Action Table";
 
         // 折叠状态
         private static bool s_StyleFoldout = true;

@@ -4,10 +4,11 @@ using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
+using XericUI.Core;
 
 namespace XericUI.OverrideLayout
 {
-    [AddComponentMenu("Xeric UI Vessel/Layout/Xeric Horizontal Layout Group", 10)]
+    [AddComponentMenu(XericRegistrationPaths.Layout + "/Xeric Horizontal Layout Group", 10)]
     /// <summary>
     /// Layout child layout elements below each other.
     /// </summary>

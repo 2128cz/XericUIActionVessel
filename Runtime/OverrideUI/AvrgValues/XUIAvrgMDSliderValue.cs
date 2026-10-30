@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -8,7 +9,7 @@ namespace XericUI.ReflectionUIGenerator
     /// Slider 值组件 — 处理 float / int / double 类型的滑块交互
     /// 适用 Shader Range 属性或标记了 [XuiavrgFieldTag(Slider)] 的字段
     /// </summary>
-    [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDSliderValue")]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Values/XUIAvrgMDSliderValue")]
     public class XUIAvrgMDSliderValue : XUIAvrgMDValue
     {
         [SerializeField, Tooltip("关联的 Slider 组件（未设置则自动查找）")]

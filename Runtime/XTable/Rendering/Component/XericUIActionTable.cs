@@ -5,6 +5,8 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using XericUI.Core.Base;
+// 守卫外：下面 [AddComponentMenu(XericRegistrationPaths.Table + …)] 的参数玩家编译也要算出常量
+using XericUI.Core;
 using XericUI.XTable.Core;
 using XericUI.XTable.Mapping;
 using XericUI.XTable.Rendering.Elements;
@@ -22,7 +24,7 @@ namespace XericUI.XTable.Rendering.Component
     /// 无行列标题、无样式差异分割线——所有内容由数据定义。
     /// </summary>
     [ExecuteAlways]
-    [AddComponentMenu("Xeric UI Vessel/Table/Xeric UI Action Table", 60)]
+    [AddComponentMenu(XericRegistrationPaths.Table + "/Xeric UI Action Table", 60)]
     public partial class XericUIActionTable : XericUIBehaviour
     {
         #region 序列化字段

@@ -12,6 +12,7 @@ using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
 using XericUI.Core.Base;
 using XericUI.Core.Vessel;
+using XericUI.Core;
 
 namespace XericUI.FlipPage
 {
@@ -35,7 +36,7 @@ namespace XericUI.FlipPage
     /// currentPageIndex可以获取当前页数，Currentpage获取当前页面数据；
     /// 在页面数据中pageNumber可以获取自己所在的页数，itemInfos获取页面中的所有数据项目。
     /// </code>
-    [AddComponentMenu("Xeric UI Vessel/FlipPage/Basic FilpPage Database")]
+    [AddComponentMenu(XericRegistrationPaths.FlipPage + "/Basic FilpPage Database")]
     public class XericFlipPageIndexVesselBase : XericUIBehaviour
     {
         #region 设定参数

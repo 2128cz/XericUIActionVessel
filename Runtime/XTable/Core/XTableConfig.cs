@@ -1,4 +1,5 @@
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.XTable.Core
 {
@@ -7,7 +8,7 @@ namespace XericUI.XTable.Core
 	/// 表格组件在 Awake 时自动加载 Resources 中的 "XTableDefaultConfig"，
 	/// 或由外部脚本在初始化阶段显式赋值。
 	/// </summary>
-	[CreateAssetMenu(fileName = "XTableConfig", menuName = "Xeric Library/Table/Table Config", order = 100)]
+	[CreateAssetMenu(fileName = "XTableConfig", menuName = XericRegistrationPaths.Table + "/Table Config", order = 100)]
 	public class XTableConfig : ScriptableObject
 	{
 		#region 布局

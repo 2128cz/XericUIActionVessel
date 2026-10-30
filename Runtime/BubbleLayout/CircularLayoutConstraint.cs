@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.BubbleLayout
 {
 	/// <summary>
 	/// 环绕布局约束插件 —— 将气泡元素沿圆形排列，并通过弹簧力吸附到目标位置。
 	/// </summary>
-	[AddComponentMenu("Xeric UI Vessel/Layout/Circular Layout Constraint", 55)]
+	[AddComponentMenu(XericRegistrationPaths.Layout + "/Circular Layout Constraint", 55)]
 	public class CircularLayoutConstraint : BubbleLayoutPluginBase, IBubbleConstraintPlugin
 	{
 		[Header("吸附力")]

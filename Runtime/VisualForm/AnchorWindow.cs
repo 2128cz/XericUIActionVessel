@@ -2,13 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.VisualForm
 {
     /// <summary>
     /// 锚点窗口
     /// </summary>
-    [AddComponentMenu("Xeric UI Vessel/AnchorWindow/AnchorWindow")]
+    [AddComponentMenu(XericRegistrationPaths.AnchorWindow + "/AnchorWindow")]
     public class AnchorWindowByDefaultEntry : AnchorWindow<WindowEntry> { }
     
     /// <summary>

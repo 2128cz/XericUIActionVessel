@@ -2,10 +2,11 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using XericUI.Helper;
+using XericUI.Core;
 
 namespace XericUI.OverrideUI
 {
-    [AddComponentMenu("Xeric UI Vessel/UI/Button", 50)]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Button", 50)]
     public class XericButton : Button
     {
         
@@ -168,11 +169,11 @@ namespace XericUI.OverrideUI
 
         #region 组件替换
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Xeric Button", true)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Button/Replace To/Xeric Button", true)]
         private static bool ValidateReplaceToXeric(UnityEditor.MenuCommand command)
             => command.context is Button and not XericButton;
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Xeric Button", false, 10)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Button/Replace To/Xeric Button", false, 10)]
         private static void ReplaceToXeric(UnityEditor.MenuCommand command) 
             => command.ReplaceCommandContext<Button, XericButton,
                 (Graphic targetGraphic, ButtonClickedEvent onClick)>(
@@ -184,11 +185,11 @@ namespace XericUI.OverrideUI
                     t.onClick = d.onClick;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button (Native)", true)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Button/Replace To/Unity Button (Native)", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericButton;
 
-        [UnityEditor.MenuItem("CONTEXT/Button/Replace To/Unity Button (Native)", false, 100)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Button/Replace To/Unity Button (Native)", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command) 
             => command.ReplaceCommandContext<XericButton, Button,
                 (Graphic targetGraphic, ButtonClickedEvent onClick)>(

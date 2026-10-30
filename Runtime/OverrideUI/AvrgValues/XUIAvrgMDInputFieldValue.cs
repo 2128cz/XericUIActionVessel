@@ -1,13 +1,14 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
     /// InputField 值组件 — 处理 string / float / int / double 类型的文本输入交互
     /// </summary>
-    [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDInputFieldValue")]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Values/XUIAvrgMDInputFieldValue")]
     public class XUIAvrgMDInputFieldValue : XUIAvrgMDValue
     {
         [SerializeField]

@@ -1,4 +1,5 @@
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -6,7 +7,7 @@ namespace XericUI.ReflectionUIGenerator
     /// Label 只读值组件 — 纯文本展示，无交互控件
     /// 拥有自己的 _valueDisplayText 用于显示值
     /// </summary>
-    [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDLabelValue")]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Values/XUIAvrgMDLabelValue")]
     public class XUIAvrgMDLabelValue : XUIAvrgMDValue
     {
         [SerializeField, Tooltip("值显示文本 — 显示当前字段的值")]

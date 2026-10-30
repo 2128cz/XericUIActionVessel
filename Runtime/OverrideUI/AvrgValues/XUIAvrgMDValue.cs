@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -16,7 +17,7 @@ namespace XericUI.ReflectionUIGenerator
     /// 6. 基类统一管理标签文本（名称 + 只读 + 警告标记）和单位可见性
     ///    值显示由各子类自行实现
     /// </summary>
-    [AddComponentMenu("Xeric Library/UI Action Vessel/XUIAvrgMDValue")]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/XUIAvrgMDValue")]
     public class XUIAvrgMDValue : MonoBehaviour
     {
         /// <summary>

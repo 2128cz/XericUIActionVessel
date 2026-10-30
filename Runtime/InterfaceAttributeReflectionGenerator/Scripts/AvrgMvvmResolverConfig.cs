@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -10,7 +11,7 @@ namespace XericUI.ReflectionUIGenerator
     /// </summary>
     [CreateAssetMenu(
         fileName = "Xeric UI avr Resolver Config",
-        menuName = "Xeric Library/UI Action Vessel/Reflection UI Gen/UI avr Resolver Config",
+        menuName = XericRegistrationPaths.UI + "/Reflection UI Gen/UI avr Resolver Config",
         order = 20)]
     public class AvrgMvvmResolverConfig : ScriptableObject, IAvrgMvvmConflictResolver
     {

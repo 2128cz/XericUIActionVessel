@@ -7,11 +7,12 @@ using UnityEngine.Serialization;
 using UnityEngine.UI;
 using XericUI.Helper;
 using XericUI.OverrideUI;
+using XericUI.Core;
 
 namespace XericUI
 {
     
-    [AddComponentMenu("Xeric UI Vessel/UI/Toggle", 31)]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Toggle", 31)]
     [DisallowMultipleComponent]
     public class XericToggle : Toggle
     {
@@ -279,11 +280,11 @@ namespace XericUI
 
         #region 组件替换
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Xeric Toggle", true)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Toggle/Replace To/Xeric Toggle", true)]
         private static bool ValidateReplaceToXeric(UnityEditor.MenuCommand command)
             => command.context is Toggle and not XericToggle;
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Xeric Toggle", false, 10)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Toggle/Replace To/Xeric Toggle", false, 10)]
         private static void ReplaceToXeric(UnityEditor.MenuCommand command)
         {
             command.ReplaceCommandContext<Toggle, XericToggle,
@@ -299,11 +300,11 @@ namespace XericUI
             Debug.Log("请手动替换toggle下的Checkmark Image组件为XericImage，这样Toggle关闭时取消选中的状态会保持为ison状态");
         }
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle (Native)", true)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Toggle/Replace To/Unity Toggle (Native)", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericToggle;
 
-        [UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle (Native)", false, 100)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Toggle/Replace To/Unity Toggle (Native)", false, 100)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command) 
             => command.ReplaceCommandContext<XericToggle, Toggle,
                 (Graphic graphic, ToggleGroup group, ToggleEvent onValueChanged)>(

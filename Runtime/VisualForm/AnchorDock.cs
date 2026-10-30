@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using XericLibrary.Runtime.MacroLibrary;
 using System;
+using XericUI.Core;
 
 namespace XericUI.VisualForm
 {
@@ -10,7 +11,7 @@ namespace XericUI.VisualForm
     /// 锚点坞 - 挂载在Canvas上的主要布局组件管理器。
     /// 负责收集所有世界锚点，每帧将世界坐标转换到屏幕坐标，并管理中间窗口状态。
     /// </summary>
-    [AddComponentMenu("Xeric UI Vessel/AnchorWindow/AnchorDock")]
+    [AddComponentMenu(XericRegistrationPaths.AnchorWindow + "/AnchorDock")]
     [DefaultExecutionOrder(31000)]
     public class AnchorDock : MonoBehaviour
     {

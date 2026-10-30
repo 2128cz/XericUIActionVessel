@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -7,7 +8,7 @@ namespace XericUI.ReflectionUIGenerator
     /// 向量值组件 — 处理 Vector2 / Vector3 / Vector4 类型的多字段输入
     /// 子节点按 BindingSlots 绑定各分量（如 "x", "y", "z", "w"）
     /// </summary>
-    [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDVectorValue")]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Values/XUIAvrgMDVectorValue")]
     public class XUIAvrgMDVectorValue : XUIAvrgMDValue
     {
         [SerializeField, Tooltip("X 分量 InputField（可选，也可通过 BindingSlots 的子节点绑定）")]

@@ -7,6 +7,7 @@ using UI_Text = UnityEngine.UI.Text;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using XericUI.Core;
 
 namespace XericUI.Form
 {
@@ -14,7 +15,7 @@ namespace XericUI.Form
     /// 窗口标题栏 — 独立子组件，挂载在 UIFormController 的子对象上。
     /// Start 时向上查找父级 UIFormController，绑定按钮/Toggle 事件到其公开 API。
     /// </summary>
-    [AddComponentMenu("Xeric UI Vessel/Form/UI Title Bar")]
+    [AddComponentMenu(XericRegistrationPaths.Form + "/UI Title Bar")]
     public class UITitleBar : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
     {
         [Header("控件引用")]

@@ -1,4 +1,5 @@
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -10,7 +11,7 @@ namespace XericUI.ReflectionUIGenerator
     /// 内部子元素通过锚点系统获得布局
     /// 可通过挂载 TMP_Text / Image 等组件实现组标题/背景装饰
     /// </summary>
-    [AddComponentMenu("Xeric Library/UI Action Vessel/XuiAvrgMDGroup")]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/XuiAvrgMDGroup")]
     public class XuiAvrgMDGroup : MonoBehaviour
     {
         [SerializeField]

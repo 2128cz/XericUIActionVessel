@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 using XericUI.ReflectionUIGenerator;
+using XericUI.Core;
 
 namespace XericUIEditor.ReflectionUIGenerator
 {
@@ -16,7 +17,7 @@ namespace XericUIEditor.ReflectionUIGenerator
     /// </summary>
     public static class XuiavrgExampleMenu
     {
-        private const string MenuPath = "GameObject/Xeric UI/Create Reflection UI Example";
+        private const string MenuPath = XericRegistrationPaths.UICreate + "/Create Reflection UI Example";
         private const int MenuPriority = 10;
 
         [MenuItem(MenuPath, false, MenuPriority)]

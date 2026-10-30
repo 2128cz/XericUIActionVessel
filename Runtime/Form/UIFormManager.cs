@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.Form
 {
@@ -8,7 +9,7 @@ namespace XericUI.Form
     /// 通过 Entry 驱动管理窗口生命周期、层级排序、委托事件发布。
     /// 支持任务栏和边缘触发隐藏窗口。
     /// </summary>
-    [AddComponentMenu("Xeric UI Vessel/Form/UI Form Manager")]
+    [AddComponentMenu(XericRegistrationPaths.Form + "/UI Form Manager")]
     [DefaultExecutionOrder(32000)]
     public class UIFormManager : MonoBehaviour
     {

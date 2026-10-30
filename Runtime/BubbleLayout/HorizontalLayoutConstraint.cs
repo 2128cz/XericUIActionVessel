@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.BubbleLayout
 {
@@ -7,7 +8,7 @@ namespace XericUI.BubbleLayout
 	/// 横排布局约束插件 —— 将气泡元素沿 X 轴排列，并通过弹簧力吸附到目标位置。
 	/// 支持多布局框穿插排列。
 	/// </summary>
-	[AddComponentMenu("Xeric UI Vessel/Layout/Horizontal Layout Constraint", 54)]
+	[AddComponentMenu(XericRegistrationPaths.Layout + "/Horizontal Layout Constraint", 54)]
 	public class HorizontalLayoutConstraint : LinearLayoutConstraintBase
 	{
 		[Header("横排特有")]

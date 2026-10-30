@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using XericLibrary.Runtime;
+using XericUI.Core;
 
 namespace XericUI.BubbleLayout
 {
@@ -8,7 +9,7 @@ namespace XericUI.BubbleLayout
 	/// 气泡碰撞约束插件 —— 使用四叉树检测重叠并推挤分离。
 	/// 默认 Order = 1000，在约束阶段最后执行，确保碰撞排挤在所有其他约束之后进行。
 	/// </summary>
-	[AddComponentMenu("Xeric UI Vessel/Layout/Bubble Collision Constraint", 52)]
+	[AddComponentMenu(XericRegistrationPaths.Layout + "/Bubble Collision Constraint", 52)]
 	public class BubbleCollisionConstraint : BubbleLayoutPluginBase, IBubbleConstraintPlugin
 	{
 #if UNITY_EDITOR

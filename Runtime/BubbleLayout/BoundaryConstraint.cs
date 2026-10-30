@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.BubbleLayout
 {
@@ -19,7 +20,7 @@ namespace XericUI.BubbleLayout
 	/// 边界限制约束插件 —— 将气泡元素限制在指定范围内。
 	/// 支持矩形/椭圆两种形状，并记录超出范围的元素。
 	/// </summary>
-	[AddComponentMenu("Xeric UI Vessel/Layout/Boundary Constraint", 56)]
+	[AddComponentMenu(XericRegistrationPaths.Layout + "/Boundary Constraint", 56)]
 	public class BoundaryConstraint : BubbleLayoutPluginBase, IBubbleConstraintPlugin
 	{
 		[Header("限制范围")]

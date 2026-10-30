@@ -1,12 +1,13 @@
 using UnityEngine;
 using UnityEngine.UI;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
     /// Color 值组件 — 通过 Image 显示颜色，可选点击弹出颜色选择器
     /// </summary>
-    [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDColorValue")]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Values/XUIAvrgMDColorValue")]
     public class XUIAvrgMDColorValue : XUIAvrgMDValue
     {
         [SerializeField, Tooltip("关联的 Image 组件（未设置则自动查找）")]

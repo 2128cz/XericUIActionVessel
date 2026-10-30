@@ -4,6 +4,10 @@ using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.UI;
 using XericLibrary.Runtime;
+// using 必须在守卫**外**：下面 [AddComponentMenu(XericRegistrationPaths.Layout + …)] 的
+// 参数在玩家编译也要算得出常量——它在 #if UNITY_EDITOR 里的话，编辑器那套照样绿、
+// 只有玩家编译报 CS0103（2026-10-23 现场）
+using XericUI.Core;
 #if UNITY_EDITOR
 using System.Diagnostics;
 #endif
@@ -56,7 +60,7 @@ namespace XericUI.BubbleLayout
 	/// 支持动画插件和约束插件，插件按 Order 优先级分阶段顺序执行。
 	/// </summary>
 	[ExecuteAlways]
-	[AddComponentMenu("Xeric UI Vessel/Layout/Bubble Layout Group", 51)]
+	[AddComponentMenu(XericRegistrationPaths.Layout + "/Bubble Layout Group", 51)]
 	public class BubbleLayoutGroup : LayoutGroup
 	{
 		#region 序列化字段

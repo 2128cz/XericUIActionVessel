@@ -9,6 +9,8 @@ using XericUI.XTable.Core;
 using XericUI.XTable.Mapping;
 using XericUI.XTable.Rendering.Elements;
 using XericLibrary.Runtime.SuperStyleSheet;
+// 守卫外：[ContextMenu(XericRegistrationPaths.Table + …)] 是运行时属性，玩家编译也要算出常量
+using XericUI.Core;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -647,7 +649,7 @@ namespace XericUI.XTable.Rendering.Component
         /// 行为：立即销毁池与渲染器；CheckUpdate 内禁止调用。
         /// 建议：仅用于初始化或故障恢复，不要与批量业务更新混用。
         /// </summary>
-        [ContextMenu("Xeric UI/完全重建表格")]
+        [ContextMenu(XericRegistrationPaths.Table + "/完全重建表格")]
         public void FullRebuild()
         {
             ThrowIfCheckingUpdate(nameof(FullRebuild));

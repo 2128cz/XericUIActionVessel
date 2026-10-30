@@ -1,12 +1,13 @@
 using UnityEngine;
 using UnityEngine.UI;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
     /// Toggle 值组件 — 处理 bool 类型的开关交互
     /// </summary>
-    [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDToggleValue")]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Values/XUIAvrgMDToggleValue")]
     public class XUIAvrgMDToggleValue : XUIAvrgMDValue
     {
         [SerializeField, Tooltip("关联的 Toggle 组件（未设置则自动查找）")]

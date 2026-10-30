@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using XericUI.Core;
 
 namespace XericUI.Form
 {
@@ -32,7 +33,7 @@ namespace XericUI.Form
     /// 支持全屏/还原、边缘吸附、自动隐藏、拖拽移动、置顶。
     /// 通过 WindowEntry 与 Manager 通信。
     /// </summary>
-    [AddComponentMenu("Xeric UI Vessel/Form/UI Form Controller")]
+    [AddComponentMenu(XericRegistrationPaths.Form + "/UI Form Controller")]
     [RequireComponent(typeof(RectTransform))]
     public class UIFormController : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler
     {

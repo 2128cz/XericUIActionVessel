@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System;
 using System.Linq;
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -12,7 +13,7 @@ namespace XericUI.ReflectionUIGenerator
     /// 选项动态创建：OnPoolGet 时根据元数据 PresetOptions 构建选项列表，
     /// BindToAccessor 时通过 AddOptions() 填充到 Dropdown 组件。
     /// </summary>
-    [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDDropdownValue")]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Values/XUIAvrgMDDropdownValue")]
     public class XUIAvrgMDDropdownValue : XUIAvrgMDValue
     {
         [SerializeField, Tooltip("关联的 Dropdown 组件（未设置则自动查找）")]

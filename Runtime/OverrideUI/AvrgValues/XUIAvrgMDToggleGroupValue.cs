@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
@@ -12,7 +13,7 @@ namespace XericUI.ReflectionUIGenerator
     /// 选项动态创建：OnPoolGet 时根据元数据 PresetOptions 数量，
     /// 从 _toggleItemPrefab 实例化 Toggle 子对象。
     /// </summary>
-    [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDToggleGroupValue")]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Values/XUIAvrgMDToggleGroupValue")]
     public class XUIAvrgMDToggleGroupValue : XUIAvrgMDValue
     {
         [SerializeField, Tooltip("关联的 ToggleGroup 组件（未设置则自动查找）")]

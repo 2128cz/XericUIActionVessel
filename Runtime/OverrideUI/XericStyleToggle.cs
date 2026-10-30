@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using XericLibrary.Runtime.SuperStyleSheet;
 using XericUI.Core.StyleSheetUI;
 using XericUI.Helper;
+using XericUI.Core;
 
 namespace XericUI.OverrideUI
 {
@@ -12,7 +13,7 @@ namespace XericUI.OverrideUI
 	/// 通过 TransitionMode 选择颜色切换、纹理切换或两者并用，
 	/// 额外支持 isOn 覆盖和 Checkmark 样式。
 	/// </summary>
-	[AddComponentMenu("Xeric UI Vessel/UI/Style Toggle", 52)]
+	[AddComponentMenu(XericRegistrationPaths.UI + "/Style Toggle", 52)]
 	public class XericStyleToggle : Toggle, IStyleRefreshable
 	{
 		/// <summary>样式过渡模式</summary>
@@ -236,28 +237,28 @@ namespace XericUI.OverrideUI
 		#region 组件替换
 
 #if UNITY_EDITOR
-		[UnityEditor.MenuItem("CONTEXT/XericStyleToggle/Xeric UI/强制刷新样式", false, 1)]
+		[UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "XericStyleToggle/Xeric UI/强制刷新样式", false, 1)]
 		private static void ForceRefreshStyle(UnityEditor.MenuCommand command)
 		{
 			StyleRefreshManager.ForceRefreshAll();
 		}
 
-		[UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Xeric (Style)", true)]
+		[UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Toggle/Replace To/Xeric (Style)", true)]
 		private static bool ValidateReplaceToStyleToggle(UnityEditor.MenuCommand command)
 			=> command.context is Toggle and not XericStyleToggle;
 
-		[UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Xeric (Style)", false, 11)]
+		[UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Toggle/Replace To/Xeric (Style)", false, 11)]
 		private static void ReplaceToStyleToggle(UnityEditor.MenuCommand command)
 			=> command.ReplaceCommandContext<Toggle, XericStyleToggle,
 				(Graphic graphic, ToggleGroup group, ToggleEvent onValueChanged, Navigation navigation)>(
 				o => (o.graphic, o.group, o.onValueChanged, o.navigation),
 				(t, d) => { t.graphic = d.graphic; t.group = d.group; t.onValueChanged = d.onValueChanged; t.navigation = d.navigation; });
 
-		[UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle (Style)", true)]
+		[UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Toggle/Replace To/Unity Toggle (Style)", true)]
 		private static bool ValidateReplaceStyleToggleToUnity(UnityEditor.MenuCommand command)
 			=> command.context is XericStyleToggle;
 
-		[UnityEditor.MenuItem("CONTEXT/Toggle/Replace To/Unity Toggle (Style)", false, 100)]
+		[UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Toggle/Replace To/Unity Toggle (Style)", false, 100)]
 		private static void ReplaceStyleToggleToUnity(UnityEditor.MenuCommand command)
 			=> command.ReplaceCommandContext<XericStyleToggle, Toggle,
 				(Graphic graphic, ToggleGroup group, ToggleEvent onValueChanged, Navigation navigation)>(

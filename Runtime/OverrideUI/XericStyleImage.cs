@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using XericLibrary.Runtime.SuperStyleSheet;
 using XericUI.Core.StyleSheetUI;
 using XericUI.Helper;
+using XericUI.Core;
 
 namespace XericUI.OverrideUI
 {
@@ -11,7 +12,7 @@ namespace XericUI.OverrideUI
 	/// 基于 SuperStyleSheet 的图像组件。
 	/// 使用 StyleField 引用样式表中的颜色和纹理路径，样式变更时自动刷新。
 	/// </summary>
-	[AddComponentMenu("Xeric UI Vessel/UI/Style Image", 53)]
+	[AddComponentMenu(XericRegistrationPaths.UI + "/Style Image", 53)]
 	public class XericStyleImage : Image
 	{
 		#region 序列化字段
@@ -165,21 +166,21 @@ namespace XericUI.OverrideUI
 		#region 组件替换
 
 #if UNITY_EDITOR
-		[UnityEditor.MenuItem("CONTEXT/Image/Replace To/Xeric (Style)", true)]
+		[UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Image/Replace To/Xeric (Style)", true)]
 		private static bool ValidateReplaceToStyleImage(UnityEditor.MenuCommand command)
 			=> command.context is Image and not XericStyleImage;
 
-		[UnityEditor.MenuItem("CONTEXT/Image/Replace To/Xeric (Style)", false, 11)]
+		[UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Image/Replace To/Xeric (Style)", false, 11)]
 		private static void ReplaceToStyleImage(UnityEditor.MenuCommand command)
 			=> command.ReplaceCommandContext<Image, XericStyleImage, Sprite>(
 				o => o.sprite,
 				(t, d) => { t.sprite = d; });
 
-		[UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image (Style)", true)]
+		[UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Image/Replace To/Unity Image (Style)", true)]
 		private static bool ValidateReplaceStyleImageToUnity(UnityEditor.MenuCommand command)
 			=> command.context is XericStyleImage;
 
-		[UnityEditor.MenuItem("CONTEXT/Image/Replace To/Unity Image (Style)", false, 100)]
+		[UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "Image/Replace To/Unity Image (Style)", false, 100)]
 		private static void ReplaceStyleImageToUnity(UnityEditor.MenuCommand command)
 			=> command.ReplaceCommandContext<XericStyleImage, Image, Sprite>(
 				o => o.sprite,

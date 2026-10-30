@@ -1,12 +1,13 @@
 using UnityEngine;
 using UnityEngine.UI;
+using XericUI.Core;
 
 namespace XericUI.ReflectionUIGenerator
 {
     /// <summary>
     /// Texture 值组件 — 通过 RawImage 显示纹理
     /// </summary>
-    [AddComponentMenu("Xeric Library/UI Action Vessel/Values/XUIAvrgMDTextureValue")]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/Values/XUIAvrgMDTextureValue")]
     public class XUIAvrgMDTextureValue : XUIAvrgMDValue
     {
         [SerializeField, Tooltip("关联的 RawImage 组件（未设置则自动查找）")]

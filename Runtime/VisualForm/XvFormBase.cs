@@ -1,11 +1,12 @@
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.VisualForm
 {
     /// <summary>
     /// 虚拟窗体基类，提供基础的窗体标记功能
     /// </summary>
-    [AddComponentMenu("Xeric UI Vessel/AnchorWindow/XvFormBase")]
+    [AddComponentMenu(XericRegistrationPaths.AnchorWindow + "/XvFormBase")]
     public class XvFormBase : MonoBehaviour
     {
         [SerializeField]

@@ -16,11 +16,12 @@ using XericLibraryEditor.Debug;
 #endif
 #if ODIN_INSPECTOR
 using Sirenix.OdinInspector;
+using XericUI.Core;
 #endif
 
 namespace XericUI.OverrideLayout
 {
-    [AddComponentMenu("Xeric UI Vessel/UI/ScrollRect", 50)]
+    [AddComponentMenu(XericRegistrationPaths.UI + "/ScrollRect", 50)]
     [SelectionBase]
     [ExecuteAlways]
     [DisallowMultipleComponent]
@@ -590,11 +591,11 @@ namespace XericUI.OverrideLayout
         #region 组件替换
 
 #if UNITY_EDITOR
-        [UnityEditor.MenuItem("CONTEXT/ScrollRect/Replace To XericScrollView", true)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "ScrollRect/Replace To XericScrollView", true)]
         private static bool ValidateReplaceToXeric(UnityEditor.MenuCommand command)
             => command.context is ScrollRect and not XericScrollRect;
 
-        [UnityEditor.MenuItem("CONTEXT/ScrollRect/Replace To XericScrollView", false, 10)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "ScrollRect/Replace To XericScrollView", false, 10)]
         private static void ReplaceToXeric(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<ScrollRect, XericScrollRect,
                 (RectTransform Viewport, RectTransform Content, Scrollbar HScrollbar, Scrollbar VScrollbar)>(
@@ -608,11 +609,11 @@ namespace XericUI.OverrideLayout
                     t.verticalScrollbar = d.VScrollbar;
                 });
 
-        [UnityEditor.MenuItem("CONTEXT/ScrollRect/Replace To ScrollView", true)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "ScrollRect/Replace To ScrollView", true)]
         private static bool ValidateReplaceToUnity(UnityEditor.MenuCommand command)
             => command.context is XericScrollRect;
 
-        [UnityEditor.MenuItem("CONTEXT/ScrollRect/Replace To ScrollView", false, 10)]
+        [UnityEditor.MenuItem(XericRegistrationPaths.ContextPrefix + "ScrollRect/Replace To ScrollView", false, 10)]
         private static void ReplaceToUnity(UnityEditor.MenuCommand command)
             => command.ReplaceCommandContext<XericScrollRect, ScrollRect,
                 (RectTransform Viewport, RectTransform Content, Scrollbar HScrollbar, Scrollbar VScrollbar)>(

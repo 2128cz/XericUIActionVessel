@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using XericUI.Core;
 
 namespace XericUI.VisualForm
 {
@@ -14,7 +15,7 @@ namespace XericUI.VisualForm
     ///   4. 构建四叉树 → 迭代推挤分离 → 写入 CollisionOffset
     ///   5. 下一帧 UpdateStatePosition 通过 EffectiveOffset 自动应用碰撞偏移
     /// </summary>
-    [AddComponentMenu("Xeric UI Vessel/AnchorWindow/AdvancedAnchorDock")]
+    [AddComponentMenu(XericRegistrationPaths.AnchorWindow + "/AdvancedAnchorDock")]
     public class AdvancedAnchorDock : AnchorDock
     {
         [Header("碰撞分离")]
