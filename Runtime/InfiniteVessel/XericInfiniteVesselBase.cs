@@ -3,16 +3,15 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Pool;
 using XericLibrary.Runtime;
-using XericLibrary.Runtime.Type;
 
 namespace XericUI.InfiniteVessel
 {
     /// <summary>
-    /// ÎŞÏŞUIÁĞ±íÈİÆ÷»ùÀà
+    /// æ— é™UIåˆ—è¡¨å®¹å™¨åŸºç±»
     /// </summary>
     public abstract class XericInfiniteVesselBase : WeaklyMonoBase
     {
-        #region ×Ö¶ÎÊôĞÔ
+        #region å­—æ®µå±æ€§
 
         public GameObject mainItemPrefab;
         
@@ -20,7 +19,7 @@ namespace XericUI.InfiniteVessel
 
         #endregion
 
-        #region ÉúÃüÖÜÆÚ
+        #region ç”Ÿå‘½å‘¨æœŸ
 
         protected virtual void Awake()
         {
@@ -35,10 +34,10 @@ namespace XericUI.InfiniteVessel
 
         #endregion
 
-        #region ¶ÔÏó³Ø²Ù×÷
+        #region å¯¹è±¡æ± æ“ä½œ
 
         /// <summary>
-        /// ´´½¨¶ÔÏó
+        /// åˆ›å»ºå¯¹è±¡
         /// </summary>
         /// <returns></returns>
         public virtual GameObject CreatItem()
@@ -47,7 +46,7 @@ namespace XericUI.InfiniteVessel
         }
 
         /// <summary>
-        /// »ñÈ¡¶ÔÏó£¬²¢»ñÈ¡¹ÜÀíÆ÷
+        /// è·å–å¯¹è±¡ï¼Œå¹¶è·å–ç®¡ç†å™¨
         /// </summary>
         /// <param name="target"></param>
         /// <typeparam name="T"></typeparam>
@@ -58,7 +57,7 @@ namespace XericUI.InfiniteVessel
         }
 
         /// <summary>
-        /// ÊÍ·Å¶ÔÏó
+        /// é‡Šæ”¾å¯¹è±¡
         /// </summary>
         /// <param name="target"></param>
         public virtual void ReleaseItem(GameObject target)
@@ -67,7 +66,7 @@ namespace XericUI.InfiniteVessel
         }
 
         /// <summary>
-        /// Ïú»Ù¶ÔÏó
+        /// é”€æ¯å¯¹è±¡
         /// </summary>
         /// <param name="target"></param>
         public virtual void DestroyItem(GameObject target)
