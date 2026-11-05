@@ -62,7 +62,8 @@ namespace XericUI.ShaderBake
 				}
 				finally
 				{
-					UnityEngine.Object.Destroy(flattened);
+					// 编辑器非播放状态下 Object.Destroy 会被拒绝并报错，统一走这条能分辨时机的回收
+					ShaderBakeRenderer.ReleaseTempObject(flattened);
 				}
 			}
 

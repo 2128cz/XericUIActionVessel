@@ -72,6 +72,8 @@ namespace XericUI.Core
         public const string TableBar = MenuBarRoot + "/Table";
         /// <summary> 通用 UI 族的工具栏入口（场景变形手柄开关） </summary>
         public const string UIBar = MenuBarRoot + "/UI";
+        /// <summary> 工具族（离线渲染 / 烘焙之类的一次性工具） </summary>
+        public const string ToolBar = MenuBarRoot + "/Tool";
 
         // ── Hierarchy 创建菜单 ────────────────────────────────────
 

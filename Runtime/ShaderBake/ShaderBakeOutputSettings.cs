@@ -120,16 +120,21 @@ namespace XericUI.ShaderBake
 
 		/// <summary>
 		/// 按当前设置造一张未被使用过的 RenderTexture（调用方负责销毁）。
+		/// <paramref name="samples"/> 传负数表示按设置走；解析目标必须显式传 1——
+		/// 往多采样目标上 Blit 是非法的，MSAA 那条路要靠"先画采样目标、再落地到单采样目标"。
 		/// </summary>
-		public RenderTexture CreateRenderTexture(string name = "ShaderBakeTarget")
+		public RenderTexture CreateRenderTexture(string name = "ShaderBakeTarget", int samples = -1)
 		{
 			Clamp();
+			int actualSamples = samples < 0 ? antiAliasing : SnapAntiAliasing(samples);
+			if (hdr && actualSamples > 1)
+				actualSamples = 1;
 			var rt = new RenderTexture(width, height, depthBuffer, format, renderTextureColorSpace)
 			{
 				name = name,
 				filterMode = filterMode,
 				wrapMode = wrapMode,
-				antiAliasing = antiAliasing,
+				antiAliasing = actualSamples,
 				hideFlags = HideFlags.DontSave
 			};
 			// 显式 Create：antiAliasing 只有在初始化之前赋值才生效，靠第一次使用时自动建就丢了

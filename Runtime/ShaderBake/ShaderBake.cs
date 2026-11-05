@@ -26,9 +26,10 @@ namespace XericUI.ShaderBake
 				if (rt == null)
 					return null;
 
-				// renderer.Dispose 会把内部那张一起销毁，所以交出去的是按同一套参数另建的一张
+				// renderer.Dispose 会把内部那张一起销毁，所以交出去的是按同一套参数另建的一张。
+				// 这张要能被 Blit 写入，只能是单采样（采样已在 Render 里解析过了）。
 				var effective = settings != null ? settings : ShaderBakeSettings.CreateDefault();
-				var copy = effective.output.CreateRenderTexture("ShaderBakeResult");
+				var copy = effective.output.CreateRenderTexture("ShaderBakeResult", 1);
 				Graphics.Blit(rt, copy);
 				return copy;
 			}

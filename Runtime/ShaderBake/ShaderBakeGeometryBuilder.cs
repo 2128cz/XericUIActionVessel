@@ -98,13 +98,14 @@ namespace XericUI.ShaderBake
 				int bottomRight = bottomLeft + 1;
 				int topLeft = bottomLeft + stride;
 				int topRight = topLeft + 1;
-				// 绕序按"从 -Z 往 +Z 看是顺时针"排；翻转投影时靠 output.flipY 修，不靠这里换绕序
+				// Unity 认定顺时针为正面（视线方向上的屏幕顺时针），所以是 左下→左上→右下；
+				// 顺序写反了整张面片会被背面剔除掉，画面全空还查不出原因
 				triangles.Add(bottomLeft);
-				triangles.Add(bottomRight);
 				triangles.Add(topLeft);
 				triangles.Add(bottomRight);
+				triangles.Add(topLeft);
 				triangles.Add(topRight);
-				triangles.Add(topLeft);
+				triangles.Add(bottomRight);
 			}
 
 			var mesh = NewMesh("ShaderBakeQuad");

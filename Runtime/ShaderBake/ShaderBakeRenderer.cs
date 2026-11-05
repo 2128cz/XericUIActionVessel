@@ -32,6 +32,7 @@ namespace XericUI.ShaderBake
 		private string m_TargetSignature = string.Empty;
 		private RenderTexture m_MultiSampleSource;
 		private CommandBuffer m_Buffer;
+		private MaterialPropertyBlock m_Block;
 
 		/// <summary> 当前这次烘焙用的网格（只读用途，外部别销毁） </summary>
 		public Mesh geometry { get { return m_Geometry; } }
@@ -188,11 +189,12 @@ namespace XericUI.ShaderBake
 
 			ReleaseTempObject(m_OwnedTarget);
 			ReleaseTempObject(m_MultiSampleSource);
-			m_OwnedTarget = settings.output.CreateRenderTexture("ShaderBakeTarget");
+			// 落地目标永远单采样：它要能被 ReadPixels 读、能被 Blit 写入、也直接拿去显示
+			m_OwnedTarget = settings.output.CreateRenderTexture("ShaderBakeTarget", 1);
 			m_TargetSignature = m_OwnedTarget != null ? signature : string.Empty;
 
 			if (settings.output.antiAliasing > 1 && m_OwnedTarget != null)
-				m_MultiSampleSource = settings.output.CreateRenderTexture("ShaderBakeMultiSample");
+				m_MultiSampleSource = settings.output.CreateRenderTexture("ShaderBakeMultiSample", settings.output.antiAliasing);
 
 			return m_OwnedTarget;
 		}
@@ -212,9 +214,35 @@ namespace XericUI.ShaderBake
 			m_Buffer.SetRenderTarget(rt, 0, CubemapFace.Unknown, 0);
 			m_Buffer.ClearRenderTarget(true, true, settings.output.clearColor, 1f);
 			m_Buffer.SetViewProjectionMatrices(settings.camera.viewMatrix, projection);
+			// UV 已经烘进顶点了；只有用户显式要求时再补一份 _MainTex_ST 给依赖 ST 的 shader。
+			// 走属性块而不是改材质，是为了不让这一笔写进材质副本、进而被"写回原材质"带走。
+			MaterialPropertyBlock block = null;
+			if (settings.surface.applyUvToMainTexST)
+			{
+				if (m_Block == null)
+					m_Block = new MaterialPropertyBlock();
+				m_Block.Clear();
+				m_Block.SetVector("_MainTex_ST", new Vector4(
+					settings.surface.uvTiling.x, settings.surface.uvTiling.y,
+					settings.surface.uvOffset.x, settings.surface.uvOffset.y));
+				block = m_Block;
+			}
+
 			m_Buffer.DrawMesh(m_Geometry, settings.surface.localMatrix, material,
-				Mathf.Max(settings.surface.meshSubMesh, 0), settings.output.shaderPass);
-			Graphics.ExecuteCommandBuffer(m_Buffer);
+				Mathf.Max(settings.surface.meshSubMesh, 0), settings.output.shaderPass, block);
+
+			// 翻 Y 的投影是一次镜像，会把绕序反过来，背面剔除于是剔掉本该看见的正面。
+			// 不动网格（外部模型的绕序不该被我们改），只在这一刻把剔除方向反过来。
+			bool previousInvert = GL.invertCulling;
+			GL.invertCulling = previousInvert != settings.output.flipY;
+			try
+			{
+				Graphics.ExecuteCommandBuffer(m_Buffer);
+			}
+			finally
+			{
+				GL.invertCulling = previousInvert;
+			}
 			m_Buffer.Clear();
 		}
 
@@ -227,7 +255,7 @@ namespace XericUI.ShaderBake
 			ReleaseTempObject(obj, false);
 		}
 
-		internal static void ReleaseTempObject(UnityEngine.Object obj, bool immediate)
+		public static void ReleaseTempObject(UnityEngine.Object obj, bool immediate)
 		{
 			if (obj == null)
 				return;

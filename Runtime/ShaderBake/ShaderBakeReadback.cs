@@ -25,7 +25,7 @@ namespace XericUI.ShaderBake
 				name = source.name,
 				hideFlags = HideFlags.DontSave
 			};
-			CopyInto(source, texture);
+			CopyInto(source, texture, mipChain);
 			return texture;
 		}
 
@@ -33,13 +33,13 @@ namespace XericUI.ShaderBake
 		/// 读进一张已存在的纹理（尺寸要和 source 一致；不一致 Unity 只会填左上角，剩下留黑）。
 		/// 走 RenderTexture.active + ReadPixels，MSAA 目标已被调用方解析过，这里读到的是解析后的像素。
 		/// </summary>
-		public static void CopyInto(RenderTexture source, Texture2D destination)
+		public static void CopyInto(RenderTexture source, Texture2D destination, bool recalculateMipMaps = false)
 		{
 			RenderTexture previous = RenderTexture.active;
 			try
 			{
 				RenderTexture.active = source;
-				destination.ReadPixels(new Rect(0, 0, source.width, source.height), 0, 0, false);
+				destination.ReadPixels(new Rect(0, 0, source.width, source.height), 0, 0, recalculateMipMaps);
 				destination.Apply(false);
 			}
 			finally
