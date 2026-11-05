@@ -83,6 +83,15 @@ namespace XericUI.ReflectionUIGenerator
         [Tooltip("类型-预制体映射配置 ScriptableObject")]
         public AvrgTypePrefabMappingConfig typePrefabMappingConfig;
 
+        /// <summary>
+        /// 可选：字段零件配方表。给了就用它决定"这块预制体上哪几件亮着"（预制体只放零件），
+        /// 不给就完全按预制体作者摆的样子用——两种情况会在 Console 里分得清。
+        /// </summary>
+        [Tooltip("可选：字段配方表（预制体放零件、配方决定拼哪几块）")]
+        public FieldRecipeTable fieldRecipes;
+
+        private bool _warnedNoRecipeTable;
+
         #endregion
 
         #region Unity 生命周期
@@ -340,6 +349,8 @@ namespace XericUI.ReflectionUIGenerator
             uiInstance.name = entry.EntryName;
             uiInstance.transform.SetParent(parent, false);
 
+            ApplyFieldRecipe(entry, uiInstance);
+
             if (uiInstance.GetComponentInChildren<XUIAvrgMDValue>(true) == null)
             {
                 Debug.LogError(
@@ -373,6 +384,40 @@ namespace XericUI.ReflectionUIGenerator
         /// 3. defaultPrefab 回退
         /// PrefabOverrideName 已移除，由 Tag + 类型匹配替代
         /// </summary>
+        /// <summary>
+        /// 预制体挑好并挂上父级后，按配方决定"这块上的哪几件亮着"。
+        /// 没给配方表 / 这块预制体没有零件槽 ⇒ 原样使用，但各自说一句：
+        /// "我改了配方没生效"和"根本没有配方表"不能长得一样。
+        /// </summary>
+        private void ApplyFieldRecipe(IFieldEntry entry, GameObject instance)
+        {
+            if (fieldRecipes == null)
+            {
+                if (!_warnedNoRecipeTable)
+                {
+                    _warnedNoRecipeTable = true;
+                    Debug.Log("[Xuiavrg] 未指定 fieldRecipes：零件激活完全按预制体原样，配方表不参与。");
+                }
+                return;
+            }
+
+            var assembler = instance.GetComponent<FieldPartsAssembler>();
+            if (assembler == null) return;
+
+            var bindings = entry.Bindings;
+            var valueType = bindings?.Count > 0 ? bindings[0].MetaData?.ValueType : null;
+            if (!fieldRecipes.TryPlan(valueType == null ? "" : valueType.FullName, entry.EntryName,
+                                      out var plan, out var reason))
+            {
+                Debug.LogWarning($"[Xuiavrg] Entry '{entry.EntryName}'（类型 {valueType?.Name ?? "未知"}）：{reason}");
+                return;
+            }
+
+            assembler.Apply(plan, out var problems);
+            for (var i = 0; i < problems.Count; i++)
+                Debug.LogWarning($"[Xuiavrg] Entry '{entry.EntryName}' 按 {plan.source} 装配时：{problems[i]}");
+        }
+
         private GameObject ResolvePrefab(IFieldEntry entry)
         {
             if (typePrefabMappingConfig == null)

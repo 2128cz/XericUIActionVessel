@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>field_recipe_probe</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <!-- 引擎无关的匹配/合并，直接编包里那一份 -->
+    <Compile Include="../../Runtime/InterfaceAttributeReflectionGenerator/Scripts/Recipes/FieldRecipeSet.cs" />
+    <Compile Include="../../Runtime/InterfaceAttributeReflectionGenerator/Scripts/Recipes/FieldLayout.cs" />
+  </ItemGroup>
+</Project>
