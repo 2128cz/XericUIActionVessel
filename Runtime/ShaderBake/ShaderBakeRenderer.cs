@@ -408,8 +408,16 @@ namespace XericUI.ShaderBake
 		{
 			if (m_Buffer != null)
 			{
-				m_Buffer.Release();
-				m_Buffer.Dispose();
+				// 只 Dispose：Dispose 内部已经 Release，再单独 Release 一次会二次释放，
+				// 2021.3 上表现为关闭窗口时抛 _unity_self 为空的 ArgumentNullException
+				try
+				{
+					m_Buffer.Dispose();
+				}
+				catch (Exception)
+				{
+					// 退出编辑器/域重载期间原生对象可能已被回收，这时再报错没有意义
+				}
 				m_Buffer = null;
 			}
 			ReleaseTempObject(m_MultiSampleSource, immediate);

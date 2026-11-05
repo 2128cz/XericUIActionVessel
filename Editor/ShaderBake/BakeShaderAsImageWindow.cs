@@ -289,12 +289,13 @@ namespace XericUI.ShaderBake.Editor
 
 		private void BindSections()
 		{
-			Collapsible("sec-source", "sec-source-body");
-			Collapsible("sec-output", "sec-output-body");
-			Collapsible("sec-surface", "sec-surface-body");
-			Collapsible("sec-camera", "sec-camera-body");
-			Collapsible("sec-globals", "sec-globals-body");
-			Collapsible("sec-props", "sec-props-body");
+			// 头部是 Toggle（名字带 -head），外层同名容器只是分组壳，别拿它去 Q<Toggle>
+			Collapsible("sec-source-head", "sec-source-body");
+			Collapsible("sec-output-head", "sec-output-body");
+			Collapsible("sec-surface-head", "sec-surface-body");
+			Collapsible("sec-camera-head", "sec-camera-body");
+			Collapsible("sec-globals-head", "sec-globals-body");
+			Collapsible("sec-props-head", "sec-props-body");
 		}
 
 		private void Collapsible(string headName, string bodyName)
