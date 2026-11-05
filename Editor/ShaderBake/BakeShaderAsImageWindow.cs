@@ -633,8 +633,8 @@ namespace XericUI.ShaderBake.Editor
 
 		private void SetFaceFieldsEnabled(bool enabled)
 		{
-			IntegerField x = rootVisualElement.Q<IntegerField>("face-uv-x");
-			IntegerField y = rootVisualElement.Q<IntegerField>("face-uv-y");
+			VisualElement x = rootVisualElement.Q<VisualElement>("face-uv-x");
+			VisualElement y = rootVisualElement.Q<VisualElement>("face-uv-y");
 			if (x != null) x.SetEnabled(enabled);
 			if (y != null) y.SetEnabled(enabled);
 		}
@@ -856,18 +856,27 @@ namespace XericUI.ShaderBake.Editor
 
 		// ── 通用绑定 ────────────────────────────────────────────
 
+		/*
+		 * 一律按名字取元素、再按 INotifyValueChanged<T> 绑定，而不是 Q<FloatField> 之类。
+		 * 同名的数字输入框在 2021.3 / 2022.1 分属 UnityEditor.UIElements 与 UnityEngine.UIElements，
+		 * 按具体类型 Q 一旦落在另一侧就取不到：表现是数值永远空白，而且当时不一定有显眼报错。
+		 */
+
 		private void BindFloat(string name, Func<float> get, Action<float> set)
 		{
-			FloatField field = rootVisualElement.Q<FloatField>(name);
-			if (field == null)
+			VisualElement field = rootVisualElement.Q<VisualElement>(name);
+			var target = field as INotifyValueChanged<float>;
+			if (target == null)
 			{
-				Debug.LogError("[ShaderBake] UXML 里缺控件 " + name);
+				Debug.LogError("[ShaderBake] UXML 里缺数值控件 " + name);
 				return;
 			}
 			// 延迟提交：一边打字一边回写会把光标和"0."这类中间输入搅乱，等回车/失焦再收
-			field.isDelayed = true;
-			m_Syncers.Add(() => field.SetValueWithoutNotify(get()));
-			field.RegisterValueChangedCallback(evt =>
+			var delayedTarget = field as TextInputBaseField<float>;
+			if (delayedTarget != null)
+				delayedTarget.isDelayed = true;
+			m_Syncers.Add(() => target.SetValueWithoutNotify(get()));
+			field.RegisterCallback<ChangeEvent<float>>(evt =>
 			{
 				set(evt.newValue);
 				Commit();
@@ -876,15 +885,18 @@ namespace XericUI.ShaderBake.Editor
 
 		private void BindInt(string name, Func<int> get, Action<int> set)
 		{
-			IntegerField field = rootVisualElement.Q<IntegerField>(name);
-			if (field == null)
+			VisualElement field = rootVisualElement.Q<VisualElement>(name);
+			var target = field as INotifyValueChanged<int>;
+			if (target == null)
 			{
-				Debug.LogError("[ShaderBake] UXML 里缺控件 " + name);
+				Debug.LogError("[ShaderBake] UXML 里缺整数控件 " + name);
 				return;
 			}
-			field.isDelayed = true;
-			m_Syncers.Add(() => field.SetValueWithoutNotify(get()));
-			field.RegisterValueChangedCallback(evt =>
+			var delayedTarget = field as TextInputBaseField<int>;
+			if (delayedTarget != null)
+				delayedTarget.isDelayed = true;
+			m_Syncers.Add(() => target.SetValueWithoutNotify(get()));
+			field.RegisterCallback<ChangeEvent<int>>(evt =>
 			{
 				set(evt.newValue);
 				Commit();
@@ -893,14 +905,15 @@ namespace XericUI.ShaderBake.Editor
 
 		private void BindBool(string name, Func<bool> get, Action<bool> set)
 		{
-			Toggle field = rootVisualElement.Q<Toggle>(name);
-			if (field == null)
+			VisualElement field = rootVisualElement.Q<VisualElement>(name);
+			var target = field as INotifyValueChanged<bool>;
+			if (target == null)
 			{
-				Debug.LogError("[ShaderBake] UXML 里缺控件 " + name);
+				Debug.LogError("[ShaderBake] UXML 里缺开关 " + name);
 				return;
 			}
-			m_Syncers.Add(() => field.SetValueWithoutNotify(get()));
-			field.RegisterValueChangedCallback(evt =>
+			m_Syncers.Add(() => target.SetValueWithoutNotify(get()));
+			field.RegisterCallback<ChangeEvent<bool>>(evt =>
 			{
 				set(evt.newValue);
 				Commit();
@@ -909,14 +922,15 @@ namespace XericUI.ShaderBake.Editor
 
 		private void BindColor(string name, Func<Color> get, Action<Color> set)
 		{
-			ColorField field = rootVisualElement.Q<ColorField>(name);
-			if (field == null)
+			VisualElement field = rootVisualElement.Q<VisualElement>(name);
+			var target = field as INotifyValueChanged<Color>;
+			if (target == null)
 			{
-				Debug.LogError("[ShaderBake] UXML 里缺控件 " + name);
+				Debug.LogError("[ShaderBake] UXML 里缺颜色控件 " + name);
 				return;
 			}
-			m_Syncers.Add(() => field.SetValueWithoutNotify(get()));
-			field.RegisterValueChangedCallback(evt =>
+			m_Syncers.Add(() => target.SetValueWithoutNotify(get()));
+			field.RegisterCallback<ChangeEvent<Color>>(evt =>
 			{
 				set(evt.newValue);
 				Commit();

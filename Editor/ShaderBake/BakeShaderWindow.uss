@@ -127,6 +127,7 @@
 }
 
 .detail-pane > .unity-scroll-view__content-container {
+    width: 100%;
     flex-shrink: 0;
 }
 
@@ -167,9 +168,14 @@
     min-width: 0;
 }
 
+/*
+ * flex-basis: 0 是关键：默认 auto 会按内容宽度（标题 + 输入框）定基宽，
+ * 一行两栏/三栏加起来必然超过侧栏宽度，输入框被挤到可视区外——表现就是"数值文本不显示"。
+ */
 .field-half {
     flex-grow: 1;
     flex-shrink: 1;
+    flex-basis: 0;
     min-width: 0;
     margin-right: 4px;
 }
@@ -177,6 +183,7 @@
 .field-third {
     flex-grow: 1;
     flex-shrink: 1;
+    flex-basis: 0;
     min-width: 0;
     margin-right: 4px;
 }
@@ -184,9 +191,26 @@
 .field-quarter {
     flex-grow: 1;
     flex-shrink: 1;
+    flex-basis: 0;
     min-width: 0;
     margin-right: 3px;
     font-size: 10px;
+}
+
+/* 2021.3 的字段标题默认吃 120px 左右，窄栏里会把输入区压没；侧栏内统一收窄 */
+.detail-content .unity-base-field__label,
+.detail-content .unity-text-field__label,
+.detail-content .unity-base-text-field__label {
+    min-width: 30px;
+    flex-shrink: 1;
+    overflow: hidden;
+}
+
+.detail-content .unity-base-field__input,
+.detail-content .unity-text-field__input,
+.detail-content .unity-base-text-field__input {
+    flex-shrink: 1;
+    min-width: 0;
 }
 
 /* ── 浏览图里的选中面片高亮 ── */

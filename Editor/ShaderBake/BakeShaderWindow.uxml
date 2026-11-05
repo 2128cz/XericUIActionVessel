@@ -86,9 +86,9 @@
                             </ui:VisualElement>
                             <xer:IntegerField name="out-pass" label="Pass 下标" class="field-full" />
                             <x:ColorField name="out-clear" label="背景色" class="field-full" />
-                            <ui:Toggle name="out-hdr" label="HDR（浮点目标）" class="field-toggle" />
+                            <ui:Toggle name="out-hdr" label="HDR" class="field-toggle" />
                             <ui:Toggle name="out-srgb" label="sRGB 存储" class="field-toggle" />
-                            <ui:Toggle name="out-flip" label="上下翻转（读回方向不对时开）" class="field-toggle" />
+                            <ui:Toggle name="out-flip" label="翻转 Y" class="field-toggle" />
                         </ui:VisualElement>
                     </ui:VisualElement>
 
@@ -102,8 +102,8 @@
                                 <xer:FloatField name="surf-size-y" label="高" class="field-half" />
                             </ui:VisualElement>
                             <ui:VisualElement class="field-row">
-                                <xer:IntegerField name="surf-seg-x" label="面内细分列" class="field-half" />
-                                <xer:IntegerField name="surf-seg-y" label="面内细分行" class="field-half" />
+                                <xer:IntegerField name="surf-seg-x" label="细分X" class="field-half" />
+                                <xer:IntegerField name="surf-seg-y" label="细分Y" class="field-half" />
                             </ui:VisualElement>
 
                             <ui:Label class="field-note" text="面片网格（一格一张 UV 区域，向左/下扩展编号递减）" />
@@ -152,8 +152,8 @@
                             <ui:Label class="field-note" text="外部网格" />
                             <x:ObjectField name="surf-mesh" label="网格" class="field-full" />
                             <xer:IntegerField name="surf-submesh" label="SubMesh" class="field-full" />
-                            <ui:Toggle name="surf-normalize" label="缩放到面片尺寸" class="field-toggle" />
-                            <ui:Toggle name="surf-uv-st" label="UV 再写进 _MainTex_ST" class="field-toggle" />
+                            <ui:Toggle name="surf-normalize" label="适配尺寸" class="field-toggle" />
+                            <ui:Toggle name="surf-uv-st" label="写 _MainTex_ST" class="field-toggle" />
                             <ui:VisualElement class="field-row">
                                 <ui:Button name="surf-reset" text="面片归位" class="field-half" />
                                 <ui:Button name="surf-pick-scene" text="取选中物体" class="field-half" />

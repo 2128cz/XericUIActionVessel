@@ -31,10 +31,21 @@ namespace XericUI.ShaderBake
 		[Tooltip("相机旋转（欧拉角，度）：默认朝 +Z 看，即看着放在原点、面朝 -Z 的面片")]
 		public Vector3 eulerAngles;
 
-		/// <summary> 视口（世界 → 相机）矩阵 </summary>
+		/// <summary>
+		/// 视口（世界 → 相机）矩阵。
+		///
+		/// <para><b>为什么要镜像 Z</b>：<see cref="Matrix4x4.Perspective"/> 与 <see cref="Matrix4x4.Ortho"/>
+		/// 沿用 OpenGL 约定——相机朝 <b>-Z</b> 看；而 <c>TRS(...).inverse</c> 给出的是 Unity 自己的
+		/// "朝 +Z 看"。两者直接拼起来，正前方的物体会得到负的裁剪 w（透视）或落在近远裁剪面之外（正交），
+		/// 整块几何被裁光，表现就是"渲染成功但画面全透明"。</para>
+		/// </summary>
 		public Matrix4x4 viewMatrix
 		{
-			get { return Matrix4x4.TRS(position, Quaternion.Euler(eulerAngles), Vector3.one).inverse; }
+			get
+			{
+				Matrix4x4 worldToLocal = Matrix4x4.TRS(position, Quaternion.Euler(eulerAngles), Vector3.one).inverse;
+				return Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * worldToLocal;
+			}
 		}
 
 		/// <summary>
