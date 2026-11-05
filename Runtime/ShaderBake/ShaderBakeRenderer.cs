@@ -156,6 +156,127 @@ namespace XericUI.ShaderBake
 			settings.camera.FrameBounds(geometryBounds, settings.aspect);
 		}
 
+		/// <summary>
+		/// 把浏览图上的一个点（0~1，左上为原点）打到面片网络上，返回命中的格子序号。
+		/// 用的是与烘焙完全相同的投影，所以"看到的哪一格"和"点到的哪一格"是同一套坐标。
+		/// </summary>
+		public bool TryPickFace(Vector2 viewport01, out int faceIndex)
+		{
+			faceIndex = -1;
+			Matrix4x4 viewProjection;
+			if (!TryGetViewProjection(out viewProjection))
+				return false;
+
+			ShaderBakeSurfaceSettings surface = settings.surface;
+			float ndcX = viewport01.x * 2f - 1f;
+			float ndcY = 1f - viewport01.y * 2f;
+			Matrix4x4 inverse = viewProjection.inverse;
+			Vector3 near = Unproject(inverse, new Vector3(ndcX, ndcY, -1f));
+			Vector3 far = Unproject(inverse, new Vector3(ndcX, ndcY, 1f));
+			Vector3 direction = far - near;
+
+			Matrix4x4 local = surface.localMatrix;
+			Vector3 planePoint = local.MultiplyPoint3x4(Vector3.zero);
+			Vector3 planeNormal = local.MultiplyVector(Vector3.forward).normalized;
+			float denominator = Vector3.Dot(direction, planeNormal);
+			if (Mathf.Abs(denominator) < 0.000001f)
+				return false;
+			float distance = Vector3.Dot(planePoint - near, planeNormal) / denominator;
+			if (distance < 0f)
+				return false;
+
+			int columns = Mathf.Max(surface.gridColumns, 1);
+			int rows = Mathf.Max(surface.gridRows, 1);
+			Vector3 localPoint = local.inverse.MultiplyPoint3x4(near + direction * distance);
+			float totalWidth = surface.size.x * columns;
+			float totalHeight = surface.size.y * rows;
+			float u = (localPoint.x + totalWidth * 0.5f) / totalWidth;
+			float v = (localPoint.y + totalHeight * 0.5f) / totalHeight;
+			if (u < 0f || u > 1f || v < 0f || v > 1f)
+				return false;
+			int column = Mathf.Clamp(Mathf.FloorToInt(u * columns), 0, columns - 1);
+			int row = Mathf.Clamp(Mathf.FloorToInt(v * rows), 0, rows - 1);
+			faceIndex = row * columns + column;
+			return true;
+		}
+
+		/// <summary>
+		/// 某一格在浏览图上的矩形范围（0~1，左上为原点），用来把选中高亮贴在图上。
+		/// 透视或旋转时这是一个外接框，不是精确的四边形轮廓。
+		/// </summary>
+		public bool TryGetFaceViewportBounds(int faceIndex, out Vector2 min, out Vector2 max)
+		{
+			min = Vector2.zero;
+			max = Vector2.zero;
+			Matrix4x4 viewProjection;
+			if (!TryGetViewProjection(out viewProjection))
+				return false;
+
+			ShaderBakeSurfaceSettings surface = settings.surface;
+			int columns = Mathf.Max(surface.gridColumns, 1);
+			int rows = Mathf.Max(surface.gridRows, 1);
+			if (faceIndex < 0 || faceIndex >= columns * rows)
+				return false;
+
+			float faceWidth = surface.size.x;
+			float faceHeight = surface.size.y;
+			int column = faceIndex % columns;
+			int row = faceIndex / columns;
+			float x0 = -faceWidth * columns * 0.5f + column * faceWidth;
+			float y0 = -faceHeight * rows * 0.5f + row * faceHeight;
+			float x1 = x0 + faceWidth;
+			float y1 = y0 + faceHeight;
+
+			Matrix4x4 local = surface.localMatrix;
+			bool first = true;
+			for (int i = 0; i < 4; i++)
+			{
+				Vector3 corner = new Vector3((i & 1) == 0 ? x0 : x1, (i & 2) == 0 ? y0 : y1, 0f);
+				Vector4 clip = viewProjection * local.MultiplyPoint3x4(corner);
+				if (clip.w <= 0.0001f)
+					return false;
+				float u = (clip.x / clip.w + 1f) * 0.5f;
+				float v = 1f - (clip.y / clip.w + 1f) * 0.5f;
+				if (float.IsNaN(u) || float.IsNaN(v))
+					return false;
+				var point = new Vector2(Mathf.Clamp01(u), Mathf.Clamp01(v));
+				if (first)
+				{
+					min = max = point;
+					first = false;
+				}
+				else
+				{
+					min = Vector2.Min(min, point);
+					max = Vector2.Max(max, point);
+				}
+			}
+			return true;
+		}
+
+		private bool TryGetViewProjection(out Matrix4x4 viewProjection)
+		{
+			viewProjection = Matrix4x4.identity;
+			if (settings == null || settings.surface == null)
+				return false;
+			// 外部网格不是平面，"点选格子"这件事对它没有意义
+			if (settings.surface.kind == ShaderBakeSurfaceKind.Mesh && settings.surface.sourceMesh != null)
+				return false;
+
+			Matrix4x4 projection = settings.camera.GetProjectionMatrix(settings.aspect);
+			if (settings.output.flipY)
+				projection = Matrix4x4.Scale(new Vector3(1f, -1f, 1f)) * projection;
+			viewProjection = projection * settings.camera.viewMatrix;
+			return true;
+		}
+
+		private static Vector3 Unproject(Matrix4x4 inverse, Vector3 clip)
+		{
+			Vector4 point = inverse * new Vector4(clip.x, clip.y, clip.z, 1f);
+			float w = Mathf.Abs(point.w) < 0.0000001f ? 0.0000001f : point.w;
+			return new Vector3(point.x / w, point.y / w, point.z / w);
+		}
+
 		/// <summary> 网格与相机指纹都记下来，界面据此判断要不要重建 </summary>
 		public string stateSignature
 		{

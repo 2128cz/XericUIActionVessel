@@ -35,6 +35,14 @@ namespace XericUI.ShaderBake.Editor
 
 		private const float kDefaultDetailWidth = 340f;
 		private static readonly string[] kAntiAliasingChoices = { "1", "2", "4", "8" };
+		private const string kCustomSize = "自定义";
+
+		/// <summary> 常用导出尺寸。最后一项只是让当前值不在表里时下拉框有个落点 </summary>
+		private static readonly string[] kSizePresets =
+		{
+			"256 × 256", "512 × 512", "1024 × 1024", "2048 × 2048", "4096 × 4096",
+			"512 × 256", "1024 × 512", "2048 × 1024", kCustomSize
+		};
 
 		private ShaderBakeMaterialSource m_Source;
 		private ShaderBakeRenderer m_Renderer;
@@ -59,6 +67,7 @@ namespace XericUI.ShaderBake.Editor
 
 		private bool m_RenderPending;
 		private double m_LastRenderMs = -1;
+		private int m_SelectedFace;
 
 		[MenuItem(XericRegistrationPaths.ToolBar + "/Bake Shader As Image", false, 20)]
 		private static void OpenFromMenu()
@@ -99,8 +108,11 @@ namespace XericUI.ShaderBake.Editor
 				return;
 			}
 
+			m_Preview.faceClicked += OnFaceClicked;
+
 			CollectReferences();
 			BuildPropertyTable();
+			BindFaceGrid();
 			BindToolbar();
 			BindSections();
 			BindSettings();
@@ -404,6 +416,15 @@ namespace XericUI.ShaderBake.Editor
 
 		private void BindOutput()
 		{
+			DropdownField preset = rootVisualElement.Q<DropdownField>("out-preset");
+			if (preset != null)
+			{
+				preset.choices = new List<string>(kSizePresets);
+				m_Syncers.Add(() => preset.SetValueWithoutNotify(CurrentSizePreset()));
+				preset.RegisterValueChangedCallback(evt => ApplySizePreset(evt.newValue));
+			}
+			Click("out-fit-aspect", FitOutputAspect);
+
 			BindInt("out-width", () => m_Renderer.settings.output.width, v => m_Renderer.settings.output.width = v);
 			BindInt("out-height", () => m_Renderer.settings.output.height, v => m_Renderer.settings.output.height = v);
 			BindInt("out-depth", () => m_Renderer.settings.output.depthBuffer, v => m_Renderer.settings.output.depthBuffer = v);
@@ -425,6 +446,167 @@ namespace XericUI.ShaderBake.Editor
 					Commit();
 				});
 			}
+		}
+
+		private string CurrentSizePreset()
+		{
+			Vector2Int size = m_Renderer.settings.output.size;
+			string label = size.x + " × " + size.y;
+			for (int i = 0; i < kSizePresets.Length - 1; i++)
+				if (kSizePresets[i] == label)
+					return label;
+			return kCustomSize;
+		}
+
+		private void ApplySizePreset(string label)
+		{
+			if (label == kCustomSize)
+				return;
+			string[] parts = label.Split('×');
+			if (parts.Length != 2)
+				return;
+			if (!int.TryParse(parts[0].Trim(), out int width) || !int.TryParse(parts[1].Trim(), out int height))
+				return;
+			m_Renderer.settings.output.width = width;
+			m_Renderer.settings.output.height = height;
+			Commit();
+		}
+
+		/// <summary> 按面片网格的整体宽高比把高度对上，省得手算 </summary>
+		private void FitOutputAspect()
+		{
+			ShaderBakeSettings settings = m_Renderer.settings;
+			float totalWidth = settings.surface.size.x * settings.surface.gridColumns;
+			float totalHeight = settings.surface.size.y * settings.surface.gridRows;
+			if (totalWidth <= 0.0001f || totalHeight <= 0.0001f)
+				return;
+			settings.output.height = Mathf.Clamp(
+				Mathf.RoundToInt(settings.output.width * totalHeight / totalWidth),
+				ShaderBakeOutputSettings.kMinDimension, ShaderBakeOutputSettings.kMaxDimension);
+			Commit();
+			SetStatus("高度已按面片比例对齐");
+		}
+
+		// ── 面片网格与选面 ──────────────────────────────────────
+
+		private void BindFaceGrid()
+		{
+			Click("grid-left", () => ResizeGrid(true, true));
+			Click("grid-right", () => ResizeGrid(false, true));
+			Click("grid-down", () => ResizeGrid(true, false));
+			Click("grid-up", () => ResizeGrid(false, false));
+			Click("grid-reset", () =>
+			{
+				m_Renderer.settings.surface.ResetGrid();
+				m_SelectedFace = 0;
+				Commit();
+			});
+			Click("face-zero", () =>
+			{
+				ShaderBakeFaceCell cell = SelectedFaceCell();
+				if (cell == null)
+					return;
+				cell.uvX = 0;
+				cell.uvY = 0;
+				Commit();
+			});
+
+			BindInt("face-uv-x",
+				() => SelectedFaceCell() != null ? SelectedFaceCell().uvX : 0,
+				v => { ShaderBakeFaceCell cell = SelectedFaceCell(); if (cell != null) cell.uvX = v; });
+			BindInt("face-uv-y",
+				() => SelectedFaceCell() != null ? SelectedFaceCell().uvY : 0,
+				v => { ShaderBakeFaceCell cell = SelectedFaceCell(); if (cell != null) cell.uvY = v; });
+		}
+
+		/// <summary>
+		/// 在左/右加一列，或上/下加一行。新格的 UV 编号由 <see cref="ShaderBakeSurfaceSettings"/>
+		/// 按贴边那一格往外推，所以向左加出来的一定是 [-1,0] 这种负号区间。
+		/// </summary>
+		private void ResizeGrid(bool negativeSide, bool column)
+		{
+			ShaderBakeSurfaceSettings surface = m_Renderer.settings.surface;
+			if (column)
+				surface.AddColumn(!negativeSide);
+			else
+				surface.AddRow(!negativeSide);
+			Commit();
+			SetStatus(surface.gridColumns + " × " + surface.gridRows + " 格");
+		}
+
+		private ShaderBakeFaceCell SelectedFaceCell()
+		{
+			if (m_Renderer == null)
+				return null;
+			ShaderBakeSurfaceSettings surface = m_Renderer.settings.surface;
+			if (surface.kind == ShaderBakeSurfaceKind.Mesh && surface.sourceMesh != null)
+				return null;
+			return surface.GetFace(m_SelectedFace);
+		}
+
+		private void OnFaceClicked(Vector2 viewport01)
+		{
+			int face;
+			if (!m_Renderer.TryPickFace(viewport01, out face))
+				return;
+			m_SelectedFace = face;
+			RefreshFaceUi();
+			SetStatus("选中第 " + (face + 1) + " 格");
+		}
+
+		private void RefreshFaceUi()
+		{
+			if (m_Renderer == null)
+				return;
+			ShaderBakeSurfaceSettings surface = m_Renderer.settings.surface;
+			int count = surface.FaceCount;
+			m_SelectedFace = Mathf.Clamp(m_SelectedFace, 0, Mathf.Max(count - 1, 0));
+
+			Label gridInfo = rootVisualElement.Q<Label>("grid-info");
+			if (gridInfo != null)
+				gridInfo.text = surface.gridColumns + " × " + surface.gridRows + " 格";
+
+			bool meshMode = surface.kind == ShaderBakeSurfaceKind.Mesh && surface.sourceMesh != null;
+			ShaderBakeFaceCell cell = meshMode ? null : surface.GetFace(m_SelectedFace);
+			Label faceInfo = rootVisualElement.Q<Label>("face-info");
+			if (faceInfo != null)
+			{
+				faceInfo.text = meshMode
+					? "外部网格不参与面片点选"
+					: "选中第 " + (m_SelectedFace + 1) + " 格：UV (" + cell.uvX + ", " + cell.uvY + ")";
+			}
+			SetFaceFieldsEnabled(!meshMode);
+			UpdateFaceOverlay();
+		}
+
+		private void SetFaceFieldsEnabled(bool enabled)
+		{
+			IntegerField x = rootVisualElement.Q<IntegerField>("face-uv-x");
+			IntegerField y = rootVisualElement.Q<IntegerField>("face-uv-y");
+			if (x != null) x.SetEnabled(enabled);
+			if (y != null) y.SetEnabled(enabled);
+		}
+
+		/// <summary> 把选中格的屏幕框和 UV 编号贴到浏览图上 </summary>
+		private void UpdateFaceOverlay()
+		{
+			if (m_Preview == null || m_Renderer == null)
+				return;
+			ShaderBakeSurfaceSettings surface = m_Renderer.settings.surface;
+			if (surface.kind == ShaderBakeSurfaceKind.Mesh && surface.sourceMesh != null)
+			{
+				m_Preview.SetFaceSelection(false, Vector2.zero, Vector2.zero, string.Empty);
+				return;
+			}
+
+			Vector2 min, max;
+			if (!m_Renderer.TryGetFaceViewportBounds(m_SelectedFace, out min, out max))
+			{
+				m_Preview.SetFaceSelection(false, Vector2.zero, Vector2.zero, string.Empty);
+				return;
+			}
+			ShaderBakeFaceCell cell = surface.GetFace(m_SelectedFace);
+			m_Preview.SetFaceSelection(true, min, max, "UV (" + cell.uvX + ", " + cell.uvY + ")");
 		}
 
 		// ── 面片 ────────────────────────────────────────────────
@@ -698,6 +880,7 @@ namespace XericUI.ShaderBake.Editor
 			m_Renderer.settings.ClampAll();
 			m_Renderer.InvalidateGeometry();
 			SyncUiFromSettings();
+			RefreshFaceUi();
 			RequestRender();
 		}
 
@@ -758,6 +941,7 @@ namespace XericUI.ShaderBake.Editor
 			}
 
 			m_Preview.SetResult(rt, m_Renderer.settings.output.size);
+			UpdateFaceOverlay();
 			UpdateSizeReadout();
 			if (string.IsNullOrEmpty(m_StatusMessage.text) || m_StatusMessage.text.StartsWith("导出"))
 				SetStatus("已渲染");

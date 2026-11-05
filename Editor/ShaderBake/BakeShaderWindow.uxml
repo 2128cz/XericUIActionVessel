@@ -38,6 +38,10 @@
                         <ui:VisualElement name="preview-frame" class="preview-frame">
                             <ui:Image name="preview-checker" class="preview-checker" />
                             <ui:Image name="preview-image" class="preview-image" />
+                            <!-- 选中面片的高亮：位置按百分比算，缩放时不用重排 -->
+                            <ui:VisualElement name="face-overlay" class="face-overlay">
+                                <ui:Label name="face-overlay-label" class="face-overlay-label" text="UV (0,0)" />
+                            </ui:VisualElement>
                         </ui:VisualElement>
                     </ui:VisualElement>
                 </ui:ScrollView>
@@ -69,6 +73,10 @@
                         <ui:Toggle name="sec-output-head" label="输出" value="true" class="section-head" />
                         <ui:VisualElement name="sec-output-body" class="section-body">
                             <ui:VisualElement class="field-row">
+                                <ui:DropdownField name="out-preset" label="预设" class="field-half" />
+                                <ui:Button name="out-fit-aspect" text="匹配面片比例" class="field-half" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="field-row">
                                 <xer:IntegerField name="out-width" label="宽" class="field-half" />
                                 <xer:IntegerField name="out-height" label="高" class="field-half" />
                             </ui:VisualElement>
@@ -94,9 +102,28 @@
                                 <xer:FloatField name="surf-size-y" label="高" class="field-half" />
                             </ui:VisualElement>
                             <ui:VisualElement class="field-row">
-                                <xer:IntegerField name="surf-seg-x" label="列" class="field-half" />
-                                <xer:IntegerField name="surf-seg-y" label="行" class="field-half" />
+                                <xer:IntegerField name="surf-seg-x" label="面内细分列" class="field-half" />
+                                <xer:IntegerField name="surf-seg-y" label="面内细分行" class="field-half" />
                             </ui:VisualElement>
+
+                            <ui:Label class="field-note" text="面片网格（一格一张 UV 区域，向左/下扩展编号递减）" />
+                            <ui:Label name="grid-info" class="field-note" text="1 × 1" />
+                            <ui:VisualElement class="field-row">
+                                <ui:Button name="grid-left" text="←加列" class="field-quarter" />
+                                <ui:Button name="grid-right" text="加列→" class="field-quarter" />
+                                <ui:Button name="grid-down" text="↓加行" class="field-quarter" />
+                                <ui:Button name="grid-up" text="↑加行" class="field-quarter" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="field-row">
+                                <ui:Button name="grid-reset" text="恢复 1×1" class="field-half" />
+                                <ui:Button name="face-zero" text="选中面归零" class="field-half" />
+                            </ui:VisualElement>
+                            <ui:Label name="face-info" class="field-note" text="在左侧浏览图里点选面片" />
+                            <ui:VisualElement class="field-row">
+                                <xer:IntegerField name="face-uv-x" label="UV X" class="field-half" />
+                                <xer:IntegerField name="face-uv-y" label="UV Y" class="field-half" />
+                            </ui:VisualElement>
+
                             <ui:Label class="field-note" text="UV" />
                             <ui:VisualElement class="field-row">
                                 <xer:FloatField name="surf-uv-off-x" label="偏移X" class="field-half" />

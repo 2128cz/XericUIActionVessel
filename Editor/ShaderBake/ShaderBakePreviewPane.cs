@@ -20,6 +20,11 @@ namespace XericUI.ShaderBake.Editor
 		private readonly Image m_Checker;
 		private readonly Image m_Image;
 		private readonly Label m_Readout;
+		private readonly VisualElement m_FaceOverlay;
+		private readonly Label m_FaceOverlayLabel;
+
+		/// <summary> 在图上点了一下（不是拖拽）。参数是 0~1、左上为原点的坐标 </summary>
+		public event Action<Vector2> faceClicked;
 
 		private Texture2D m_CheckerTexture;
 		private int m_CheckerWidth;
@@ -29,6 +34,7 @@ namespace XericUI.ShaderBake.Editor
 		private float m_Zoom = 1f;
 		private bool m_AutoFit = true;
 		private bool m_Dragging;
+		private bool m_PointerMoved;
 		private Vector2 m_DragStart;
 		private Vector2 m_ScrollStart;
 
@@ -46,6 +52,10 @@ namespace XericUI.ShaderBake.Editor
 			m_Checker = root.Q<Image>("preview-checker");
 			m_Image = root.Q<Image>("preview-image");
 			m_Readout = root.Q<Label>("preview-readout");
+			m_FaceOverlay = root.Q<VisualElement>("face-overlay");
+			m_FaceOverlayLabel = root.Q<Label>("face-overlay-label");
+			if (m_FaceOverlay != null)
+				m_FaceOverlay.pickingMode = PickingMode.Ignore;
 
 			if (m_Viewport == null || m_Frame == null || m_Image == null)
 				throw new InvalidOperationException("BakeShaderWindow.uxml 缺少预览区节点");
@@ -104,6 +114,27 @@ namespace XericUI.ShaderBake.Editor
 			// 留 24px 边距，否则图正好贴边看上去像被裁了一半
 			float fit = Mathf.Min((rect.width - 24f) / m_PixelSize.x, (rect.height - 24f) / m_PixelSize.y);
 			SetZoom(fit);
+		}
+
+		/// <summary>
+		/// 把选中面片的框贴到图上。范围是 0~1（左上为原点），用百分比定位，缩放/滚动都不用重算。
+		/// </summary>
+		public void SetFaceSelection(bool visible, Vector2 min, Vector2 max, string label)
+		{
+			if (m_FaceOverlay == null)
+				return;
+			if (!visible)
+			{
+				m_FaceOverlay.style.display = DisplayStyle.None;
+				return;
+			}
+			m_FaceOverlay.style.display = DisplayStyle.Flex;
+			m_FaceOverlay.style.left = Length.Percent(Mathf.Clamp01(min.x) * 100f);
+			m_FaceOverlay.style.top = Length.Percent(Mathf.Clamp01(min.y) * 100f);
+			m_FaceOverlay.style.width = Length.Percent(Mathf.Max(max.x - min.x, 0.002f) * 100f);
+			m_FaceOverlay.style.height = Length.Percent(Mathf.Max(max.y - min.y, 0.002f) * 100f);
+			if (m_FaceOverlayLabel != null)
+				m_FaceOverlayLabel.text = label;
 		}
 
 		public void Clear()
@@ -188,6 +219,7 @@ namespace XericUI.ShaderBake.Editor
 			if (m_PixelSize.x <= 0)
 				return;
 			m_Dragging = true;
+			m_PointerMoved = false;
 			m_DragStart = evt.position;
 			m_ScrollStart = m_Viewport.scrollOffset;
 			m_Viewport.CapturePointer(evt.pointerId);
@@ -200,6 +232,8 @@ namespace XericUI.ShaderBake.Editor
 				return;
 			// 2022.1 的 position 是 Vector3，直接和 Vector2 相减会二义
 			Vector2 delta = (Vector2)evt.position - m_DragStart;
+			if (delta.sqrMagnitude > 16f)
+				m_PointerMoved = true;
 			m_Viewport.scrollOffset = m_ScrollStart - delta;
 		}
 
@@ -207,6 +241,18 @@ namespace XericUI.ShaderBake.Editor
 		{
 			m_Dragging = false;
 			m_Viewport.ReleasePointer(evt.pointerId);
+			if (m_PointerMoved || m_PixelSize.x <= 0 || faceClicked == null)
+				return;
+
+			// 没拖动才算点选：拖动是平移视图，抬手时不该顺手换掉选中的面
+			Rect bounds = m_Frame.worldBound;
+			var position = new Vector2(evt.position.x, evt.position.y);
+			if (bounds.width < 1f || bounds.height < 1f || !bounds.Contains(position))
+				return;
+			// 统一用"左上为原点"的 0~1 坐标，和 Renderer.TryPickFace 的约定一致
+			faceClicked.Invoke(new Vector2(
+				(position.x - bounds.x) / bounds.width,
+				(position.y - bounds.y) / bounds.height));
 		}
 
 		/// <summary>

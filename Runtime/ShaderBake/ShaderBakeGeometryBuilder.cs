@@ -23,11 +23,11 @@ namespace XericUI.ShaderBake
 			switch (surface.kind)
 			{
 				case ShaderBakeSurfaceKind.Plane:
-					return BuildGrid(surface, Mathf.Max(surface.segments.x, 1), Mathf.Max(surface.segments.y, 1));
+					return BuildFaces(surface, Mathf.Max(surface.segments.x, 1), Mathf.Max(surface.segments.y, 1));
 				case ShaderBakeSurfaceKind.Mesh when surface.sourceMesh != null:
 					return BuildFromMesh(surface);
 				default:
-					return BuildGrid(surface, 1, 1);
+					return BuildFaces(surface, 1, 1);
 			}
 		}
 
@@ -63,52 +63,74 @@ namespace XericUI.ShaderBake
 			return bounds;
 		}
 
-		/// <summary> 网格在自身变换之后、相机之前的最大分量跨度，用于决定要不要走 uint32 索引 </summary>
-		private static Mesh BuildGrid(ShaderBakeSurfaceSettings surface, int columns, int rows)
+		/// <summary>
+		/// 按面片网格造一张平面：每个格子是一张完整的面片，UV 从自己格子的编号起算。
+		/// <paramref name="segmentsX"/>/<paramref name="segmentsY"/> 是<b>单张面片内部</b>的细分，
+		/// 给顶点着色器留梯度用；格子本身恒为一张。
+		/// </summary>
+		private static Mesh BuildFaces(ShaderBakeSurfaceSettings surface, int segmentsX, int segmentsY)
 		{
-			float halfWidth = surface.size.x * 0.5f;
-			float halfHeight = surface.size.y * 0.5f;
+			int columns = Mathf.Max(surface.gridColumns, 1);
+			int rows = Mathf.Max(surface.gridRows, 1);
+			segmentsX = Mathf.Max(segmentsX, 1);
+			segmentsY = Mathf.Max(segmentsY, 1);
 
-			int vertexCount = (columns + 1) * (rows + 1);
+			// size 是"每一格"的尺寸：加一格，整个平面就往那一侧长一格出去
+			float faceWidth = surface.size.x;
+			float faceHeight = surface.size.y;
+			float halfWidth = faceWidth * columns * 0.5f;
+			float halfHeight = faceHeight * rows * 0.5f;
+
+			int verticesPerFace = (segmentsX + 1) * (segmentsY + 1);
+			int vertexCount = columns * rows * verticesPerFace;
 			var vertices = new List<Vector3>(vertexCount);
 			var normals = new List<Vector3>(vertexCount);
 			var uvs = new List<Vector2>(vertexCount);
-			var triangles = new List<int>(columns * rows * 6);
+			var triangles = new List<int>(columns * rows * segmentsX * segmentsY * 6);
 
-			for (int y = 0; y <= rows; y++)
+			int stride = segmentsX + 1;
+			for (int row = 0; row < rows; row++)
+			for (int column = 0; column < columns; column++)
 			{
-				float ty = rows == 0 ? 0f : (float)y / rows;
-				for (int x = 0; x <= columns; x++)
+				ShaderBakeFaceCell face = surface.GetFace(row * columns + column);
+				float originX = -halfWidth + column * faceWidth;
+				float originY = -halfHeight + row * faceHeight;
+				int baseIndex = vertices.Count;
+
+				for (int y = 0; y <= segmentsY; y++)
 				{
-					float tx = columns == 0 ? 0f : (float)x / columns;
-					vertices.Add(new Vector3(
-						Mathf.Lerp(-halfWidth, halfWidth, tx),
-						Mathf.Lerp(-halfHeight, halfHeight, ty),
-						0f));
-					normals.Add(Vector3.back);   // 面朝 -Z，即默认相机（朝 +Z 看）看到的正面
-					uvs.Add(RemapUv(new Vector2(tx, ty), surface));
+					float ty = (float)y / segmentsY;
+					for (int x = 0; x <= segmentsX; x++)
+					{
+						float tx = (float)x / segmentsX;
+						vertices.Add(new Vector3(originX + tx * faceWidth, originY + ty * faceHeight, 0f));
+						normals.Add(Vector3.back);   // 面朝 -Z，即默认相机（朝 +Z 看）看到的正面
+						// 格子编号 + 面内 0~1，再统一套上全局的偏移/重复
+						uvs.Add(RemapUv(new Vector2(face.uvX + tx, face.uvY + ty), surface));
+					}
+				}
+
+				for (int y = 0; y < segmentsY; y++)
+				for (int x = 0; x < segmentsX; x++)
+				{
+					int bottomLeft = baseIndex + y * stride + x;
+					int bottomRight = bottomLeft + 1;
+					int topLeft = bottomLeft + stride;
+					int topRight = topLeft + 1;
+					// Unity 认定顺时针为正面（视线方向上的屏幕顺时针），所以是 左下→左上→右下；
+					// 顺序写反了整张面片会被背面剔除掉，画面全空还查不出原因
+					triangles.Add(bottomLeft);
+					triangles.Add(topLeft);
+					triangles.Add(bottomRight);
+					triangles.Add(topLeft);
+					triangles.Add(topRight);
+					triangles.Add(bottomRight);
 				}
 			}
 
-			int stride = columns + 1;
-			for (int y = 0; y < rows; y++)
-			for (int x = 0; x < columns; x++)
-			{
-				int bottomLeft = y * stride + x;
-				int bottomRight = bottomLeft + 1;
-				int topLeft = bottomLeft + stride;
-				int topRight = topLeft + 1;
-				// Unity 认定顺时针为正面（视线方向上的屏幕顺时针），所以是 左下→左上→右下；
-				// 顺序写反了整张面片会被背面剔除掉，画面全空还查不出原因
-				triangles.Add(bottomLeft);
-				triangles.Add(topLeft);
-				triangles.Add(bottomRight);
-				triangles.Add(topLeft);
-				triangles.Add(topRight);
-				triangles.Add(bottomRight);
-			}
-
-			var mesh = NewMesh("ShaderBakeQuad");
+			var mesh = NewMesh(vertexCount > 65000 ? "ShaderBakeFaces" : "ShaderBakeQuad");
+			if (vertexCount > 65000)
+				mesh.indexFormat = IndexFormat.UInt32;
 			mesh.SetVertices(vertices);
 			mesh.SetNormals(normals);
 			mesh.SetUVs(0, uvs);
@@ -130,7 +152,7 @@ namespace XericUI.ShaderBake
 			if (vertices.Count == 0)
 			{
 				Debug.LogWarning("[ShaderBake] 外部网格没有顶点数据（可能是只读网格），退回单片四边形");
-				return BuildGrid(surface, 1, 1);
+				return BuildFaces(surface, 1, 1);
 			}
 
 			var normals = new List<Vector3>();

@@ -181,6 +181,34 @@
     margin-right: 4px;
 }
 
+.field-quarter {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    margin-right: 3px;
+    font-size: 10px;
+}
+
+/* ── 浏览图里的选中面片高亮 ── */
+.face-overlay {
+    position: absolute;
+    display: none;
+    border-width: 1px;
+    border-color: rgb(255, 196, 64);
+    background-color: rgba(255, 196, 64, 0.14);
+}
+
+.face-overlay-label {
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    font-size: 10px;
+    color: rgb(255, 224, 160);
+    background-color: rgba(0, 0, 0, 0.55);
+    padding: 0 4px;
+    border-radius: 2px;
+}
+
 .field-toggle {
     font-size: 11px;
     margin-top: 2px;
