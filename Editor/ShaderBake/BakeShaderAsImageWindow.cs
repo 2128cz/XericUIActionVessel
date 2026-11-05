@@ -177,6 +177,16 @@ namespace XericUI.ShaderBake.Editor
 			m_StatusSource = Require<Label>("status-source");
 			m_DetailPane = Require<VisualElement>("detail-pane");
 			m_DetailSplit = Require<VisualElement>("detail-split");
+
+			// 侧栏只允许纵向滚动。UXML 的 mode="Vertical" 在 2021.3 里仍可能带出横向滚动条，
+			// 这里显式把横向滚动器隐藏掉，宽度不足交给内部的 min-width/flex 规则去收敛。
+			var detailScroll = m_DetailPane as ScrollView;
+			if (detailScroll != null)
+			{
+				detailScroll.mode = ScrollViewMode.Vertical;
+				detailScroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+				detailScroll.verticalScrollerVisibility = ScrollerVisibility.Auto;
+			}
 		}
 
 		private T Require<T>(string name) where T : VisualElement

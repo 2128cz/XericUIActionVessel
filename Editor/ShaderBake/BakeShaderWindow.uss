@@ -126,12 +126,15 @@
     border-left-color: rgb(60, 60, 60);
 }
 
-.detail-pane > .unity-scroll-view__content-container {
+/* 2021.2 之前叫 content-viewport，之后叫 content-container，两个都写上省得按版本失效 */
+.detail-pane > .unity-scroll-view__content-container,
+.detail-pane > .unity-scroll-view__content-viewport {
     width: 100%;
     flex-shrink: 0;
 }
 
 .detail-content {
+    width: 100%;
     flex-shrink: 0;
     padding-bottom: 8px;
 }
