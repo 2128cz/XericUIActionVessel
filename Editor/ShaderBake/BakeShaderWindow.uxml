@@ -1,4 +1,4 @@
-<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:x="UnityEditor.UIElements">
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:x="UnityEditor.UIElements" xmlns:xer="XericUI.ShaderBake.Editor">
     <!--
         Xeric UI Action Vessel — Bake Shader As Image 面板结构。
         这一份只管"有哪些块、块里有哪些控件、叫什么名字"，
@@ -69,14 +69,14 @@
                         <ui:Toggle name="sec-output-head" label="输出" value="true" class="section-head" />
                         <ui:VisualElement name="sec-output-body" class="section-body">
                             <ui:VisualElement class="field-row">
-                                <ui:IntegerField name="out-width" label="宽" class="field-half" />
-                                <ui:IntegerField name="out-height" label="高" class="field-half" />
+                                <xer:IntegerField name="out-width" label="宽" class="field-half" />
+                                <xer:IntegerField name="out-height" label="高" class="field-half" />
                             </ui:VisualElement>
                             <ui:VisualElement class="field-row">
-                                <ui:IntegerField name="out-depth" label="深度" class="field-half" />
+                                <xer:IntegerField name="out-depth" label="深度" class="field-half" />
                                 <ui:DropdownField name="out-msaa" label="采样" class="field-half" />
                             </ui:VisualElement>
-                            <ui:IntegerField name="out-pass" label="Pass 下标" class="field-full" />
+                            <xer:IntegerField name="out-pass" label="Pass 下标" class="field-full" />
                             <x:ColorField name="out-clear" label="背景色" class="field-full" />
                             <ui:Toggle name="out-hdr" label="HDR（浮点目标）" class="field-toggle" />
                             <ui:Toggle name="out-srgb" label="sRGB 存储" class="field-toggle" />
@@ -88,43 +88,43 @@
                     <ui:VisualElement name="sec-surface" class="section">
                         <ui:Toggle name="sec-surface-head" label="面片" value="true" class="section-head" />
                         <ui:VisualElement name="sec-surface-body" class="section-body">
-                            <ui:EnumField name="surf-kind" label="种类" class="field-full" />
+                            <xer:EnumField name="surf-kind" label="种类" class="field-full" />
                             <ui:VisualElement class="field-row">
-                                <ui:FloatField name="surf-size-x" label="宽" class="field-half" />
-                                <ui:FloatField name="surf-size-y" label="高" class="field-half" />
+                                <xer:FloatField name="surf-size-x" label="宽" class="field-half" />
+                                <xer:FloatField name="surf-size-y" label="高" class="field-half" />
                             </ui:VisualElement>
                             <ui:VisualElement class="field-row">
-                                <ui:IntegerField name="surf-seg-x" label="列" class="field-half" />
-                                <ui:IntegerField name="surf-seg-y" label="行" class="field-half" />
+                                <xer:IntegerField name="surf-seg-x" label="列" class="field-half" />
+                                <xer:IntegerField name="surf-seg-y" label="行" class="field-half" />
                             </ui:VisualElement>
                             <ui:Label class="field-note" text="UV" />
                             <ui:VisualElement class="field-row">
-                                <ui:FloatField name="surf-uv-off-x" label="偏移X" class="field-half" />
-                                <ui:FloatField name="surf-uv-off-y" label="偏移Y" class="field-half" />
+                                <xer:FloatField name="surf-uv-off-x" label="偏移X" class="field-half" />
+                                <xer:FloatField name="surf-uv-off-y" label="偏移Y" class="field-half" />
                             </ui:VisualElement>
                             <ui:VisualElement class="field-row">
-                                <ui:FloatField name="surf-uv-tile-x" label="重复X" class="field-half" />
-                                <ui:FloatField name="surf-uv-tile-y" label="重复Y" class="field-half" />
+                                <xer:FloatField name="surf-uv-tile-x" label="重复X" class="field-half" />
+                                <xer:FloatField name="surf-uv-tile-y" label="重复Y" class="field-half" />
                             </ui:VisualElement>
                             <ui:Label class="field-note" text="面片变换" />
                             <ui:VisualElement class="field-row">
-                                <ui:FloatField name="surf-pos-x" label="X" class="field-third" />
-                                <ui:FloatField name="surf-pos-y" label="Y" class="field-third" />
-                                <ui:FloatField name="surf-pos-z" label="Z" class="field-third" />
+                                <xer:FloatField name="surf-pos-x" label="X" class="field-third" />
+                                <xer:FloatField name="surf-pos-y" label="Y" class="field-third" />
+                                <xer:FloatField name="surf-pos-z" label="Z" class="field-third" />
                             </ui:VisualElement>
                             <ui:VisualElement class="field-row">
-                                <ui:FloatField name="surf-rot-x" label="X" class="field-third" />
-                                <ui:FloatField name="surf-rot-y" label="Y" class="field-third" />
-                                <ui:FloatField name="surf-rot-z" label="Z" class="field-third" />
+                                <xer:FloatField name="surf-rot-x" label="X" class="field-third" />
+                                <xer:FloatField name="surf-rot-y" label="Y" class="field-third" />
+                                <xer:FloatField name="surf-rot-z" label="Z" class="field-third" />
                             </ui:VisualElement>
                             <ui:VisualElement class="field-row">
-                                <ui:FloatField name="surf-scale-x" label="X" class="field-third" />
-                                <ui:FloatField name="surf-scale-y" label="Y" class="field-third" />
-                                <ui:FloatField name="surf-scale-z" label="Z" class="field-third" />
+                                <xer:FloatField name="surf-scale-x" label="X" class="field-third" />
+                                <xer:FloatField name="surf-scale-y" label="Y" class="field-third" />
+                                <xer:FloatField name="surf-scale-z" label="Z" class="field-third" />
                             </ui:VisualElement>
                             <ui:Label class="field-note" text="外部网格" />
                             <x:ObjectField name="surf-mesh" label="网格" class="field-full" />
-                            <ui:IntegerField name="surf-submesh" label="SubMesh" class="field-full" />
+                            <xer:IntegerField name="surf-submesh" label="SubMesh" class="field-full" />
                             <ui:Toggle name="surf-normalize" label="缩放到面片尺寸" class="field-toggle" />
                             <ui:Toggle name="surf-uv-st" label="UV 再写进 _MainTex_ST" class="field-toggle" />
                             <ui:VisualElement class="field-row">
@@ -145,23 +145,23 @@
                         <ui:Toggle name="sec-camera-head" label="相机" value="true" class="section-head" />
                         <ui:VisualElement name="sec-camera-body" class="section-body">
                             <ui:Toggle name="cam-ortho" label="正交" class="field-toggle" />
-                            <ui:FloatField name="cam-ortho-size" label="正交半高" class="field-full" />
-                            <ui:FloatField name="cam-fov" label="视野角" class="field-full" />
+                            <xer:FloatField name="cam-ortho-size" label="正交半高" class="field-full" />
+                            <xer:FloatField name="cam-fov" label="视野角" class="field-full" />
                             <ui:VisualElement class="field-row">
-                                <ui:FloatField name="cam-near" label="近" class="field-half" />
-                                <ui:FloatField name="cam-far" label="远" class="field-half" />
+                                <xer:FloatField name="cam-near" label="近" class="field-half" />
+                                <xer:FloatField name="cam-far" label="远" class="field-half" />
                             </ui:VisualElement>
                             <ui:Label class="field-note" text="位置" />
                             <ui:VisualElement class="field-row">
-                                <ui:FloatField name="cam-pos-x" label="X" class="field-third" />
-                                <ui:FloatField name="cam-pos-y" label="Y" class="field-third" />
-                                <ui:FloatField name="cam-pos-z" label="Z" class="field-third" />
+                                <xer:FloatField name="cam-pos-x" label="X" class="field-third" />
+                                <xer:FloatField name="cam-pos-y" label="Y" class="field-third" />
+                                <xer:FloatField name="cam-pos-z" label="Z" class="field-third" />
                             </ui:VisualElement>
                             <ui:Label class="field-note" text="旋转（欧拉角）" />
                             <ui:VisualElement class="field-row">
-                                <ui:FloatField name="cam-rot-x" label="X" class="field-third" />
-                                <ui:FloatField name="cam-rot-y" label="Y" class="field-third" />
-                                <ui:FloatField name="cam-rot-z" label="Z" class="field-third" />
+                                <xer:FloatField name="cam-rot-x" label="X" class="field-third" />
+                                <xer:FloatField name="cam-rot-y" label="Y" class="field-third" />
+                                <xer:FloatField name="cam-rot-z" label="Z" class="field-third" />
                             </ui:VisualElement>
                             <ui:Button name="cam-fit" text="框住面片" class="field-full" />
                         </ui:VisualElement>
