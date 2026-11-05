@@ -26,6 +26,7 @@ namespace XericUI.ShaderBake.Editor
 		private const string kUxmlPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/BakeShaderWindow.uxml";
 		private const string kUssPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/BakeShaderWindow.uss";
 		private const string kRowUxmlPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/BakeShaderPropertyRow.uxml";
+		private const string kGlobalRowUxmlPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/BakeShaderGlobalRow.uxml";
 
 		private const string kPrefSettings = "XericUI.ShaderBake.Settings";
 		private const string kPrefAutoRefresh = "XericUI.ShaderBake.AutoRefresh";
@@ -48,6 +49,7 @@ namespace XericUI.ShaderBake.Editor
 		private ShaderBakeRenderer m_Renderer;
 		private ShaderBakePreviewPane m_Preview;
 		private ShaderBakePropertyTable m_PropertyTable;
+		private ShaderBakeGlobalTable m_Globals;
 		private ShaderBakeExporter m_Exporter;
 
 		private ObjectField m_ShaderField;
@@ -112,6 +114,7 @@ namespace XericUI.ShaderBake.Editor
 
 			CollectReferences();
 			BuildPropertyTable();
+			BuildGlobalTable();
 			BindFaceGrid();
 			BindToolbar();
 			BindSections();
@@ -141,6 +144,7 @@ namespace XericUI.ShaderBake.Editor
 			m_Renderer = null;
 			m_Preview = null;
 			m_PropertyTable = null;
+			m_Globals = null;
 			m_Syncers.Clear();
 		}
 
@@ -153,6 +157,7 @@ namespace XericUI.ShaderBake.Editor
 		private void OnSettingsReplaced()
 		{
 			SyncUiFromSettings();
+			RefreshGlobals();
 			RequestRender();
 		}
 
@@ -180,6 +185,30 @@ namespace XericUI.ShaderBake.Editor
 			if (element == null)
 				Debug.LogError("[ShaderBake] UXML 里缺节点 " + name + "，对应功能不可用");
 			return element;
+		}
+
+		private void BuildGlobalTable()
+		{
+			VisualTreeAsset rowTemplate = LoadAsset<VisualTreeAsset>(kGlobalRowUxmlPath, "BakeShaderGlobalRow");
+			if (rowTemplate == null)
+			{
+				Debug.LogError("[ShaderBake] 找不到全局参数行模板 " + kGlobalRowUxmlPath);
+				return;
+			}
+			m_Globals = new ShaderBakeGlobalTable(rootVisualElement, rowTemplate);
+			m_Globals.changed += RequestRender;
+		}
+
+		private void RefreshGlobals()
+		{
+			if (m_Globals == null)
+				return;
+			m_Globals.SetTarget(m_Renderer.settings.globals);
+			Label note = rootVisualElement.Q<Label>("globals-note");
+			if (note != null)
+				note.text = m_Globals.rowCount == 0
+					? "还没有全局参数：可以扫描 shader，或直接加入常用光照/环境预设"
+					: m_Globals.rowCount + " 条（勾选才生效，渲染完立即还原）";
 		}
 
 		private void BuildPropertyTable()
@@ -264,6 +293,7 @@ namespace XericUI.ShaderBake.Editor
 			Collapsible("sec-output", "sec-output-body");
 			Collapsible("sec-surface", "sec-surface-body");
 			Collapsible("sec-camera", "sec-camera-body");
+			Collapsible("sec-globals", "sec-globals-body");
 			Collapsible("sec-props", "sec-props-body");
 		}
 
@@ -320,6 +350,9 @@ namespace XericUI.ShaderBake.Editor
 			if (revert != null)
 				revert.clicked += RevertToSource;
 
+			Click("globals-detect", ScanGlobals);
+			Click("globals-presets", AddGlobalPresets);
+
 			BindOutput();
 			BindSurface();
 			BindCamera();
@@ -348,6 +381,7 @@ namespace XericUI.ShaderBake.Editor
 
 			SetSourceNote();
 			RefreshPropertyTable();
+			RefreshGlobals();
 			DoRender();
 		}
 
@@ -410,6 +444,23 @@ namespace XericUI.ShaderBake.Editor
 		private void OnMaterialChanged()
 		{
 			RequestRender();
+		}
+
+		// ── 全局参数 ────────────────────────────────────────────
+
+		private void ScanGlobals()
+		{
+			string note;
+			ShaderBakeGlobalScanner.Scan(m_Source.shader, m_Renderer.settings.globals, out note);
+			RefreshGlobals();
+			SetStatus(note);
+		}
+
+		private void AddGlobalPresets()
+		{
+			m_Renderer.settings.globals.AddEnvironmentPresets();
+			RefreshGlobals();
+			SetStatus("已加入常用光照/环境预设（勾选才生效）");
 		}
 
 		// ── 输出 ────────────────────────────────────────────────
@@ -893,6 +944,7 @@ namespace XericUI.ShaderBake.Editor
 		private void ResetSettings()
 		{
 			m_Renderer.settings = ShaderBakeSettings.CreateDefault();
+			RefreshGlobals();
 			Commit();
 			if (m_Preview != null)
 				m_Preview.FitToView();

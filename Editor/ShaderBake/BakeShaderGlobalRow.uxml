@@ -1,0 +1,21 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:x="UnityEditor.UIElements" xmlns:xer="XericUI.ShaderBake.Editor">
+    <!--
+        全局参数表的一行：勾选 + 名字 + 按类型只留一个输入控件。
+        取控件一律在克隆出来的行内查（row.Q），不查全局。
+    -->
+    <ui:VisualElement name="global-row" class="prop-row global-row">
+        <ui:Toggle name="global-enabled" class="global-enabled" />
+        <ui:Label name="global-name" class="prop-label global-name" text="全局量" />
+        <ui:VisualElement name="global-field" class="prop-field">
+            <xer:FloatField name="global-float" class="prop-inline" />
+            <ui:VisualElement name="global-vector" class="prop-vector">
+                <xer:FloatField name="global-x" label="X" class="prop-vec-part" />
+                <xer:FloatField name="global-y" label="Y" class="prop-vec-part" />
+                <xer:FloatField name="global-z" label="Z" class="prop-vec-part" />
+                <xer:FloatField name="global-w" label="W" class="prop-vec-part" />
+            </ui:VisualElement>
+            <x:ColorField name="global-color" class="prop-inline" />
+            <x:ObjectField name="global-texture" class="prop-inline" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

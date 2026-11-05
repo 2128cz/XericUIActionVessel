@@ -19,6 +19,9 @@ namespace XericUI.ShaderBake
 		[Tooltip("离屏相机")]
 		public ShaderBakeCameraSettings camera = new ShaderBakeCameraSettings();
 
+		[Tooltip("渲染前注入的全局参数（光照方向、环境光、反射贴图等）")]
+		public ShaderBakeGlobalSettings globals = new ShaderBakeGlobalSettings();
+
 		/// <summary> 画面宽高比 </summary>
 		public float aspect
 		{

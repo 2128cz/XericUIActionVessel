@@ -287,6 +287,16 @@
     margin-right: 2px;
 }
 
+/* ── 全局参数行 ── */
+.global-enabled {
+    margin-right: 4px;
+}
+
+.global-name {
+    width: 118px;
+    font-size: 10px;
+}
+
 .prop-vec-part > .unity-label {
     min-width: 12px;
     font-size: 10px;

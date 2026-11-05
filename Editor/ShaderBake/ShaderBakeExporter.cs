@@ -210,6 +210,7 @@ namespace XericUI.ShaderBake.Editor
 			m_Renderer.settings.output = parsed.output;
 			m_Renderer.settings.surface = parsed.surface;
 			m_Renderer.settings.camera = parsed.camera;
+			m_Renderer.settings.globals = parsed.globals;
 			Report("烘焙参数已从剪贴板替换");
 			Action apply = settingsReplaced;
 			if (apply != null)

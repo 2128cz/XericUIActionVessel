@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -356,6 +357,7 @@ namespace XericUI.ShaderBake
 			// 不动网格（外部模型的绕序不该被我们改），只在这一刻把剔除方向反过来。
 			bool previousInvert = GL.invertCulling;
 			GL.invertCulling = previousInvert != settings.output.flipY;
+			List<Action> restoreGlobals = settings.globals != null ? settings.globals.Apply() : null;
 			try
 			{
 				Graphics.ExecuteCommandBuffer(m_Buffer);
@@ -363,6 +365,12 @@ namespace XericUI.ShaderBake
 			finally
 			{
 				GL.invertCulling = previousInvert;
+				// 画完立刻还原：这些是编辑器全局状态，留一次烘焙的值下来会污染别处的渲染
+				if (restoreGlobals != null)
+				{
+					for (int i = restoreGlobals.Count - 1; i >= 0; i--)
+						restoreGlobals[i]();
+				}
 			}
 			m_Buffer.Clear();
 		}
