@@ -923,13 +923,31 @@ namespace XericUI.ShaderBake.Editor
 			}
 			if (coverage <= 0.001f)
 			{
-				SetSelfTestNote("自检未画出任何像素 → 问题在渲染管线本身。先按「框住面片」，再看面片宽高、pass 下标与翻转 Y");
+				SetSelfTestNote("自检未画出任何像素 → 问题在渲染管线。" + DescribePipeline() +
+				               " 先按「框住面片」再自检一次；仍为空就查 pass 下标与面片宽高。");
 				SetStatus("管线自检：空画面");
 				return;
 			}
 			SetSelfTestNote("自检通过：纯色面片不透明 " + Mathf.RoundToInt(coverage * 100f) +
 			               "%。管线是通的，画面空是被测 shader 自己的事（贴图、pass、混合模式、需要光照）");
 			SetStatus("管线自检：正常");
+		}
+
+		/// <summary>
+		/// 把决定"画不画得见"的那几个数值摊开写一行。空画面的时候最缺的就是这个——
+		/// 否则只能靠猜是相机框不住、面片太小还是 pass 选错。
+		/// </summary>
+		private string DescribePipeline()
+		{
+			ShaderBakeSettings s = m_Renderer.settings;
+			return "正交=" + s.camera.orthographic +
+			       " 半高=" + s.camera.orthographicSize.ToString("0.###") +
+			       " 近/远=" + s.camera.nearClipPlane.ToString("0.###") + "/" + s.camera.farClipPlane.ToString("0.###") +
+			       " 机位=" + s.camera.position +
+			       " 面片=" + s.surface.gridColumns + "×" + s.surface.gridRows + " 格 尺寸=" + s.surface.size +
+			       " 双面=" + s.surface.doubleSided +
+			       " pass=" + s.output.shaderPass +
+			       " 翻转Y=" + s.output.flipY;
 		}
 
 		private void SetSelfTestNote(string text)
