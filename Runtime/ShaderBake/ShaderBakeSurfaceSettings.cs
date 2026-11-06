@@ -94,6 +94,17 @@ namespace XericUI.ShaderBake
 		[Tooltip("把 UV 偏移/重复同时写进 _MainTex_ST：给 Standard / Unlit 那类靠 ST 做缩放的 shader 用")]
 		public bool applyUvToMainTexST;
 
+		/// <summary>
+		/// 双面绘制：正反两份绕序都写进网格。
+		///
+		/// <para><b>为什么要这么兜住</b>：这条链路没有相机，视图/投影矩阵是自己拼的（含一处 Z 镜像和
+		/// 一个可选的 Y 镜像），"哪一侧算正面"于是成了我们自己的推导而不是引擎的保证；押错一次
+		/// 就是整片被 Cull Back 剔掉，表现是"渲染成功、画面全透明"。两份绕序里同一时刻只有一份是
+		/// 正面，所以透明混合不会被算两次。只有确定要复刻引擎的剔除行为时才关掉。</para>
+		/// </summary>
+		[Tooltip("双面绘制：正反两份绕序，避免押错正面约定导致整片被剔除")]
+		public bool doubleSided = true;
+
 		/// <summary> 面片自己的局部变换矩阵（DrawMesh 用的那个 model 矩阵） </summary>
 		public Matrix4x4 localMatrix
 		{
@@ -211,11 +222,13 @@ namespace XericUI.ShaderBake
 		{
 			var meshId = sourceMesh != null ? sourceMesh.GetInstanceID().ToString() : "none";
 			var builder = new System.Text.StringBuilder(64);
-			for (int i = 0; i < faces.Count; i++)
+			// 老存档里没有 faces 这一项，直接读会踩空；这里只算指纹，不做补全
+			int faceCount = faces != null ? faces.Count : 0;
+			for (int i = 0; i < faceCount; i++)
 				builder.Append(faces[i].uvX).Append(',').Append(faces[i].uvY).Append(';');
 			return kind + "_" + size + "_" + segments + "_" + uvOffset + "_" + uvTiling +
 			       "_" + position + "_" + eulerAngles + "_" + scale + "_" + meshId + "_" + meshSubMesh +
-			       "_" + normalizeMeshSize + "_" + gridColumns + "x" + gridRows + "_" + builder;
+			       "_" + normalizeMeshSize + "_" + doubleSided + "_" + gridColumns + "x" + gridRows + "_" + builder;
 		}
 	}
 }

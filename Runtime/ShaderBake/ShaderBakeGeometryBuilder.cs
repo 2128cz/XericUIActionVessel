@@ -86,7 +86,7 @@ namespace XericUI.ShaderBake
 			var vertices = new List<Vector3>(vertexCount);
 			var normals = new List<Vector3>(vertexCount);
 			var uvs = new List<Vector2>(vertexCount);
-			var triangles = new List<int>(columns * rows * segmentsX * segmentsY * 6);
+			var triangles = new List<int>(columns * rows * segmentsX * segmentsY * (surface.doubleSided ? 12 : 6));
 
 			int stride = segmentsX + 1;
 			for (int row = 0; row < rows; row++)
@@ -117,14 +117,12 @@ namespace XericUI.ShaderBake
 					int bottomRight = bottomLeft + 1;
 					int topLeft = bottomLeft + stride;
 					int topRight = topLeft + 1;
-					// Unity 认定顺时针为正面（视线方向上的屏幕顺时针），所以是 左下→左上→右下；
-					// 顺序写反了整张面片会被背面剔除掉，画面全空还查不出原因
-					triangles.Add(bottomLeft);
-					triangles.Add(topLeft);
-					triangles.Add(bottomRight);
-					triangles.Add(topLeft);
-					triangles.Add(topRight);
-					triangles.Add(bottomRight);
+					// 与 Unity 内置 Quad 同向：从法线指的那一侧看是 xy 平面的逆时针。
+					// 究竟哪一侧算正面由图形 API 决定，而这条链路的投影矩阵是自己拼的、没有相机帮忙统一，
+					// 所以单靠一个固定绕序永远会在某个 API 上被 Cull Back 剔光——见 doubleSided。
+					AddQuad(triangles, bottomLeft, bottomRight, topRight, topLeft, false);
+					if (surface.doubleSided)
+						AddQuad(triangles, bottomLeft, bottomRight, topRight, topLeft, true);
 				}
 			}
 
@@ -137,6 +135,23 @@ namespace XericUI.ShaderBake
 			mesh.SetTriangles(triangles, 0);
 			Upload(mesh);
 			return mesh;
+		}
+
+		/// <summary>
+		/// 一个格子的两个三角面。<paramref name="reverse"/> 为真时把绕序整个反过来：同一片几何
+		/// 在"顺时针算正面"与"逆时针算正面"两种约定下各有一份是可见的，而另一份仍会被剔除，
+		/// 所以不会画两遍、透明混合也不会被叠加两次。
+		/// </summary>
+		private static void AddQuad(List<int> triangles, int bottomLeft, int bottomRight, int topRight, int topLeft, bool reverse)
+		{
+			if (reverse)
+			{
+				triangles.Add(bottomLeft); triangles.Add(bottomRight); triangles.Add(topLeft);
+				triangles.Add(bottomRight); triangles.Add(topRight); triangles.Add(topLeft);
+				return;
+			}
+			triangles.Add(bottomLeft); triangles.Add(bottomRight); triangles.Add(topRight);
+			triangles.Add(bottomLeft); triangles.Add(topRight); triangles.Add(topLeft);
 		}
 
 		/// <summary>
@@ -192,7 +207,24 @@ namespace XericUI.ShaderBake
 			int layerCount = subMesh + 1;
 			mesh.subMeshCount = layerCount;
 			for (int i = 0; i < layerCount; i++)
-				mesh.SetTriangles(source.GetTriangles(i), i);
+			{
+				int[] tris = source.GetTriangles(i);
+				if (surface.doubleSided)
+				{
+					// 反向补一份，理由同 AddQuad：正面对侧的约定由 API 决定，别让烘焙结果取决于显卡
+					int complete = tris.Length / 3 * 3;
+					var both = new int[tris.Length + complete];
+					tris.CopyTo(both, 0);
+					for (int t = 0; t < complete; t += 3)
+					{
+						both[tris.Length + t] = tris[t];
+						both[tris.Length + t + 1] = tris[t + 2];
+						both[tris.Length + t + 2] = tris[t + 1];
+					}
+					tris = both;
+				}
+				mesh.SetTriangles(tris, i);
+			}
 
 			Upload(mesh);
 			mesh.RecalculateBounds();
