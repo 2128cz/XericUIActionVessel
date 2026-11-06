@@ -43,6 +43,9 @@ namespace XericUI.ShaderBake.Editor
 		private const double kLiveIntervalFocused = 1.0 / 24.0;
 		private const double kLiveIntervalBlurred = 1.0 / 6.0;
 
+		/// <summary> 覆盖率读数降频：它要 ReadPixels，是这一轮里唯一会同步显卡的一步 </summary>
+		private const double kCoverageInterval = 0.5;
+
 		private const float kDefaultDetailWidth = 340f;
 		private static readonly string[] kAntiAliasingChoices = { "1", "2", "4", "8" };
 		private const string kCustomSize = "自定义";
@@ -83,6 +86,7 @@ namespace XericUI.ShaderBake.Editor
 		private bool m_PendingRefresh;
 		private double m_LastRenderMs = -1;
 		private double m_NextLiveRender;
+		private double m_NextCoverageCheck;
 		/// <summary> 上一次结果的不透明像素占比，-1 = 没测出来 </summary>
 		private float m_LastCoverage = -1f;
 		/// <summary> 探针（自检 / 测试视图）活着才能让那张图继续显示；切回真实结果时才收掉 </summary>
@@ -1221,8 +1225,9 @@ namespace XericUI.ShaderBake.Editor
 			if (m_Renderer == null || m_Preview == null)
 				return;
 
+			bool measureCoverage = ShouldMeasureCoverage(fromHeartbeat);
 			bool wantDebugView = m_DebugView != DebugView.None;
-			if (wantDebugView && RenderDebugView())
+			if (wantDebugView && RenderDebugView(measureCoverage))
 				return;
 			if (wantDebugView)
 			{
@@ -1246,17 +1251,39 @@ namespace XericUI.ShaderBake.Editor
 			}
 
 			m_Preview.SetResult(rt, m_Renderer.settings.output.size);
-			float coverage;
-			Color average;
-			m_LastCoverage = ShaderBakeReadback.MeasureCoverage(rt, out coverage, out average) ? coverage : -1f;
-			if (m_LastCoverage >= 0f)
-				m_Preview.SetCoverage(m_LastCoverage, average);
+			if (measureCoverage)
+				MeasureCoverage(rt);
 			UpdateFaceOverlay();
 			UpdateSizeReadout();
 			if (fromHeartbeat)
 				return;
 			if (string.IsNullOrEmpty(m_StatusMessage.text) || m_StatusMessage.text.StartsWith("导出") || m_StatusMessage.text.StartsWith("参数已改"))
 				SetStatus("已渲染");
+		}
+
+		/// <summary>
+		/// 覆盖率量的是"这一轮画面上有没有东西"，慢变化，半秒一次足够；
+		/// 心跳 24fps 时每次都量的话，每帧都要同步一次显卡，实时预览就变成卡顿本身。
+		/// 不量的时候沿用上一个读数，界面不会因此少信息。
+		/// </summary>
+		private bool ShouldMeasureCoverage(bool fromHeartbeat)
+		{
+			double now = EditorApplication.timeSinceStartup;
+			if (!fromHeartbeat || now >= m_NextCoverageCheck)
+			{
+				m_NextCoverageCheck = now + kCoverageInterval;
+				return true;
+			}
+			return false;
+		}
+
+		private void MeasureCoverage(RenderTexture rt)
+		{
+			float coverage;
+			Color average;
+			m_LastCoverage = ShaderBakeReadback.MeasureCoverage(rt, out coverage, out average) ? coverage : -1f;
+			if (m_LastCoverage >= 0f)
+				m_Preview.SetCoverage(m_LastCoverage, average);
 		}
 
 		// ── 测试视图 ────────────────────────────────────────────
@@ -1413,7 +1440,7 @@ namespace XericUI.ShaderBake.Editor
 		///
 		/// <para>只换"看"的那张图：导出、材质属性表、写回原材质都不受影响，仍走真实材质。</para>
 		/// </summary>
-		private bool RenderDebugView()
+		private bool RenderDebugView(bool measureCoverage)
 		{
 			if (!EnsureDebugMaterial())
 				return false;
@@ -1429,11 +1456,8 @@ namespace XericUI.ShaderBake.Editor
 			}
 
 			m_Preview.SetResult(rt, m_Renderer.settings.output.size);
-			float coverage;
-			Color average;
-			m_LastCoverage = ShaderBakeReadback.MeasureCoverage(rt, out coverage, out average) ? coverage : -1f;
-			if (m_LastCoverage >= 0f)
-				m_Preview.SetCoverage(m_LastCoverage, average);
+			if (measureCoverage)
+				MeasureCoverage(rt);
 			UpdateFaceOverlay();
 			UpdateSizeReadout();
 			return true;
