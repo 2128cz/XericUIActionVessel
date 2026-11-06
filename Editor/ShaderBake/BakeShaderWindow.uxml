@@ -25,6 +25,7 @@
             <x:ToolbarButton name="zoom-actual" text="1:1" />
             <x:ToolbarButton name="zoom-in" text="+" class="tool-narrow" />
             <x:ToolbarToggle name="show-checker" text="透明底" />
+            <x:ToolbarToggle name="uv-check" text="UV 检查" />
             <x:ToolbarSpacer class="toolbar-gap" />
             <x:ToolbarButton name="reset-settings" text="重置参数" />
         </x:Toolbar>
@@ -123,6 +124,8 @@
                                 <xer:IntegerField name="face-uv-x" label="UV X" class="field-half" />
                                 <xer:IntegerField name="face-uv-y" label="UV Y" class="field-half" />
                             </ui:VisualElement>
+                            <!-- 只在工具栏「UV 检查」点亮时出现，内容是这张图的读法 -->
+                            <ui:Label name="uvcheck-note" class="field-note" text="UV 检查未开启" />
 
                             <ui:Label class="field-note" text="UV" />
                             <ui:VisualElement class="field-row">

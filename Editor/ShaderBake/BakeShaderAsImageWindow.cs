@@ -27,12 +27,17 @@ namespace XericUI.ShaderBake.Editor
 		private const string kUssPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/BakeShaderWindow.uss";
 		private const string kRowUxmlPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/BakeShaderPropertyRow.uxml";
 		private const string kGlobalRowUxmlPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/BakeShaderGlobalRow.uxml";
+		private const string kUvDebugShaderPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/ShaderBakeUVDebug.shader";
 
 		private const string kPrefSettings = "XericUI.ShaderBake.Settings";
 		private const string kPrefAutoRefresh = "XericUI.ShaderBake.AutoRefresh";
 		private const string kPrefChecker = "XericUI.ShaderBake.Checker";
+		private const string kPrefUvCheck = "XericUI.ShaderBake.UvCheck";
 		private const string kPrefDetailWidth = "XericUI.ShaderBake.DetailWidth";
 		private const string kPrefSource = "XericUI.ShaderBake.SourceAsset";
+
+		/// <summary> UV 检查视图用的那张调试 shader（Editor 目录下，见 ShaderBakeUVDebug.shader） </summary>
+		private const string kUvDebugShader = "Hidden/XericUI/ShaderBake/UV Debug";
 
 		private const float kDefaultDetailWidth = 340f;
 		private static readonly string[] kAntiAliasingChoices = { "1", "2", "4", "8" };
@@ -58,6 +63,7 @@ namespace XericUI.ShaderBake.Editor
 		private Button m_ExportButton;
 		private ToolbarToggle m_AutoRefreshToggle;
 		private ToolbarToggle m_CheckerToggle;
+		private ToolbarToggle m_UvCheckToggle;
 		private Label m_StatusMessage;
 		private Label m_StatusSize;
 		private Label m_StatusTime;
@@ -71,10 +77,8 @@ namespace XericUI.ShaderBake.Editor
 		private double m_LastRenderMs = -1;
 		/// <summary> 上一次结果的不透明像素占比，-1 = 没测出来 </summary>
 		private float m_LastCoverage = -1f;
-		/// <summary> 管线自检的探针（活着才能让自检那张图继续显示） </summary>
-		private ShaderBakeRenderer m_SelfTestProbe;
-		private RenderTexture m_SelfTestTarget;
-		private Material m_SelfTestMaterial;
+		/// <summary> 探针（自检 / UV 检查）活着才能让那张图继续显示；下一次正常渲染时收掉 </summary>
+		private readonly ShaderBakeOverrideRenderer m_Override = new ShaderBakeOverrideRenderer();
 		private int m_SelectedFace;
 
 		[MenuItem(XericRegistrationPaths.ToolBar + "/Bake Shader As Image", false, 20)]
@@ -143,8 +147,9 @@ namespace XericUI.ShaderBake.Editor
 				m_PropertyTable.Dispose();
 			if (m_Preview != null)
 				m_Preview.Dispose();
+			// 探针那张 RT 归探针所有，先收探针
+			m_Override.Release();
 			// 临时材质一定要还：它挂着的是 shader，不销毁就是每次开关窗口漏一份
-			ReleaseSelfTestTarget();
 			if (m_Source != null) m_Source.Dispose(true);
 			if (m_Renderer != null) m_Renderer.Dispose(true);
 			m_Source = null;
@@ -178,6 +183,7 @@ namespace XericUI.ShaderBake.Editor
 			m_ExportButton = Require<ToolbarButton>("export-menu");
 			m_AutoRefreshToggle = Require<ToolbarToggle>("auto-refresh");
 			m_CheckerToggle = Require<ToolbarToggle>("show-checker");
+			m_UvCheckToggle = Require<ToolbarToggle>("uv-check");
 			m_StatusMessage = Require<Label>("status-message");
 			m_StatusSize = Require<Label>("status-size");
 			m_StatusTime = Require<Label>("status-time");
@@ -261,6 +267,14 @@ namespace XericUI.ShaderBake.Editor
 					SavePrefs();
 				});
 
+			if (m_UvCheckToggle != null)
+				m_UvCheckToggle.RegisterValueChangedCallback(evt =>
+				{
+					// 换的是"看哪张图"，不是参数，所以立刻重画而不走延迟
+					UpdateUvCheckNote(evt.newValue);
+					DoRender();
+				});
+
 			Click("zoom-in", () => { if (m_Preview != null) { m_Preview.autoFit = false; m_Preview.ZoomIn(); } });
 			Click("zoom-out", () => { if (m_Preview != null) { m_Preview.autoFit = false; m_Preview.ZoomOut(); } });
 			Click("zoom-fit", () => { if (m_Preview != null) m_Preview.FitToView(); });
@@ -283,6 +297,11 @@ namespace XericUI.ShaderBake.Editor
 		private void ShowExportMenu()
 		{
 			GenericMenu menu = new GenericMenu();
+			if (isUvView)
+			{
+				// 免得有人对着一张 UV 色块图等它导出成那张图——导出永远走真实材质
+				menu.AddDisabledItem(new GUIContent("当前显示的是 UV 检查视图，导出仍按真实材质"), false);
+			}
 			m_Exporter.BuildMenu(menu, SuggestedExportName());
 			if (m_ExportButton != null)
 				menu.DropDown(m_ExportButton.worldBound);
@@ -878,7 +897,6 @@ namespace XericUI.ShaderBake.Editor
 				SetSelfTestNote("自检不可用：这个工程里找不到 Unlit/Color");
 				return;
 			}
-			ReleaseSelfTestTarget();
 
 			var probeMaterial = new Material(solid)
 			{
@@ -887,44 +905,58 @@ namespace XericUI.ShaderBake.Editor
 			};
 			probeMaterial.color = new Color(0.25f, 0.85f, 0.5f);
 
+			// 探针只有一个位置，自检这张纯色图要把 UV 视图挤掉；不关开关的话下一次重画又变回 UV 图，
+			// 而用户看到的"刚点出来的自检结果"只存在一瞬间
+			if (isUvView)
+			{
+				m_UvCheckToggle.SetValueWithoutNotify(false);
+				UpdateUvCheckNote(false);
+			}
+
 			float coverage = -1f;
-			string failure = string.Empty;
+			string failure;
 			// settings 是共享引用：自检必须和被测走同一套面片/相机/pass，才有控制变量的意义。
-			// 探针还要活着：它一 Dispose 就把那张 RT 一起销毁了，而自检结果正是那张图。
-			// 下一次正常渲染或关窗口时由 ReleaseSelfTestTarget 收掉。
-			m_SelfTestMaterial = probeMaterial;
-			m_SelfTestProbe = new ShaderBakeRenderer { settings = m_Renderer.settings, material = probeMaterial };
+			// 探针要一直活着——它一 Release 就把那张 RT 一起销毁了，而自检结果正是那张图。
+			// 下一次正常渲染或关窗口时由 DoRender / OnDisable 收掉。
+			RenderTexture rt;
 			try
 			{
-				RenderTexture rt = m_SelfTestProbe.Render();
-				if (rt == null)
-					failure = m_SelfTestProbe.lastError;
-				else
-				{
-					Color average;
-					if (ShaderBakeReadback.MeasureCoverage(rt, out coverage, out average))
-					{
-						// 把纯色结果直接显示出来：数字说有像素，眼睛说看到什么，两边对上才算过
-						m_SelfTestTarget = rt;
-						m_Preview.SetResult(rt, m_Renderer.settings.output.size);
-						m_Preview.SetCoverage(coverage, average);
-					}
-				}
+				rt = m_Override.RenderWithMaterial(m_Renderer.settings, probeMaterial, out failure);
 			}
 			catch (Exception evt)
 			{
 				failure = evt.Message;
+				rt = null;
+			}
+			finally
+			{
+				// 纯色材质用完就该还，画面已经在探针那张 RT 里了
+				ShaderBakeRenderer.ReleaseTempObject(probeMaterial, true);
 			}
 
-			if (!string.IsNullOrEmpty(failure))
+			if (rt == null)
 			{
+				if (string.IsNullOrEmpty(failure))
+					failure = "未知错误";
 				SetSelfTestNote("自检失败：" + failure);
 				return;
 			}
+
+			Color average;
+			if (!ShaderBakeReadback.MeasureCoverage(rt, out coverage, out average))
+			{
+				SetSelfTestNote("自检读不回像素：显卡或纹理格式不支持这次采样");
+				return;
+			}
+			// 把纯色结果直接显示出来：数字说有像素，眼睛说看到什么，两边对上才算过
+			m_Preview.SetResult(rt, m_Renderer.settings.output.size);
+			m_Preview.SetCoverage(coverage, average);
+			m_LastCoverage = coverage;
+
 			if (coverage <= 0.001f)
 			{
 				SetSelfTestNote("自检未画出任何像素 → 问题在渲染管线。" + DescribePipeline() +
-				               " 先按「框住面片」再自检一次；仍为空就查 pass 下标与面片宽高。");
+				               " 先按「框住面片」再自检一次；仍为空就查面片宽高与相机（探针固定 pass 0，pass 不背这个锅）。");
 				SetStatus("管线自检：空画面");
 				return;
 			}
@@ -946,7 +978,7 @@ namespace XericUI.ShaderBake.Editor
 			       " 机位=" + s.camera.position +
 			       " 面片=" + s.surface.gridColumns + "×" + s.surface.gridRows + " 格 尺寸=" + s.surface.size +
 			       " 双面=" + s.surface.doubleSided +
-			       " pass=" + s.output.shaderPass +
+			       " pass=" + s.output.shaderPass + "（探针固定用 0）" +
 			       " 翻转Y=" + s.output.flipY;
 		}
 
@@ -955,19 +987,6 @@ namespace XericUI.ShaderBake.Editor
 			Label note = rootVisualElement.Q<Label>("selftest-note");
 			if (note != null)
 				note.text = text;
-		}
-
-		private void ReleaseSelfTestTarget()
-		{
-			// 探针自己会回收那张 RT，所以先释放探针、再清引用，别两边各销毁一次
-			if (m_SelfTestProbe != null)
-			{
-				m_SelfTestProbe.Dispose(true);
-				m_SelfTestProbe = null;
-				m_SelfTestTarget = null;
-			}
-			ShaderBakeRenderer.ReleaseTempObject(m_SelfTestMaterial, true);
-			m_SelfTestMaterial = null;
 		}
 
 		// ── 右侧细节栏宽度 ──────────────────────────────────────
@@ -1141,8 +1160,18 @@ namespace XericUI.ShaderBake.Editor
 			m_RenderPending = false;
 			if (m_Renderer == null || m_Preview == null)
 				return;
-			// 真实结果回来了，自检那张临时图就该退场
-			ReleaseSelfTestTarget();
+
+			bool wantUvView = m_UvCheckToggle != null && m_UvCheckToggle.value;
+			if (wantUvView && RenderUvDebug())
+				return;
+			if (wantUvView)
+			{
+				// 探针点不着就别让界面停在一个空视图上：关掉开关，回落渲染真实结果
+				m_UvCheckToggle.SetValueWithoutNotify(false);
+				UpdateUvCheckNote(false);
+			}
+			// 真实结果回来了，探针（自检 / UV 检查）那张临时图就该退场
+			m_Override.Release();
 
 			double start = EditorApplication.timeSinceStartup;
 			RenderTexture rt = m_Renderer.Render();
@@ -1169,6 +1198,68 @@ namespace XericUI.ShaderBake.Editor
 			SavePrefs();
 		}
 
+		/// <summary>
+		/// UV 检查视图：按<b>同一套</b>面片 / 相机 / pass，把顶点收到的 UV 本身画成颜色。
+		///
+		/// <para>它只回答一个问题——"这一格铺的是哪段 UV"，不吃贴图、不吃光照，所以画面为空不会
+		/// 有第二种解释；四角是不是 00 / 10 / 01 / 11，看颜色就行。</para>
+		/// <para>只换"看"的那张图：导出、材质属性表、写回原材质都不受影响，仍走真实材质。</para>
+		/// </summary>
+		private bool RenderUvDebug()
+		{
+			Shader debugShader = FindUvDebugShader();
+			if (debugShader == null)
+			{
+				Debug.LogWarning("[ShaderBake] UV 检查不可用：包内找不到 " + kUvDebugShader + "（ShaderBakeUVDebug.shader 没被导入？）");
+				SetStatus("UV 检查不可用：包里找不到 " + kUvDebugShader);
+				return false;
+			}
+
+			double start = EditorApplication.timeSinceStartup;
+			string error;
+			RenderTexture rt = m_Override.Render(m_Renderer.settings, debugShader, kUvDebugShader, out error);
+			m_LastRenderMs = (EditorApplication.timeSinceStartup - start) * 1000.0;
+			if (rt == null)
+			{
+				Debug.LogWarning("[ShaderBake] UV 检查渲染失败：" + error);
+				SetStatus("UV 检查渲染失败：" + error);
+				return false;
+			}
+
+			m_Preview.SetResult(rt, m_Renderer.settings.output.size);
+			float coverage;
+			Color average;
+			m_LastCoverage = ShaderBakeReadback.MeasureCoverage(rt, out coverage, out average) ? coverage : -1f;
+			if (m_LastCoverage >= 0f)
+				m_Preview.SetCoverage(m_LastCoverage, average);
+			UpdateFaceOverlay();
+			UpdateSizeReadout();
+			UpdateUvCheckNote(true);
+			SavePrefs();
+			return true;
+		}
+
+		private Shader FindUvDebugShader()
+		{
+			// 先按名字找：这张 shader 在 Editor 目录里，编辑器下 Shader.Find 认得到；
+			// 找不到再按资产路径捞一次，覆盖包被放进 Assets/ 的安装方式
+			Shader shader = Shader.Find(kUvDebugShader);
+			return shader != null ? shader : LoadAsset<Shader>(kUvDebugShaderPath, "ShaderBakeUVDebug");
+		}
+
+		/// <summary> 把这张 UV 图的读法写在面片栏里；开关灭掉就收起来，不然会一直占着一行 </summary>
+		private void UpdateUvCheckNote(bool visible)
+		{
+			Label note = rootVisualElement.Q<Label>("uvcheck-note");
+			if (note == null)
+				return;
+			note.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
+			if (!visible)
+				return;
+			note.text = "UV 视图：红 = U，绿 = V。一格四角该是 黑(0,0) 红(1,0) 绿(0,1) 黄(1,1)；"
+			            + "整数 UV 处压暗，每格色相不同，能数出这是第几格。画面若有镜像，红绿会互换。";
+		}
+
 		private void UpdateSizeReadout()
 		{
 			if (m_StatusSize != null)
@@ -1182,11 +1273,13 @@ namespace XericUI.ShaderBake.Editor
 		{
 			// 顶点数只在状态栏出现：它决定细分够不够用，但不值得占一行界面
 			Mesh mesh = m_Renderer != null ? m_Renderer.geometry : null;
+			if (isUvView && m_Override.geometry != null)
+				mesh = m_Override.geometry;
 			if (mesh == null || m_StatusMessage == null)
 				return;
 			if (m_StatusMessage.text.StartsWith("导出") || m_StatusMessage.text.StartsWith("参数已改"))
 				return;
-			m_StatusMessage.text = "已渲染 · " + mesh.vertexCount + " 顶点" + CoverageHint();
+			m_StatusMessage.text = (isUvView ? "UV 视图 · " : "已渲染 · ") + mesh.vertexCount + " 顶点" + CoverageHint();
 		}
 
 		/// <summary> 状态栏的覆盖率后缀：把"看着像没渲染"拆成"没画出来"和"画出来但是透明的" </summary>
@@ -1194,9 +1287,20 @@ namespace XericUI.ShaderBake.Editor
 		{
 			if (m_LastCoverage < 0f)
 				return string.Empty;
+			// UV 视图那张图 alpha 恒为 1，这里的占比量的就是"面片盖住了多少画面"，
+			// 和透明不透明没关系——用它一眼看出是相机没框住，还是 UV 有问题
+			if (isUvView)
+				return m_LastCoverage <= 0.001f ? " · 画面全空，面片不在视锥里"
+				                                : " · 面片盖住画面 " + Mathf.RoundToInt(m_LastCoverage * 100f) + "%";
 			if (m_LastCoverage <= 0.001f)
 				return " · 全透明，一个像素都没画出";
 			return " · 不透明 " + Mathf.RoundToInt(m_LastCoverage * 100f) + "%";
+		}
+
+		/// <summary> 屏幕上现在放的是不是 UV 检查那张图 </summary>
+		private bool isUvView
+		{
+			get { return m_UvCheckToggle != null && m_UvCheckToggle.value; }
 		}
 
 		private void SetStatus(string message)
@@ -1218,6 +1322,13 @@ namespace XericUI.ShaderBake.Editor
 				bool checker = EditorPrefs.GetBool(kPrefChecker, true);
 				m_CheckerToggle.SetValueWithoutNotify(checker);
 				if (m_Preview != null) m_Preview.SetCheckerVisible(checker);
+			}
+			if (m_UvCheckToggle != null)
+			{
+				// 开机默认关：这是排查用的视图，不该下次打开窗口还挡着真实结果
+				bool uvCheck = EditorPrefs.GetBool(kPrefUvCheck, false);
+				m_UvCheckToggle.SetValueWithoutNotify(uvCheck);
+				UpdateUvCheckNote(uvCheck);
 			}
 			if (m_DetailPane != null)
 				m_DetailPane.style.width = EditorPrefs.GetFloat(kPrefDetailWidth, kDefaultDetailWidth);
@@ -1248,6 +1359,8 @@ namespace XericUI.ShaderBake.Editor
 				EditorPrefs.SetBool(kPrefAutoRefresh, m_AutoRefreshToggle.value);
 			if (m_CheckerToggle != null)
 				EditorPrefs.SetBool(kPrefChecker, m_CheckerToggle.value);
+			if (m_UvCheckToggle != null)
+				EditorPrefs.SetBool(kPrefUvCheck, m_UvCheckToggle.value);
 			if (m_DetailPane != null && m_DetailPane.resolvedStyle.width > 1f)
 				EditorPrefs.SetFloat(kPrefDetailWidth, m_DetailPane.resolvedStyle.width);
 			EditorPrefs.SetString(kPrefSource, SourceAssetPath() ?? string.Empty);
