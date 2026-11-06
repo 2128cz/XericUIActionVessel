@@ -59,8 +59,9 @@ Shader "Hidden/XericUI/ShaderBake/Debug View"
 			// 整数 UV 边界压暗：格与格之间、UV 单位边界都显出来
 			float EdgeMask(float2 f)
 			{
-				float line = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
-				return lerp(0.3, 1.0, saturate(line * _LineThickness));
+				// 变量别叫 line：HLSL 把它当保留字，fxc 直接报"unexpected token 'line'"
+				float edge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+				return lerp(0.3, 1.0, saturate(edge * _LineThickness));
 			}
 
 			v2f vert(appdata v)
