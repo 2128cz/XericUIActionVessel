@@ -154,6 +154,7 @@
                             <xer:IntegerField name="surf-submesh" label="SubMesh" class="field-full" />
                             <ui:Toggle name="surf-normalize" label="适配尺寸" class="field-toggle" />
                             <ui:Toggle name="surf-uv-st" label="写 _MainTex_ST" class="field-toggle" />
+                            <ui:Toggle name="surf-double-sided" label="双面绘制" class="field-toggle" />
                             <ui:VisualElement class="field-row">
                                 <ui:Button name="surf-reset" text="面片归位" class="field-half" />
                                 <ui:Button name="surf-pick-scene" text="取选中物体" class="field-half" />
@@ -190,7 +191,12 @@
                                 <xer:FloatField name="cam-rot-y" label="Y" class="field-third" />
                                 <xer:FloatField name="cam-rot-z" label="Z" class="field-third" />
                             </ui:VisualElement>
-                            <ui:Button name="cam-fit" text="框住面片" class="field-full" />
+                            <ui:VisualElement class="field-row">
+                                <ui:Button name="cam-fit" text="框住面片" class="field-half" />
+                                <ui:Button name="cam-selftest" text="管线自检" class="field-half" />
+                            </ui:VisualElement>
+                            <ui:Label name="selftest-note" class="field-note"
+                                      text="自检：用不依赖贴图与光照的内置纯色 shader 按同一套矩阵画一次，用来分清是渲染管线的问题还是被测 shader 本身的问题" />
                         </ui:VisualElement>
                     </ui:VisualElement>
 

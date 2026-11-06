@@ -38,6 +38,10 @@ namespace XericUI.ShaderBake.Editor
 		private Vector2 m_DragStart;
 		private Vector2 m_ScrollStart;
 
+		/// <summary> 上一次渲染的不透明像素占比，-1 = 还没测过 </summary>
+		private float m_CoverageRatio = -1f;
+		private Color m_CoverageColor = Color.clear;
+
 		/// <summary> 当前缩放倍率（1 = 一个像素对应屏幕一个点） </summary>
 		public float zoom { get { return m_Zoom; } }
 
@@ -137,9 +141,21 @@ namespace XericUI.ShaderBake.Editor
 				m_FaceOverlayLabel.text = label;
 		}
 
+		/// <summary>
+		/// 报告这次结果里有多少像素不是全透明。看图时最先要确认的就是"到底画没画出来"，
+		/// 而棋盘格背景会让"没画"和"画了个透明的"看起来完全一样。
+		/// </summary>
+		public void SetCoverage(float opaqueRatio, Color averageColor)
+		{
+			m_CoverageRatio = opaqueRatio;
+			m_CoverageColor = averageColor;
+			UpdateReadout();
+		}
+
 		public void Clear()
 		{
 			m_PixelSize = Vector2Int.zero;
+			m_CoverageRatio = -1f;
 			m_Image.style.backgroundImage = new StyleBackground(StyleKeyword.None);
 			UpdateReadout();
 		}
@@ -187,7 +203,21 @@ namespace XericUI.ShaderBake.Editor
 				return;
 			}
 			m_Readout.text = m_PixelSize.x + " × " + m_PixelSize.y + " px    " +
-			                 (m_Zoom * 100f).ToString("0.#") + "%";
+			                 (m_Zoom * 100f).ToString("0.#") + "%" + CoverageText();
+			// 全透明是"这次什么都没画出来"的信号，值得比别的读数更抢眼一点
+			m_Readout.style.color = new StyleColor(m_PixelSize.x > 0 && m_CoverageRatio <= 0.001f
+				? new Color(0.98f, 0.51f, 0.41f)
+				: new Color(0.86f, 0.86f, 0.86f));
+		}
+
+		/// <summary> 覆盖率后缀；没测过就不占字数 </summary>
+		private string CoverageText()
+		{
+			if (m_CoverageRatio < 0f)
+				return string.Empty;
+			if (m_CoverageRatio <= 0.001f)
+				return "    全透明（没画出像素）";
+			return "    不透明 " + Mathf.RoundToInt(m_CoverageRatio * 100f) + "%";
 		}
 
 		private void OnViewportGeometry(GeometryChangedEvent evt)

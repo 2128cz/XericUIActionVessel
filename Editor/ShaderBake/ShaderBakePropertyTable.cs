@@ -140,6 +140,49 @@ namespace XericUI.ShaderBake.Editor
 			m_Container.Clear();
 		}
 
+		/// <summary>
+		/// 修一处脚本造材质的老坑：贴图属性的 Tiling 为 0 时，shader 里的 <c>uv * _MainTex_ST</c>
+		/// 会把四个顶点全乘成同一个点——整片只剩一个颜色，看上去就像"UV 没设置"。
+		/// 只动这张临时副本，顺手把"没指定贴图"的数量数出来给界面当提示。
+		/// </summary>
+		public static string RepairTextureScale(Shader shader, Material material)
+		{
+			if (shader == null || material == null)
+				return string.Empty;
+
+			int normalized = 0;
+			int missing = 0;
+			int count = ShaderUtil.GetPropertyCount(shader);
+			for (int i = 0; i < count; i++)
+			{
+				if ((ShaderPropertyType)(int)ShaderUtil.GetPropertyType(shader, i) != ShaderPropertyType.Texture)
+					continue;
+				string name = ShaderUtil.GetPropertyName(shader, i);
+				if (material.GetTexture(name) == null)
+					missing++;
+				string scaleOffset = name + "_ST";
+				if (!material.HasProperty(scaleOffset))
+					continue;
+				Vector4 st = material.GetVector(scaleOffset);
+				if (st.x != 0f && st.y != 0f)
+					continue;
+				material.SetVector(scaleOffset, new Vector4(
+					st.x == 0f ? 1f : st.x, st.y == 0f ? 1f : st.y, st.z, st.w));
+				normalized++;
+			}
+
+			var note = new System.Text.StringBuilder();
+			if (normalized > 0)
+				note.Append(normalized + " 项贴图 Tiling 为 0，已归一为 1");
+			if (missing > 0)
+			{
+				if (note.Length > 0)
+					note.Append(" · ");
+				note.Append(missing + " 项贴图未指定（采样为空，渲出来会是透明）");
+			}
+			return note.ToString();
+		}
+
 		// ── 建行 ────────────────────────────────────────────────
 
 		private Row CreateRow(int propIndex)

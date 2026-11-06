@@ -69,6 +69,12 @@ namespace XericUI.ShaderBake.Editor
 
 		private bool m_RenderPending;
 		private double m_LastRenderMs = -1;
+		/// <summary> 上一次结果的不透明像素占比，-1 = 没测出来 </summary>
+		private float m_LastCoverage = -1f;
+		/// <summary> 管线自检的探针（活着才能让自检那张图继续显示） </summary>
+		private ShaderBakeRenderer m_SelfTestProbe;
+		private RenderTexture m_SelfTestTarget;
+		private Material m_SelfTestMaterial;
 		private int m_SelectedFace;
 
 		[MenuItem(XericRegistrationPaths.ToolBar + "/Bake Shader As Image", false, 20)]
@@ -138,6 +144,7 @@ namespace XericUI.ShaderBake.Editor
 			if (m_Preview != null)
 				m_Preview.Dispose();
 			// 临时材质一定要还：它挂着的是 shader，不销毁就是每次开关窗口漏一份
+			ReleaseSelfTestTarget();
 			if (m_Source != null) m_Source.Dispose(true);
 			if (m_Renderer != null) m_Renderer.Dispose(true);
 			m_Source = null;
@@ -410,11 +417,16 @@ namespace XericUI.ShaderBake.Editor
 			if (m_PropertyTable == null)
 				return;
 			m_PropertyTable.SetTarget(m_Source.shader, m_Source.material);
+			string textureHint = ShaderBakePropertyTable.RepairTextureScale(m_Source.shader, m_Source.material);
 			Label note = rootVisualElement.Q<Label>("props-note");
 			if (note != null)
+			{
 				note.text = m_Source.shader == null
 					? "未指定 shader"
 					: (m_PropertyTable.rowCount + " 项可编辑属性（隐藏属性不列出）");
+				if (!string.IsNullOrEmpty(textureHint))
+					note.text += "\n" + textureHint;
+			}
 			// 只有"来源是材质"才有可写回/可回读的原资产
 			SetApplyRevertEnabled(m_Source.sourceMaterial != null);
 		}
@@ -635,10 +647,28 @@ namespace XericUI.ShaderBake.Editor
 			{
 				faceInfo.text = meshMode
 					? "外部网格不参与面片点选"
-					: "选中第 " + (m_SelectedFace + 1) + " 格：UV (" + cell.uvX + ", " + cell.uvY + ")";
+					: "选中第 " + (m_SelectedFace + 1) + " 格：UV (" + cell.uvX + ", " + cell.uvY + ")\n" +
+					  FaceCornerText(surface, cell);
 			}
 			SetFaceFieldsEnabled(!meshMode);
 			UpdateFaceOverlay();
+		}
+
+		/// <summary>
+		/// 这一格四个顶点的实际 UV 写出来。"设为 UV0" 的约定就是四角落在 (0,0)(1,0)(0,1)(1,1)，
+		/// 再乘重复、加偏移；把结果摊开显示，是不是这个范围一眼就能核对。
+		/// </summary>
+		private static string FaceCornerText(ShaderBakeSurfaceSettings surface, ShaderBakeFaceCell cell)
+		{
+			Vector2 min = Vector2.Scale(new Vector2(cell.uvX, cell.uvY), surface.uvTiling) + surface.uvOffset;
+			Vector2 max = Vector2.Scale(new Vector2(cell.uvX + 1, cell.uvY + 1), surface.uvTiling) + surface.uvOffset;
+			return "四角 UV：(" + Corners(min.x, max.x) + ", " + Corners(min.y, max.y) + ")";
+		}
+
+		/// <summary> 一个轴的两个角值，左下在前 </summary>
+		private static string Corners(float low, float high)
+		{
+			return low.ToString("0.##") + " / " + high.ToString("0.##");
 		}
 
 		private void SetFaceFieldsEnabled(bool enabled)
@@ -708,6 +738,7 @@ namespace XericUI.ShaderBake.Editor
 			BindInt("surf-submesh", () => m_Renderer.settings.surface.meshSubMesh, v => m_Renderer.settings.surface.meshSubMesh = v);
 			BindBool("surf-normalize", () => m_Renderer.settings.surface.normalizeMeshSize, v => m_Renderer.settings.surface.normalizeMeshSize = v);
 			BindBool("surf-uv-st", () => m_Renderer.settings.surface.applyUvToMainTexST, v => m_Renderer.settings.surface.applyUvToMainTexST = v);
+			BindBool("surf-double-sided", () => m_Renderer.settings.surface.doubleSided, v => m_Renderer.settings.surface.doubleSided = v);
 
 			ObjectField meshField = rootVisualElement.Q<ObjectField>("surf-mesh");
 			if (meshField != null)
@@ -821,6 +852,7 @@ namespace XericUI.ShaderBake.Editor
 			BindFloat("cam-rot-y", () => m_Renderer.settings.camera.eulerAngles.y, v => SetCamRot(m_Renderer.settings.camera.eulerAngles.x, v, m_Renderer.settings.camera.eulerAngles.z));
 			BindFloat("cam-rot-z", () => m_Renderer.settings.camera.eulerAngles.z, v => SetCamRot(m_Renderer.settings.camera.eulerAngles.x, m_Renderer.settings.camera.eulerAngles.y, v));
 			Click("cam-fit", FitCamera);
+			Click("cam-selftest", RunPipelineSelfTest);
 		}
 
 		private void SetCamPos(float x, float y, float z) { m_Renderer.settings.camera.position = new Vector3(x, y, z); }
@@ -831,6 +863,93 @@ namespace XericUI.ShaderBake.Editor
 			m_Renderer.FitCameraToGeometry();
 			Commit();
 			SetStatus("相机已框住面片");
+		}
+
+		/// <summary>
+		/// 用一个不吃贴图、不吃光照、不吃 UV 的内置纯色 shader，按<b>同一套</b>面片/相机/pass 再画一次。
+		/// 画得出来就说明管线是通的，画面空的原因在被测 shader 那边（贴图没指定、pass、混合模式）；
+		/// 画不出来才是这里的问题（相机框不住、面片尺寸、pass 下标）。
+		/// </summary>
+		private void RunPipelineSelfTest()
+		{
+			Shader solid = Shader.Find("Unlit/Color");
+			if (solid == null)
+			{
+				SetSelfTestNote("自检不可用：这个工程里找不到 Unlit/Color");
+				return;
+			}
+			ReleaseSelfTestTarget();
+
+			var probeMaterial = new Material(solid)
+			{
+				name = "ShaderBakeSelfTest",
+				hideFlags = HideFlags.DontSave
+			};
+			probeMaterial.color = new Color(0.25f, 0.85f, 0.5f);
+
+			float coverage = -1f;
+			string failure = string.Empty;
+			// settings 是共享引用：自检必须和被测走同一套面片/相机/pass，才有控制变量的意义。
+			// 探针还要活着：它一 Dispose 就把那张 RT 一起销毁了，而自检结果正是那张图。
+			// 下一次正常渲染或关窗口时由 ReleaseSelfTestTarget 收掉。
+			m_SelfTestMaterial = probeMaterial;
+			m_SelfTestProbe = new ShaderBakeRenderer { settings = m_Renderer.settings, material = probeMaterial };
+			try
+			{
+				RenderTexture rt = m_SelfTestProbe.Render();
+				if (rt == null)
+					failure = m_SelfTestProbe.lastError;
+				else
+				{
+					Color average;
+					if (ShaderBakeReadback.MeasureCoverage(rt, out coverage, out average))
+					{
+						// 把纯色结果直接显示出来：数字说有像素，眼睛说看到什么，两边对上才算过
+						m_SelfTestTarget = rt;
+						m_Preview.SetResult(rt, m_Renderer.settings.output.size);
+						m_Preview.SetCoverage(coverage, average);
+					}
+				}
+			}
+			catch (Exception evt)
+			{
+				failure = evt.Message;
+			}
+
+			if (!string.IsNullOrEmpty(failure))
+			{
+				SetSelfTestNote("自检失败：" + failure);
+				return;
+			}
+			if (coverage <= 0.001f)
+			{
+				SetSelfTestNote("自检未画出任何像素 → 问题在渲染管线本身。先按「框住面片」，再看面片宽高、pass 下标与翻转 Y");
+				SetStatus("管线自检：空画面");
+				return;
+			}
+			SetSelfTestNote("自检通过：纯色面片不透明 " + Mathf.RoundToInt(coverage * 100f) +
+			               "%。管线是通的，画面空是被测 shader 自己的事（贴图、pass、混合模式、需要光照）");
+			SetStatus("管线自检：正常");
+		}
+
+		private void SetSelfTestNote(string text)
+		{
+			Label note = rootVisualElement.Q<Label>("selftest-note");
+			if (note != null)
+				note.text = text;
+		}
+
+		private void ReleaseSelfTestTarget()
+		{
+			// 探针自己会回收那张 RT，所以先释放探针、再清引用，别两边各销毁一次
+			if (m_SelfTestProbe != null)
+			{
+				m_SelfTestProbe.Dispose(true);
+				m_SelfTestProbe = null;
+				m_SelfTestTarget = null;
+			}
+			ShaderBakeRenderer.ReleaseTempObject(m_SelfTestMaterial, true);
+			m_SelfTestMaterial = null;
 		}
 
 		// ── 右侧细节栏宽度 ──────────────────────────────────────
@@ -1004,6 +1123,8 @@ namespace XericUI.ShaderBake.Editor
 			m_RenderPending = false;
 			if (m_Renderer == null || m_Preview == null)
 				return;
+			// 真实结果回来了，自检那张临时图就该退场
+			ReleaseSelfTestTarget();
 
 			double start = EditorApplication.timeSinceStartup;
 			RenderTexture rt = m_Renderer.Render();
@@ -1018,6 +1139,11 @@ namespace XericUI.ShaderBake.Editor
 			}
 
 			m_Preview.SetResult(rt, m_Renderer.settings.output.size);
+			float coverage;
+			Color average;
+			m_LastCoverage = ShaderBakeReadback.MeasureCoverage(rt, out coverage, out average) ? coverage : -1f;
+			if (m_LastCoverage >= 0f)
+				m_Preview.SetCoverage(m_LastCoverage, average);
 			UpdateFaceOverlay();
 			UpdateSizeReadout();
 			if (string.IsNullOrEmpty(m_StatusMessage.text) || m_StatusMessage.text.StartsWith("导出"))
@@ -1042,7 +1168,17 @@ namespace XericUI.ShaderBake.Editor
 				return;
 			if (m_StatusMessage.text.StartsWith("导出") || m_StatusMessage.text.StartsWith("参数已改"))
 				return;
-			m_StatusMessage.text = "已渲染 · " + mesh.vertexCount + " 顶点";
+			m_StatusMessage.text = "已渲染 · " + mesh.vertexCount + " 顶点" + CoverageHint();
+		}
+
+		/// <summary> 状态栏的覆盖率后缀：把"看着像没渲染"拆成"没画出来"和"画出来但是透明的" </summary>
+		private string CoverageHint()
+		{
+			if (m_LastCoverage < 0f)
+				return string.Empty;
+			if (m_LastCoverage <= 0.001f)
+				return " · 全透明，一个像素都没画出";
+			return " · 不透明 " + Mathf.RoundToInt(m_LastCoverage * 100f) + "%";
 		}
 
 		private void SetStatus(string message)
