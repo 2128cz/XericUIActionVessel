@@ -76,12 +76,23 @@ namespace XericUI.ShaderBake
 			if (radius < 0.0001f) radius = 0.0001f;
 			if (aspect <= 0f) aspect = 1f;
 
+			// 沿当前朝向平移，不改朝向——转着找角度是用户的事，这里只负责"把它挪到正中间、离远一点"
+			Vector3 dir = Quaternion.Euler(eulerAngles) * Vector3.forward;
+
 			if (orthographic)
 			{
 				// 横向不够宽时以横向为准：半高 = 半宽 / aspect
 				float halfFromHeight = extents.y;
 				float halfFromWidth = extents.x / aspect;
 				orthographicSize = Mathf.Max(halfFromHeight, halfFromWidth) * Mathf.Max(padding, 1f);
+
+				// 正交也得把目标挪到视线轴上：只改半高是"缩放到贴着边"，
+				// 目标偏在一边时照样一半在画面外——按格框取时最明显，因为那一格本来就不在网格正中。
+				// 沿视线那段距离照原样保留，所以本来就在目标平面前面的不会被吸到平面上去
+				float depthAlongView = Vector3.Dot(bounds.center - position, dir);
+				if (Mathf.Abs(depthAlongView) < 0.0001f)
+					depthAlongView = radius;
+				position = bounds.center - dir * depthAlongView;
 			}
 			else
 			{
@@ -91,8 +102,6 @@ namespace XericUI.ShaderBake
 				float neededHalfHeight = Mathf.Max(verticalFit, horizontalFit) * Mathf.Max(padding, 1f);
 				float distance = radius + neededHalfHeight / Mathf.Max(Mathf.Tan(halfFov), 0.0001f);
 
-				// 沿当前朝向平移，不改朝向——转着找角度是用户的事，这里只负责"离远一点"
-				Vector3 dir = Quaternion.Euler(eulerAngles) * Vector3.forward;
 				position = bounds.center - dir * Mathf.Max(distance, radius + 0.0001f);
 			}
 
