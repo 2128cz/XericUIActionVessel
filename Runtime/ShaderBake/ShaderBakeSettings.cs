@@ -37,6 +37,7 @@ namespace XericUI.ShaderBake
 		{
 			output.Clamp();
 			surface.Clamp();
+			camera.Clamp();
 		}
 
 		/// <summary> 复制一份（编辑器窗口拿它当工作副本，改坏了不至于污染存下来的那份） </summary>

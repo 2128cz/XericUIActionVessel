@@ -101,6 +101,19 @@ namespace XericUI.ShaderBake
 			farClipPlane = distanceFromCamera + radius * 3f;
 		}
 
+		/// <summary>
+		/// 收拢数值。负数在这组参数里没有任何含义，但数字框拦不住一个负号，而它造成的后果是
+		/// "渲染成功、画面全空"：半高为负时投影矩阵被钳成一条线，什么都框不住，还不报任何错。
+		/// 取绝对值而不是就地归零，是因为负号多半是手滑，量级本身是用户想要的。
+		/// </summary>
+		public void Clamp()
+		{
+			orthographicSize = Mathf.Max(Mathf.Abs(orthographicSize), 0.0001f);
+			fieldOfView = Mathf.Clamp(Mathf.Abs(fieldOfView), 1f, 179f);
+			nearClipPlane = Mathf.Max(Mathf.Abs(nearClipPlane), 0.0001f);
+			farClipPlane = Mathf.Max(Mathf.Abs(farClipPlane), nearClipPlane + 0.0001f);
+		}
+
 		/// <summary> 摄像机指纹：变了不需要重建网格，只需要重画 </summary>
 		public string GetCameraSignature()
 		{
