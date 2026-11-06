@@ -39,6 +39,8 @@
                         <ui:VisualElement name="preview-frame" class="preview-frame">
                             <ui:Image name="preview-checker" class="preview-checker" />
                             <ui:Image name="preview-image" class="preview-image" />
+                            <!-- 分格线与每格的 UV 编号：位置按百分比算，缩放时不用重排 -->
+                            <ui:VisualElement name="grid-overlay" class="grid-overlay" />
                             <!-- 选中面片的高亮：位置按百分比算，缩放时不用重排 -->
                             <ui:VisualElement name="face-overlay" class="face-overlay">
                                 <ui:Label name="face-overlay-label" class="face-overlay-label" text="UV (0,0)" />

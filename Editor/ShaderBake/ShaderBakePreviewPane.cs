@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -22,6 +23,14 @@ namespace XericUI.ShaderBake.Editor
 		private readonly Label m_Readout;
 		private readonly VisualElement m_FaceOverlay;
 		private readonly Label m_FaceOverlayLabel;
+		private readonly VisualElement m_GridOverlay;
+
+		// 分格层：线的条数只随行列数变，编号只随格子数变，所以按数量复用，不每帧重建
+		private readonly List<VisualElement> m_GridVerticals = new List<VisualElement>();
+		private readonly List<VisualElement> m_GridHorizontals = new List<VisualElement>();
+		private readonly List<Label> m_GridLabels = new List<Label>();
+		private int m_GridColumns = -1;
+		private int m_GridRows = -1;
 
 		/// <summary> 在图上点了一下（不是拖拽）。参数是 0~1、左上为原点的坐标 </summary>
 		public event Action<Vector2> faceClicked;
@@ -60,6 +69,9 @@ namespace XericUI.ShaderBake.Editor
 			m_FaceOverlayLabel = root.Q<Label>("face-overlay-label");
 			if (m_FaceOverlay != null)
 				m_FaceOverlay.pickingMode = PickingMode.Ignore;
+			m_GridOverlay = root.Q<VisualElement>("grid-overlay");
+			if (m_GridOverlay != null)
+				m_GridOverlay.pickingMode = PickingMode.Ignore;
 
 			if (m_Viewport == null || m_Frame == null || m_Image == null)
 				throw new InvalidOperationException("BakeShaderWindow.uxml 缺少预览区节点");
@@ -138,7 +150,141 @@ namespace XericUI.ShaderBake.Editor
 			m_FaceOverlay.style.width = Length.Percent(Mathf.Max(max.x - min.x, 0.002f) * 100f);
 			m_FaceOverlay.style.height = Length.Percent(Mathf.Max(max.y - min.y, 0.002f) * 100f);
 			if (m_FaceOverlayLabel != null)
+			{
+				// 分了格的时候每格都有自己的编号标签，选中框只留框，免得同一格里两行字叠着
+				m_FaceOverlayLabel.style.display = string.IsNullOrEmpty(label) ? DisplayStyle.None : DisplayStyle.Flex;
 				m_FaceOverlayLabel.text = label;
+			}
+		}
+
+		/// <summary> 一格在预览图里的位置（0~1，左上为原点）和它该显示的 UV 编号 </summary>
+		public struct FaceCellRect
+		{
+			public Vector2 min;
+			public Vector2 max;
+			public string label;
+		}
+
+		/// <summary>
+		/// 画分格线和每格的 UV 编号，回答"这条线右边/下边那一片是 UV 几"。
+		///
+		/// <para>只有一格时不画：这时右侧面片区已经写着 UV，再叠一层只会挡画面。
+		/// 位置全用百分比，所以缩放、拖动滚动条都不用重算。</para>
+		/// </summary>
+		public void SetFaceGrid(IList<FaceCellRect> cells, int columns, int rows)
+		{
+			if (m_GridOverlay == null)
+				return;
+			if (cells == null || cells.Count < 2)
+			{
+				m_GridOverlay.style.display = DisplayStyle.None;
+				return;
+			}
+
+			m_GridOverlay.style.display = DisplayStyle.Flex;
+			EnsureGridLines(columns, rows);
+
+			float left = float.MaxValue, top = float.MaxValue;
+			float right = float.MinValue, bottom = float.MinValue;
+			for (int i = 0; i < cells.Count; i++)
+			{
+				left = Mathf.Min(left, cells[i].min.x);
+				top = Mathf.Min(top, cells[i].min.y);
+				right = Mathf.Max(right, cells[i].max.x);
+				bottom = Mathf.Max(bottom, cells[i].max.y);
+			}
+			left = Mathf.Clamp01(left);
+			top = Mathf.Clamp01(top);
+			right = Mathf.Clamp01(right);
+			bottom = Mathf.Clamp01(bottom);
+
+			// 线按整个网格的范围等分。格是投影后的四边形，这里用的是它的视口包围盒，
+			// 正交正视时两者完全重合；斜看时线会略微跑到格边外，但仍然对得上编号
+			for (int i = 0; i < m_GridVerticals.Count; i++)
+			{
+				VisualElement line = m_GridVerticals[i];
+				line.style.left = Length.Percent(Mathf.Lerp(left, right, (float)i / Mathf.Max(columns, 1)) * 100f);
+				line.style.top = Length.Percent(top * 100f);
+				line.style.width = 1f;
+				line.style.height = Length.Percent((bottom - top) * 100f);
+			}
+			for (int j = 0; j < m_GridHorizontals.Count; j++)
+			{
+				VisualElement line = m_GridHorizontals[j];
+				line.style.left = Length.Percent(left * 100f);
+				line.style.top = Length.Percent(Mathf.Lerp(top, bottom, (float)j / Mathf.Max(rows, 1)) * 100f);
+				line.style.width = Length.Percent((right - left) * 100f);
+				line.style.height = 1f;
+			}
+
+			EnsureGridLabels(cells.Count);
+			// 一格在屏幕上还不到一个编号宽/高时，编号只会互相压着，索性不画。
+			// 布局还没算出来（宽度为 0）时不拦，等下一次重画再按真实尺寸决定
+			float frameWidth = m_Frame != null ? m_Frame.resolvedStyle.width : 0f;
+			float frameHeight = m_Frame != null ? m_Frame.resolvedStyle.height : 0f;
+			bool canMeasure = frameWidth > 1f && frameHeight > 1f;
+			for (int i = 0; i < m_GridLabels.Count; i++)
+			{
+				Label label = m_GridLabels[i];
+				bool used = i < cells.Count;
+				if (used && canMeasure)
+				{
+					float cellWidth = (cells[i].max.x - cells[i].min.x) * frameWidth;
+					float cellHeight = (cells[i].max.y - cells[i].min.y) * frameHeight;
+					used = cellWidth >= 36f && cellHeight >= 16f;
+				}
+				label.style.display = used ? DisplayStyle.Flex : DisplayStyle.None;
+				if (!used)
+					continue;
+				label.text = cells[i].label;
+				label.style.left = Length.Percent(Mathf.Clamp01(cells[i].min.x) * 100f);
+				label.style.top = Length.Percent(Mathf.Clamp01(cells[i].min.y) * 100f);
+			}
+		}
+
+		private void EnsureGridLines(int columns, int rows)
+		{
+			if (m_GridColumns == columns && m_GridRows == rows)
+				return;
+			m_GridColumns = columns;
+			m_GridRows = rows;
+
+			for (int i = 0; i < m_GridVerticals.Count; i++)
+				m_GridVerticals[i].RemoveFromHierarchy();
+			for (int i = 0; i < m_GridHorizontals.Count; i++)
+				m_GridHorizontals[i].RemoveFromHierarchy();
+			m_GridVerticals.Clear();
+			m_GridHorizontals.Clear();
+
+			// 列数 + 1 条竖线、行数 + 1 条横线：把外框也算进去，否则最外一圈没有边
+			for (int i = 0; i <= columns; i++)
+				m_GridVerticals.Add(CreateGridLine());
+			for (int j = 0; j <= rows; j++)
+				m_GridHorizontals.Add(CreateGridLine());
+
+			// 新加的线在最后，会把已有的编号压住；改完行列数把编号重新提到最上层
+			for (int i = 0; i < m_GridLabels.Count; i++)
+				m_GridLabels[i].BringToFront();
+		}
+
+		private VisualElement CreateGridLine()
+		{
+			var line = new VisualElement { pickingMode = PickingMode.Ignore };
+			line.AddToClassList("grid-line");
+			m_GridOverlay.Add(line);
+			return line;
+		}
+
+		private void EnsureGridLabels(int count)
+		{
+			while (m_GridLabels.Count < count)
+			{
+				var label = new Label { pickingMode = PickingMode.Ignore };
+				label.AddToClassList("grid-cell-label");
+				// 后加的在上面：编号要压在线之上，不能被 1px 的线切过
+				m_GridOverlay.Add(label);
+				m_GridLabels.Add(label);
+			}
 		}
 
 		/// <summary>

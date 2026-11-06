@@ -96,12 +96,39 @@
     opacity: 0.9;
 }
 
+/* 分格线浮在图上：1px 白线 + 每格一个 UV 编号，都用百分比定位，缩放/滚动不用重排 */
+.grid-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    /* 贴边的编号宁可被裁掉，也不该糊到图上之外 */
+    overflow: hidden;
+}
+
+.grid-line {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.38);
+}
+
+.grid-cell-label {
+    position: absolute;
+    font-size: 10px;
+    /* 白字压在半透明黑底上：浅色贴图上白字会糊掉，垫一层才读得出来 */
+    color: rgba(255, 255, 255, 0.88);
+    background-color: rgba(0, 0, 0, 0.38);
+    padding: 0 4px;
+    border-radius: 2px;
+    -unity-text-align: middle-left;
+}
+
 .preview-readout {
     position: absolute;
     left: 8px;
     bottom: 8px;
-    font-size: 11px;
-    color: rgb(220, 220, 220);
+    font-size: 11px;    color: rgb(220, 220, 220);
     background-color: rgba(0, 0, 0, 0.45);
     padding: 1px 6px;
     border-radius: 3px;

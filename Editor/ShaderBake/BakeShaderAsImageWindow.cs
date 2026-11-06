@@ -95,6 +95,8 @@ namespace XericUI.ShaderBake.Editor
 		/// <summary> 测试视图那张材质：_Mode 决定画哪种图，建一次反复用 </summary>
 		private Material m_DebugMaterial;
 		private int m_SelectedFace;
+		/// <summary> 给预览面板的分格数据：每帧重填，避免按格新建列表 </summary>
+		private readonly List<ShaderBakePreviewPane.FaceCellRect> m_GridCells = new List<ShaderBakePreviewPane.FaceCellRect>();
 
 		/// <summary> 预览换成"量几何与 UV"的测试图。都不吃贴图、不吃光照，画不出来的原因只剩一个。
 		/// Uv/Gradient/Checker 的取值与 shader 的 _Mode 一一对应 </summary>
@@ -763,7 +765,7 @@ namespace XericUI.ShaderBake.Editor
 			if (y != null) y.SetEnabled(enabled);
 		}
 
-		/// <summary> 把选中格的屏幕框和 UV 编号贴到浏览图上 </summary>
+		/// <summary> 把选中格的屏幕框、分格线和每格的 UV 编号贴到浏览图上 </summary>
 		private void UpdateFaceOverlay()
 		{
 			if (m_Preview == null || m_Renderer == null)
@@ -772,17 +774,46 @@ namespace XericUI.ShaderBake.Editor
 			if (surface.kind == ShaderBakeSurfaceKind.Mesh && surface.sourceMesh != null)
 			{
 				m_Preview.SetFaceSelection(false, Vector2.zero, Vector2.zero, string.Empty);
+				m_Preview.SetFaceGrid(null, 0, 0);
 				return;
 			}
 
-			Vector2 min, max;
-			if (!m_Renderer.TryGetFaceViewportBounds(m_SelectedFace, out min, out max))
+			int columns = Mathf.Max(surface.gridColumns, 1);
+			int rows = Mathf.Max(surface.gridRows, 1);
+			m_GridCells.Clear();
+			for (int i = 0; i < columns * rows; i++)
+			{
+				Vector2 min, max;
+				ShaderBakeFaceCell cell = surface.GetFace(i);
+				if (!m_Renderer.TryGetFaceViewportBounds(i, out min, out max))
+					continue;
+				// 完全在画面外的那几格（按「选中格铺满」之后就只剩一格可见）不参与，
+				// 否则它们的包围盒会被夹成零面积，编号全挤在画面边上
+				if (max.x - min.x < 0.001f || max.y - min.y < 0.001f)
+					continue;
+				m_GridCells.Add(new ShaderBakePreviewPane.FaceCellRect
+				{
+					min = min,
+					max = max,
+					label = "U" + cell.uvX + " V" + cell.uvY
+				});
+			}
+			m_Preview.SetFaceGrid(m_GridCells, columns, rows);
+
+			Vector2 selMin, selMax;
+			if (!m_Renderer.TryGetFaceViewportBounds(m_SelectedFace, out selMin, out selMax))
 			{
 				m_Preview.SetFaceSelection(false, Vector2.zero, Vector2.zero, string.Empty);
 				return;
 			}
-			ShaderBakeFaceCell cell = surface.GetFace(m_SelectedFace);
-			m_Preview.SetFaceSelection(true, min, max, "UV (" + cell.uvX + ", " + cell.uvY + ")");
+			// 分了格就由每格的编号说明 UV，选中框只留框，不然同一格里两行字叠着
+			m_Preview.SetFaceSelection(true, selMin, selMax, columns * rows > 1 ? string.Empty : SelectedFaceLabel());
+		}
+
+		private string SelectedFaceLabel()
+		{
+			ShaderBakeFaceCell cell = SelectedFaceCell();
+			return cell == null ? string.Empty : "UV (" + cell.uvX + ", " + cell.uvY + ")";
 		}
 
 		// ── 面片 ────────────────────────────────────────────────
