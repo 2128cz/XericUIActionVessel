@@ -27,17 +27,21 @@ namespace XericUI.ShaderBake.Editor
 		private const string kUssPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/BakeShaderWindow.uss";
 		private const string kRowUxmlPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/BakeShaderPropertyRow.uxml";
 		private const string kGlobalRowUxmlPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/BakeShaderGlobalRow.uxml";
-		private const string kUvDebugShaderPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/ShaderBakeUVDebug.shader";
+		private const string kDebugViewShaderPath = "Packages/com.lrss3.xericuiactionvessel/Editor/ShaderBake/ShaderBakeDebugView.shader";
 
 		private const string kPrefSettings = "XericUI.ShaderBake.Settings";
 		private const string kPrefAutoRefresh = "XericUI.ShaderBake.AutoRefresh";
 		private const string kPrefChecker = "XericUI.ShaderBake.Checker";
-		private const string kPrefUvCheck = "XericUI.ShaderBake.UvCheck";
+		private const string kPrefDebugView = "XericUI.ShaderBake.DebugView";
 		private const string kPrefDetailWidth = "XericUI.ShaderBake.DetailWidth";
 		private const string kPrefSource = "XericUI.ShaderBake.SourceAsset";
 
-		/// <summary> UV 检查视图用的那张调试 shader（Editor 目录下，见 ShaderBakeUVDebug.shader） </summary>
-		private const string kUvDebugShader = "Hidden/XericUI/ShaderBake/UV Debug";
+		/// <summary> 测试视图用的那张 shader（Editor 目录下，见 ShaderBakeDebugView.shader） </summary>
+		private const string kDebugViewShader = "Hidden/XericUI/ShaderBake/Debug View";
+
+		/// <summary> 实时预览的节拍：有焦点时跟上动画，失焦时放慢，不让一张没人看的图占着 GPU </summary>
+		private const double kLiveIntervalFocused = 1.0 / 24.0;
+		private const double kLiveIntervalBlurred = 1.0 / 6.0;
 
 		private const float kDefaultDetailWidth = 340f;
 		private static readonly string[] kAntiAliasingChoices = { "1", "2", "4", "8" };
@@ -61,9 +65,10 @@ namespace XericUI.ShaderBake.Editor
 		private ObjectField m_MaterialField;
 		private Label m_SourceNote;
 		private Button m_ExportButton;
+		private ToolbarButton m_RenderButton;
 		private ToolbarToggle m_AutoRefreshToggle;
 		private ToolbarToggle m_CheckerToggle;
-		private ToolbarToggle m_UvCheckToggle;
+		private ToolbarButton m_DebugButton;
 		private Label m_StatusMessage;
 		private Label m_StatusSize;
 		private Label m_StatusTime;
@@ -74,12 +79,36 @@ namespace XericUI.ShaderBake.Editor
 		private readonly List<Action> m_Syncers = new List<Action>();
 
 		private bool m_RenderPending;
+		/// <summary> 实时预览关着时攒下的改动：还没重画，「重新渲染」按钮上会写着这件事 </summary>
+		private bool m_PendingRefresh;
 		private double m_LastRenderMs = -1;
+		private double m_NextLiveRender;
 		/// <summary> 上一次结果的不透明像素占比，-1 = 没测出来 </summary>
 		private float m_LastCoverage = -1f;
-		/// <summary> 探针（自检 / UV 检查）活着才能让那张图继续显示；下一次正常渲染时收掉 </summary>
+		/// <summary> 探针（自检 / 测试视图）活着才能让那张图继续显示；切回真实结果时才收掉 </summary>
 		private readonly ShaderBakeOverrideRenderer m_Override = new ShaderBakeOverrideRenderer();
+		private DebugView m_DebugView = DebugView.None;
+		/// <summary> 测试视图那张材质：_Mode 决定画哪种图，建一次反复用 </summary>
+		private Material m_DebugMaterial;
 		private int m_SelectedFace;
+
+		/// <summary> 预览换成"量几何与 UV"的测试图。都不吃贴图、不吃光照，画不出来的原因只剩一个。
+		/// Uv/Gradient/Checker 的取值与 shader 的 _Mode 一一对应 </summary>
+		private enum DebugView
+		{
+			None = -1,
+			/// <summary> 红=U、绿=V，一格四角即 00/10/01/11 </summary>
+			Uv = 0,
+			/// <summary> 灰度尺：主体沿 U、顶条沿 V，每 0.1 一档，量这一格跨了多少像素 </summary>
+			Gradient = 1,
+			/// <summary> 半 UV 棋盘 + 每格色相 + 左下角红/右上角蓝，看拉伸、斜切与镜像 </summary>
+			Checker = 2,
+			/// <summary>
+			/// 内置 Unlit/Color 的一张绿面片：不吃贴图、不吃光照、不吃 UV，只回答"这套矩阵画得出东西吗"。
+			/// 取值故意离开 shader 的 _Mode 范围——它用的是另一张 shader
+			/// </summary>
+			SolidColor = 20
+		}
 
 		[MenuItem(XericRegistrationPaths.ToolBar + "/Bake Shader As Image", false, 20)]
 		private static void OpenFromMenu()
@@ -136,10 +165,33 @@ namespace XericUI.ShaderBake.Editor
 			AdoptSelectionIfEmpty();
 			AssignSource(m_Source.sourceShader, m_Source.sourceMaterial, true);
 			DoRender();
+
+			// 实时预览的节拍由这里驱动，域重载/关窗口时在 OnDisable 里摘掉
+			EditorApplication.update -= OnEditorUpdate;
+			EditorApplication.update += OnEditorUpdate;
+		}
+
+		/// <summary>
+		/// 编辑器心跳：实时预览开着就按固定节拍重画，不管有没有"改动事件"。
+		///
+		/// <para>之所以不能只等控件回调：数字框是延迟提交的，拖标签刻度、在别处改材质、
+		/// shader 里用 <c>_Time</c> 挪顶点，这些都不会发 ChangeEvent——表现就是"界面不跟着刷新"。
+		/// 关掉实时预览时这里什么都不做，改动只标记成待刷新。</para>
+		/// </summary>
+		private void OnEditorUpdate()
+		{
+			if (m_Renderer == null || m_Preview == null || m_AutoRefreshToggle == null || !m_AutoRefreshToggle.value)
+				return;
+			double now = EditorApplication.timeSinceStartup;
+			if (now < m_NextLiveRender)
+				return;
+			m_NextLiveRender = now + (hasFocus ? kLiveIntervalFocused : kLiveIntervalBlurred);
+			DoRender(true);
 		}
 
 		private void OnDisable()
 		{
+			EditorApplication.update -= OnEditorUpdate;
 			SavePrefs();
 			if (m_Exporter != null)
 				m_Exporter.settingsReplaced -= OnSettingsReplaced;
@@ -147,9 +199,9 @@ namespace XericUI.ShaderBake.Editor
 				m_PropertyTable.Dispose();
 			if (m_Preview != null)
 				m_Preview.Dispose();
-			// 探针那张 RT 归探针所有，先收探针
+			// 探针那张 RT 归探针所有，先收探针；测试视图材质挂着 shader，不销毁就是每次开关窗口漏一份
 			m_Override.Release();
-			// 临时材质一定要还：它挂着的是 shader，不销毁就是每次开关窗口漏一份
+			ReleaseDebugMaterial();
 			if (m_Source != null) m_Source.Dispose(true);
 			if (m_Renderer != null) m_Renderer.Dispose(true);
 			m_Source = null;
@@ -183,7 +235,7 @@ namespace XericUI.ShaderBake.Editor
 			m_ExportButton = Require<ToolbarButton>("export-menu");
 			m_AutoRefreshToggle = Require<ToolbarToggle>("auto-refresh");
 			m_CheckerToggle = Require<ToolbarToggle>("show-checker");
-			m_UvCheckToggle = Require<ToolbarToggle>("uv-check");
+			m_DebugButton = Require<ToolbarButton>("debug-view");
 			m_StatusMessage = Require<Label>("status-message");
 			m_StatusSize = Require<Label>("status-size");
 			m_StatusTime = Require<Label>("status-time");
@@ -255,10 +307,23 @@ namespace XericUI.ShaderBake.Editor
 
 			ToolbarButton render = rootVisualElement.Q<ToolbarButton>("render-now");
 			if (render != null)
+			{
+				m_RenderButton = render;
 				render.clicked += DoRender;
+			}
 
 			if (m_AutoRefreshToggle != null)
-				m_AutoRefreshToggle.RegisterValueChangedCallback(evt => { SavePrefs(); });
+			{
+				m_AutoRefreshToggle.RegisterValueChangedCallback(evt =>
+				{
+					// 这个勾就是"要不要一直重画"的总开关：打开时把攒下的待刷新立刻补上，
+					// 关掉时不再重画，只把它记成待刷新显示在「重新渲染」上
+					UpdateRenderButton();
+					if (evt.newValue && m_PendingRefresh)
+						DoRender();
+					SavePrefs();
+				});
+			}
 
 			if (m_CheckerToggle != null)
 				m_CheckerToggle.RegisterValueChangedCallback(evt =>
@@ -267,13 +332,8 @@ namespace XericUI.ShaderBake.Editor
 					SavePrefs();
 				});
 
-			if (m_UvCheckToggle != null)
-				m_UvCheckToggle.RegisterValueChangedCallback(evt =>
-				{
-					// 换的是"看哪张图"，不是参数，所以立刻重画而不走延迟
-					UpdateUvCheckNote(evt.newValue);
-					DoRender();
-				});
+			if (m_DebugButton != null)
+				m_DebugButton.clicked += ShowDebugMenu;
 
 			Click("zoom-in", () => { if (m_Preview != null) { m_Preview.autoFit = false; m_Preview.ZoomIn(); } });
 			Click("zoom-out", () => { if (m_Preview != null) { m_Preview.autoFit = false; m_Preview.ZoomOut(); } });
@@ -297,10 +357,10 @@ namespace XericUI.ShaderBake.Editor
 		private void ShowExportMenu()
 		{
 			GenericMenu menu = new GenericMenu();
-			if (isUvView)
+			if (m_DebugView != DebugView.None)
 			{
-				// 免得有人对着一张 UV 色块图等它导出成那张图——导出永远走真实材质
-				menu.AddDisabledItem(new GUIContent("当前显示的是 UV 检查视图，导出仍按真实材质"), false);
+				// 免得有人对着一张测试色块图等它导出成那张图——导出永远走真实材质
+				menu.AddDisabledItem(new GUIContent("当前显示的是测试视图，导出仍按真实材质"), false);
 			}
 			m_Exporter.BuildMenu(menu, SuggestedExportName());
 			if (m_ExportButton != null)
@@ -603,6 +663,7 @@ namespace XericUI.ShaderBake.Editor
 				cell.uvY = 0;
 				Commit();
 			});
+			Click("face-fit", FitCameraOnSelectedFace);
 
 			BindInt("face-uv-x",
 				() => SelectedFaceCell() != null ? SelectedFaceCell().uvX : 0,
@@ -885,82 +946,53 @@ namespace XericUI.ShaderBake.Editor
 		}
 
 		/// <summary>
-		/// 用一个不吃贴图、不吃光照、不吃 UV 的内置纯色 shader，按<b>同一套</b>面片/相机/pass 再画一次。
-		/// 画得出来就说明管线是通的，画面空的原因在被测 shader 那边（贴图没指定、pass、混合模式）；
-		/// 画不出来才是这里的问题（相机框不住、面片尺寸、pass 下标）。
+		/// 相机改成只框选中的那一格。「框住面片」量的是整个网格，多格时一格只占画面中间一小块，
+		/// 这就是"烘出来的尺寸和场景里贴上去不一样"的来源——铺满之后一格才等于一整张图。
+		/// </summary>
+		private void FitCameraOnSelectedFace()
+		{
+			if (!m_Renderer.FitCameraOnFace(m_SelectedFace))
+			{
+				SetStatus("选中格铺满不可用：外部网格模式下不分格");
+				return;
+			}
+			Commit();
+			SetStatus("第 " + (m_SelectedFace + 1) + " 格已铺满画面，仍有留白就按「匹配面片比例」");
+		}
+
+		/// <summary>
+		/// 用一张不吃贴图、不吃光照、不吃 UV 的内置纯色面片，按<b>同一套</b>面片 / 相机再画一次。
+		/// 画得出来就说明管线是通的，画面空的原因在被测 shader 那边（贴图没指定、混合模式、需要光照）；
+		/// 画不出来才是这里的问题（相机框不住、面片尺寸）。
+		///
+		/// <para>它就是测试视图里的一种，所以结果会跟着实时预览一直留在画面上，
+		/// 不再像从前那样被下一次重画顶掉。</para>
 		/// </summary>
 		private void RunPipelineSelfTest()
 		{
-			Shader solid = Shader.Find("Unlit/Color");
-			if (solid == null)
+			if (m_DebugView == DebugView.SolidColor)
+				DoRender();
+			else
+				SetDebugView(DebugView.SolidColor);
+
+			if (m_DebugView != DebugView.SolidColor)
 			{
-				SetSelfTestNote("自检不可用：这个工程里找不到 Unlit/Color");
+				SetSelfTestNote("自检失败：纯色探针渲不出来 → 问题在渲染管线。" + DescribePipeline());
 				return;
 			}
-
-			var probeMaterial = new Material(solid)
-			{
-				name = "ShaderBakeSelfTest",
-				hideFlags = HideFlags.DontSave
-			};
-			probeMaterial.color = new Color(0.25f, 0.85f, 0.5f);
-
-			// 探针只有一个位置，自检这张纯色图要把 UV 视图挤掉；不关开关的话下一次重画又变回 UV 图，
-			// 而用户看到的"刚点出来的自检结果"只存在一瞬间
-			if (isUvView)
-			{
-				m_UvCheckToggle.SetValueWithoutNotify(false);
-				UpdateUvCheckNote(false);
-			}
-
-			float coverage = -1f;
-			string failure;
-			// settings 是共享引用：自检必须和被测走同一套面片/相机/pass，才有控制变量的意义。
-			// 探针要一直活着——它一 Release 就把那张 RT 一起销毁了，而自检结果正是那张图。
-			// 下一次正常渲染或关窗口时由 DoRender / OnDisable 收掉。
-			RenderTexture rt;
-			try
-			{
-				rt = m_Override.RenderWithMaterial(m_Renderer.settings, probeMaterial, out failure);
-			}
-			catch (Exception evt)
-			{
-				failure = evt.Message;
-				rt = null;
-			}
-			finally
-			{
-				// 纯色材质用完就该还，画面已经在探针那张 RT 里了
-				ShaderBakeRenderer.ReleaseTempObject(probeMaterial, true);
-			}
-
-			if (rt == null)
-			{
-				if (string.IsNullOrEmpty(failure))
-					failure = "未知错误";
-				SetSelfTestNote("自检失败：" + failure);
-				return;
-			}
-
-			Color average;
-			if (!ShaderBakeReadback.MeasureCoverage(rt, out coverage, out average))
+			if (m_LastCoverage < 0f)
 			{
 				SetSelfTestNote("自检读不回像素：显卡或纹理格式不支持这次采样");
 				return;
 			}
-			// 把纯色结果直接显示出来：数字说有像素，眼睛说看到什么，两边对上才算过
-			m_Preview.SetResult(rt, m_Renderer.settings.output.size);
-			m_Preview.SetCoverage(coverage, average);
-			m_LastCoverage = coverage;
-
-			if (coverage <= 0.001f)
+			if (m_LastCoverage <= 0.001f)
 			{
 				SetSelfTestNote("自检未画出任何像素 → 问题在渲染管线。" + DescribePipeline() +
-				               " 先按「框住面片」再自检一次；仍为空就查面片宽高与相机（探针固定 pass 0，pass 不背这个锅）。");
+				               " 先按「框住面片」或「选中格铺满」再自检一次（探针固定 pass 0，pass 不背这个锅）。");
 				SetStatus("管线自检：空画面");
 				return;
 			}
-			SetSelfTestNote("自检通过：纯色面片不透明 " + Mathf.RoundToInt(coverage * 100f) +
+			SetSelfTestNote("自检通过：纯色面片盖住画面 " + Mathf.RoundToInt(m_LastCoverage * 100f) +
 			               "%。管线是通的，画面空是被测 shader 自己的事（贴图、pass、混合模式、需要光照）");
 			SetStatus("管线自检：正常");
 		}
@@ -1134,10 +1166,27 @@ namespace XericUI.ShaderBake.Editor
 
 		// ── 渲染 ────────────────────────────────────────────────
 
+		/// <summary>
+		/// 「重新渲染」按钮兼任待刷新指示灯：实时预览关掉的时候画面不会自己跟上参数，
+		/// 只在按钮上写出来，比只靠状态栏一句话可靠。
+		/// </summary>
+		private void UpdateRenderButton()
+		{
+			if (m_RenderButton == null)
+				return;
+			bool pending = m_PendingRefresh && (m_AutoRefreshToggle == null || !m_AutoRefreshToggle.value);
+			m_RenderButton.text = pending ? "重新渲染 · 待刷新" : "重新渲染";
+			m_RenderButton.EnableInClassList("toolbar-emphasize", pending);
+		}
+
 		private void RequestRender()
 		{
 			if (m_AutoRefreshToggle != null && !m_AutoRefreshToggle.value)
 			{
+				// 实时预览关着的时候，改完参数画面不会自己动，所以把"待刷新"直接写在按钮上——
+				// 否则只有一条状态栏提示，很容易被下一次别的状态覆盖掉，看不出来画面已经旧了
+				m_PendingRefresh = true;
+				UpdateRenderButton();
 				SetStatus("参数已改，按「重新渲染」出图");
 				return;
 			}
@@ -1157,21 +1206,32 @@ namespace XericUI.ShaderBake.Editor
 
 		private void DoRender()
 		{
+			DoRender(false);
+		}
+
+		/// <param name="fromHeartbeat">
+		/// 实时预览的定时重画。心跳每秒几十次，状态栏那句"已渲染"要是照写不误，
+		/// 刚按「选中格铺满」给出的提示就活不过一帧，所以心跳只更新画面与时间，不抢话。
+		/// </param>
+		private void DoRender(bool fromHeartbeat)
+		{
 			m_RenderPending = false;
+			m_PendingRefresh = false;
+			UpdateRenderButton();
 			if (m_Renderer == null || m_Preview == null)
 				return;
 
-			bool wantUvView = m_UvCheckToggle != null && m_UvCheckToggle.value;
-			if (wantUvView && RenderUvDebug())
+			bool wantDebugView = m_DebugView != DebugView.None;
+			if (wantDebugView && RenderDebugView())
 				return;
-			if (wantUvView)
+			if (wantDebugView)
 			{
-				// 探针点不着就别让界面停在一个空视图上：关掉开关，回落渲染真实结果
-				m_UvCheckToggle.SetValueWithoutNotify(false);
-				UpdateUvCheckNote(false);
+				// 探针点不着就别让界面停在一个空视图上，也不让心跳每帧都撞一次同一个错误
+				m_DebugView = DebugView.None;
+				m_Override.Release();
+				ReleaseDebugMaterial();
+				UpdateDebugUi();
 			}
-			// 真实结果回来了，探针（自检 / UV 检查）那张临时图就该退场
-			m_Override.Release();
 
 			double start = EditorApplication.timeSinceStartup;
 			RenderTexture rt = m_Renderer.Render();
@@ -1193,36 +1253,178 @@ namespace XericUI.ShaderBake.Editor
 				m_Preview.SetCoverage(m_LastCoverage, average);
 			UpdateFaceOverlay();
 			UpdateSizeReadout();
-			if (string.IsNullOrEmpty(m_StatusMessage.text) || m_StatusMessage.text.StartsWith("导出"))
+			if (fromHeartbeat)
+				return;
+			if (string.IsNullOrEmpty(m_StatusMessage.text) || m_StatusMessage.text.StartsWith("导出") || m_StatusMessage.text.StartsWith("参数已改"))
 				SetStatus("已渲染");
+		}
+
+		// ── 测试视图 ────────────────────────────────────────────
+
+		private void ShowDebugMenu()
+		{
+			GenericMenu menu = new GenericMenu();
+			AddDebugItem(menu, "无（看真实结果）", DebugView.None);
+			menu.AddSeparator(string.Empty);
+			AddDebugItem(menu, "UV 颜色：红=U 绿=V，四角即 00/10/01/11", DebugView.Uv);
+			AddDebugItem(menu, "UV 梯度：灰度尺，量这一格占画面多大", DebugView.Gradient);
+			AddDebugItem(menu, "棋盘：方块变矩形/平行四边形就是缩放或斜切不对", DebugView.Checker);
+			menu.AddSeparator(string.Empty);
+			AddDebugItem(menu, "纯色（管线自检）：画不出它就不是材质的问题", DebugView.SolidColor);
+			if (m_DebugButton != null)
+				menu.DropDown(m_DebugButton.worldBound);
+			else
+				menu.ShowAsContext();
+		}
+
+		private void AddDebugItem(GenericMenu menu, string label, DebugView view)
+		{
+			menu.AddItem(new GUIContent(label), m_DebugView == view, OnDebugChosen, view);
+		}
+
+		private void OnDebugChosen(object userData)
+		{
+			SetDebugView((DebugView)userData);
+		}
+
+		private void SetDebugView(DebugView view)
+		{
+			if (view == m_DebugView)
+				return;
+			m_DebugView = view;
+			// 材质里写着这一次要画哪种图，换视图就得重建
+			ReleaseDebugMaterial();
+			if (view == DebugView.None)
+			{
+				// 测试视图不看了，探针占着的显存也该还回来
+				m_Override.Release();
+			}
+			UpdateDebugUi();
+			DoRender();
 			SavePrefs();
 		}
 
-		/// <summary>
-		/// UV 检查视图：按<b>同一套</b>面片 / 相机 / pass，把顶点收到的 UV 本身画成颜色。
-		///
-		/// <para>它只回答一个问题——"这一格铺的是哪段 UV"，不吃贴图、不吃光照，所以画面为空不会
-		/// 有第二种解释；四角是不是 00 / 10 / 01 / 11，看颜色就行。</para>
-		/// <para>只换"看"的那张图：导出、材质属性表、写回原材质都不受影响，仍走真实材质。</para>
-		/// </summary>
-		private bool RenderUvDebug()
+		private void UpdateDebugUi()
 		{
-			Shader debugShader = FindUvDebugShader();
-			if (debugShader == null)
+			if (m_DebugButton != null)
+				m_DebugButton.text = m_DebugView == DebugView.None
+					? "测试视图 ▾"
+					: "测试视图：" + DebugViewName(m_DebugView) + " ▾";
+
+			Label note = rootVisualElement.Q<Label>("debug-note");
+			if (note == null)
+				return;
+			note.style.display = m_DebugView == DebugView.None ? DisplayStyle.None : DisplayStyle.Flex;
+			if (m_DebugView != DebugView.None)
+				note.text = DebugViewLegend(m_DebugView);
+		}
+
+		private static string DebugViewName(DebugView view)
+		{
+			switch (view)
 			{
-				Debug.LogWarning("[ShaderBake] UV 检查不可用：包内找不到 " + kUvDebugShader + "（ShaderBakeUVDebug.shader 没被导入？）");
-				SetStatus("UV 检查不可用：包里找不到 " + kUvDebugShader);
+				case DebugView.Uv: return "UV";
+				case DebugView.Gradient: return "梯度";
+				case DebugView.Checker: return "棋盘";
+				case DebugView.SolidColor: return "纯色";
+				default: return "无";
+			}
+		}
+
+		private static string DebugViewLegend(DebugView view)
+		{
+			switch (view)
+			{
+				case DebugView.Gradient:
+					return "梯度：横向那条尺是 U（左黑右白），顶上窄条是 V（下黑上白），每 0.1 一档压暗，整数 UV 处一条亮线。"
+						+ "尺子只占画面中间一段 → 相机框的是整个网格，按「选中格铺满」把它拉到一格铺满；"
+						+ "尺子之外是棋盘格 → 那些像素没画到东西。";
+				case DebugView.Checker:
+					return "棋盘：半 UV 一格的棋盘 + 每格一个色相，左下角红块、右上角蓝块。"
+						+ "方块变长条=横竖缩放不等，变平行四边形=斜切或透视，红蓝换位=U 或 V 被镜像。";
+				case DebugView.SolidColor:
+					return "纯色：一张不吃贴图、不吃光照、不吃 UV 的绿面片。画得出来 → 管线是通的，空画面是被测 shader "
+						+ "自己的事（贴图没指定、混合模式、需要光照）；画不出来 → 查相机框位与面片尺寸，与材质无关。";
+				default:
+					return "UV：红 = U，绿 = V。一格四角该是 黑(0,0) 红(1,0) 绿(0,1) 黄(1,1)；"
+						+ "整数 UV 处压暗，每格色相不同，能数出这是第几格。四角同色就是 UV 被压成了一个点。";
+			}
+		}
+
+		/// <summary>
+		/// 测试视图的材质常驻，按当前视图建一次反复用——每秒重画几十次的路子上，
+		/// 每次都新建再 DestroyImmediate 一张材质本身就是卡顿来源。换视图时才重建。
+		/// </summary>
+		private bool EnsureDebugMaterial()
+		{
+			if (m_DebugMaterial != null)
+				return true;
+
+			if (m_DebugView == DebugView.SolidColor)
+				return EnsureSolidDebugMaterial();
+
+			// 先按名字找：这张 shader 在 Editor 目录里，编辑器下 Shader.Find 认得到；
+			// 找不到再按资产路径捞一次，覆盖包被放进 Assets/ 的安装方式
+			Shader shader = Shader.Find(kDebugViewShader);
+			if (shader == null)
+				shader = LoadAsset<Shader>(kDebugViewShaderPath, "ShaderBakeDebugView");
+			if (shader == null)
+			{
+				Debug.LogWarning("[ShaderBake] 测试视图不可用：包内找不到 " + kDebugViewShader + "（ShaderBakeDebugView.shader 没被导入？）");
+				SetStatus("测试视图不可用：包里找不到 " + kDebugViewShader);
 				return false;
 			}
 
+			m_DebugMaterial = new Material(shader)
+			{
+				name = "ShaderBakeDebugView",
+				hideFlags = HideFlags.DontSave
+			};
+			m_DebugMaterial.SetFloat("_Mode", (float)(int)m_DebugView);
+			return true;
+		}
+
+		private bool EnsureSolidDebugMaterial()
+		{
+			Shader solid = Shader.Find("Unlit/Color");
+			if (solid == null)
+			{
+				Debug.LogWarning("[ShaderBake] 纯色探针不可用：这个工程里找不到 Unlit/Color");
+				SetStatus("纯色探针不可用：找不到 Unlit/Color");
+				return false;
+			}
+			m_DebugMaterial = new Material(solid)
+			{
+				name = "ShaderBakeSelfTest",
+				hideFlags = HideFlags.DontSave
+			};
+			m_DebugMaterial.color = new Color(0.25f, 0.85f, 0.5f);
+			return true;
+		}
+
+		private void ReleaseDebugMaterial()
+		{
+			ShaderBakeRenderer.ReleaseTempObject(m_DebugMaterial, true);
+			m_DebugMaterial = null;
+		}
+
+		/// <summary>
+		/// 按<b>同一套</b>面片 / 相机把测试图画一次。返回 false 表示探针不可用，调用方回落到真实结果。
+		///
+		/// <para>只换"看"的那张图：导出、材质属性表、写回原材质都不受影响，仍走真实材质。</para>
+		/// </summary>
+		private bool RenderDebugView()
+		{
+			if (!EnsureDebugMaterial())
+				return false;
+
 			double start = EditorApplication.timeSinceStartup;
 			string error;
-			RenderTexture rt = m_Override.Render(m_Renderer.settings, debugShader, kUvDebugShader, out error);
+			RenderTexture rt = m_Override.RenderWithMaterial(m_Renderer.settings, m_DebugMaterial, out error);
 			m_LastRenderMs = (EditorApplication.timeSinceStartup - start) * 1000.0;
 			if (rt == null)
 			{
-				Debug.LogWarning("[ShaderBake] UV 检查渲染失败：" + error);
-				SetStatus("UV 检查渲染失败：" + error);
+				Debug.LogWarning("[ShaderBake] 测试视图渲染失败：" + error);
 				return false;
 			}
 
@@ -1234,30 +1436,7 @@ namespace XericUI.ShaderBake.Editor
 				m_Preview.SetCoverage(m_LastCoverage, average);
 			UpdateFaceOverlay();
 			UpdateSizeReadout();
-			UpdateUvCheckNote(true);
-			SavePrefs();
 			return true;
-		}
-
-		private Shader FindUvDebugShader()
-		{
-			// 先按名字找：这张 shader 在 Editor 目录里，编辑器下 Shader.Find 认得到；
-			// 找不到再按资产路径捞一次，覆盖包被放进 Assets/ 的安装方式
-			Shader shader = Shader.Find(kUvDebugShader);
-			return shader != null ? shader : LoadAsset<Shader>(kUvDebugShaderPath, "ShaderBakeUVDebug");
-		}
-
-		/// <summary> 把这张 UV 图的读法写在面片栏里；开关灭掉就收起来，不然会一直占着一行 </summary>
-		private void UpdateUvCheckNote(bool visible)
-		{
-			Label note = rootVisualElement.Q<Label>("uvcheck-note");
-			if (note == null)
-				return;
-			note.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
-			if (!visible)
-				return;
-			note.text = "UV 视图：红 = U，绿 = V。一格四角该是 黑(0,0) 红(1,0) 绿(0,1) 黄(1,1)；"
-			            + "整数 UV 处压暗，每格色相不同，能数出这是第几格。画面若有镜像，红绿会互换。";
 		}
 
 		private void UpdateSizeReadout()
@@ -1273,13 +1452,14 @@ namespace XericUI.ShaderBake.Editor
 		{
 			// 顶点数只在状态栏出现：它决定细分够不够用，但不值得占一行界面
 			Mesh mesh = m_Renderer != null ? m_Renderer.geometry : null;
-			if (isUvView && m_Override.geometry != null)
+			if (m_DebugView != DebugView.None && m_Override.geometry != null)
 				mesh = m_Override.geometry;
 			if (mesh == null || m_StatusMessage == null)
 				return;
 			if (m_StatusMessage.text.StartsWith("导出") || m_StatusMessage.text.StartsWith("参数已改"))
 				return;
-			m_StatusMessage.text = (isUvView ? "UV 视图 · " : "已渲染 · ") + mesh.vertexCount + " 顶点" + CoverageHint();
+			m_StatusMessage.text = (m_DebugView != DebugView.None ? "测试视图 · " : "已渲染 · ")
+			                     + mesh.vertexCount + " 顶点" + CoverageHint();
 		}
 
 		/// <summary> 状态栏的覆盖率后缀：把"看着像没渲染"拆成"没画出来"和"画出来但是透明的" </summary>
@@ -1287,20 +1467,14 @@ namespace XericUI.ShaderBake.Editor
 		{
 			if (m_LastCoverage < 0f)
 				return string.Empty;
-			// UV 视图那张图 alpha 恒为 1，这里的占比量的就是"面片盖住了多少画面"，
-			// 和透明不透明没关系——用它一眼看出是相机没框住，还是 UV 有问题
-			if (isUvView)
+			// 测试图 alpha 恒为 1，这里的占比量的是"几何盖住了多少画面"，和透明没关系——
+			// 用它一眼看出是相机没框住，还是材质渲不出东西
+			if (m_DebugView != DebugView.None)
 				return m_LastCoverage <= 0.001f ? " · 画面全空，面片不在视锥里"
-				                                : " · 面片盖住画面 " + Mathf.RoundToInt(m_LastCoverage * 100f) + "%";
+				                                : " · 画面被面片盖住 " + Mathf.RoundToInt(m_LastCoverage * 100f) + "%";
 			if (m_LastCoverage <= 0.001f)
 				return " · 全透明，一个像素都没画出";
 			return " · 不透明 " + Mathf.RoundToInt(m_LastCoverage * 100f) + "%";
-		}
-
-		/// <summary> 屏幕上现在放的是不是 UV 检查那张图 </summary>
-		private bool isUvView
-		{
-			get { return m_UvCheckToggle != null && m_UvCheckToggle.value; }
 		}
 
 		private void SetStatus(string message)
@@ -1323,13 +1497,9 @@ namespace XericUI.ShaderBake.Editor
 				m_CheckerToggle.SetValueWithoutNotify(checker);
 				if (m_Preview != null) m_Preview.SetCheckerVisible(checker);
 			}
-			if (m_UvCheckToggle != null)
-			{
-				// 开机默认关：这是排查用的视图，不该下次打开窗口还挡着真实结果
-				bool uvCheck = EditorPrefs.GetBool(kPrefUvCheck, false);
-				m_UvCheckToggle.SetValueWithoutNotify(uvCheck);
-				UpdateUvCheckNote(uvCheck);
-			}
+			// 开机默认关：这是排查用的视图，不该下次打开窗口还挡着真实结果
+			m_DebugView = (DebugView)EditorPrefs.GetInt(kPrefDebugView, (int)DebugView.None);
+			UpdateDebugUi();
 			if (m_DetailPane != null)
 				m_DetailPane.style.width = EditorPrefs.GetFloat(kPrefDetailWidth, kDefaultDetailWidth);
 
@@ -1359,8 +1529,7 @@ namespace XericUI.ShaderBake.Editor
 				EditorPrefs.SetBool(kPrefAutoRefresh, m_AutoRefreshToggle.value);
 			if (m_CheckerToggle != null)
 				EditorPrefs.SetBool(kPrefChecker, m_CheckerToggle.value);
-			if (m_UvCheckToggle != null)
-				EditorPrefs.SetBool(kPrefUvCheck, m_UvCheckToggle.value);
+			EditorPrefs.SetInt(kPrefDebugView, (int)m_DebugView);
 			if (m_DetailPane != null && m_DetailPane.resolvedStyle.width > 1f)
 				EditorPrefs.SetFloat(kPrefDetailWidth, m_DetailPane.resolvedStyle.width);
 			EditorPrefs.SetString(kPrefSource, SourceAssetPath() ?? string.Empty);

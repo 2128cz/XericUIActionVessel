@@ -25,7 +25,7 @@
             <x:ToolbarButton name="zoom-actual" text="1:1" />
             <x:ToolbarButton name="zoom-in" text="+" class="tool-narrow" />
             <x:ToolbarToggle name="show-checker" text="透明底" />
-            <x:ToolbarToggle name="uv-check" text="UV 检查" />
+            <x:ToolbarButton name="debug-view" text="测试视图 ▾" />
             <x:ToolbarSpacer class="toolbar-gap" />
             <x:ToolbarButton name="reset-settings" text="重置参数" />
         </x:Toolbar>
@@ -116,16 +116,17 @@
                                 <ui:Button name="grid-up" text="↑加行" class="field-quarter" />
                             </ui:VisualElement>
                             <ui:VisualElement class="field-row">
-                                <ui:Button name="grid-reset" text="恢复 1×1" class="field-half" />
-                                <ui:Button name="face-zero" text="选中面归零" class="field-half" />
+                                <ui:Button name="grid-reset" text="恢复 1×1" class="field-third" />
+                                <ui:Button name="face-zero" text="选中面归零" class="field-third" />
+                                <ui:Button name="face-fit" text="选中格铺满" class="field-third" />
                             </ui:VisualElement>
                             <ui:Label name="face-info" class="field-note" text="在左侧浏览图里点选面片" />
                             <ui:VisualElement class="field-row">
                                 <xer:IntegerField name="face-uv-x" label="UV X" class="field-half" />
                                 <xer:IntegerField name="face-uv-y" label="UV Y" class="field-half" />
                             </ui:VisualElement>
-                            <!-- 只在工具栏「UV 检查」点亮时出现，内容是这张图的读法 -->
-                            <ui:Label name="uvcheck-note" class="field-note" text="UV 检查未开启" />
+                            <!-- 只在工具栏「测试视图」点亮时给出这张图的读法 -->
+                            <ui:Label name="debug-note" class="field-note" text="测试视图未开启" />
 
                             <ui:Label class="field-note" text="UV" />
                             <ui:VisualElement class="field-row">
