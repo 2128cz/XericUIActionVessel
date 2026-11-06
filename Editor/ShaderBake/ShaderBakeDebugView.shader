@@ -1,9 +1,10 @@
-// UV 状态可视化：把顶点收到的第 0 套 UV 直接当颜色画出来。
-// 它只吃 uv，不吃贴图、不吃光照，所以"这一格到底铺了哪段 UV"没有第二种解释。
-Shader "Hidden/XericUI/ShaderBake/UV Debug"
+// 测试视图：把"这一格面片在画面里到底占多大、铺了哪段 UV"变成一眼能读的颜色。
+// 三种图都只吃顶点 uv0，不吃贴图、不吃光照、不吃时间，所以画面为空或变形只有几何与 UV 两种原因。
+Shader "Hidden/XericUI/ShaderBake/Debug View"
 {
 	Properties
 	{
+		_Mode ("视图（0=UV 1=梯度 2=棋盘）", Float) = 0
 		_LineThickness ("整数边界线宽", Range(1, 400)) = 90
 		_CellMix ("每格色相强度", Range(0, 1)) = 0.22
 	}
@@ -12,7 +13,7 @@ Shader "Hidden/XericUI/ShaderBake/UV Debug"
 	{
 		Tags { "RenderType" = "Opaque" "ForceSupported" = "True" }
 
-		// 剔除方向交给 Cull Off：这个视图要回答的是"UV 长什么样"，
+		// 剔除方向交给 Cull Off：这些视图要回答的是几何与 UV，
 		// 不该再被正面约定影响一次，否则空画面时两条原因会搅在一起
 		Cull Off
 		ZWrite Off
@@ -25,6 +26,7 @@ Shader "Hidden/XericUI/ShaderBake/UV Debug"
 			#pragma fragment frag
 			#include "UnityCG.cginc"
 
+			float _Mode;
 			float _LineThickness;
 			float _CellMix;
 
@@ -48,6 +50,19 @@ Shader "Hidden/XericUI/ShaderBake/UV Debug"
 				return rgb;
 			}
 
+			// 每个整数格给一个稳定色相，相邻格不撞色，混在一起也能数出这是第几格
+			fixed3 CellHue(float2 cell)
+			{
+				return HueToRgb(cell.x * 0.618033 + cell.y * 0.381966);
+			}
+
+			// 整数 UV 边界压暗：格与格之间、UV 单位边界都显出来
+			float EdgeMask(float2 f)
+			{
+				float line = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+				return lerp(0.3, 1.0, saturate(line * _LineThickness));
+			}
+
 			v2f vert(appdata v)
 			{
 				v2f o;
@@ -56,22 +71,53 @@ Shader "Hidden/XericUI/ShaderBake/UV Debug"
 				return o;
 			}
 
+			// UV 视图：红 = U，绿 = V。角点即 UV，一格四角该是 黑(0,0) 红(1,0) 绿(0,1) 黄(1,1)
+			fixed4 UvView(float2 cell, float2 f)
+			{
+				fixed3 col = fixed3(f.x, f.y, 0.06);
+				col = lerp(col, CellHue(cell), _CellMix);
+				return fixed4(col * EdgeMask(f), 1.0);
+			}
+
+			// 梯度视图：两条灰度尺。主体沿 U 由黑到白，顶部窄带沿 V 由黑到白，
+			// 每 0.1 一档压暗。量的是一格铺满之后刻度在画面上跨了多少像素——
+			// 尺子只占画面中间一小段，就说明相机框的是整个网格而不是这一格
+			fixed4 GradientView(float2 f)
+			{
+				float ruler = lerp(f.x, f.y, step(0.86, f.y));
+				float tenth = frac(ruler * 10.0);
+				float tick = min(tenth, 1.0 - tenth);
+				float gray = ruler * lerp(0.35, 1.0, saturate(tick * 40.0));
+				gray *= EdgeMask(f);
+				return fixed4(gray, gray, gray, 1.0);
+			}
+
+			// 棋盘视图：半 UV 一格的棋盘 + 每格一个色相 + 左下角红、右上角蓝。
+			// 方块变矩形=横竖缩放不等，变平行四边形=斜切或透视，两角换位置=U 或 V 被镜像
+			fixed4 CheckerView(float2 cell, float2 f)
+			{
+				float2 q = floor(f * 2.0);
+				float check = fmod(q.x + q.y, 2.0);
+				fixed3 col = CellHue(cell) * (0.2 + 0.8 * check);
+
+				// 角标放在格内靠边的一小块，压过棋盘本身
+				float bottomLeft = max(f.x, f.y);
+				float topRight = max(1.0 - f.x, 1.0 - f.y);
+				col = lerp(col, fixed3(1.0, 0.16, 0.16), saturate((0.15 - bottomLeft) * 30.0));
+				col = lerp(col, fixed3(0.16, 0.4, 1.0), saturate((0.15 - topRight) * 30.0));
+				return fixed4(col * EdgeMask(f), 1.0);
+			}
+
 			fixed4 frag(v2f i) : SV_Target
 			{
 				float2 cell = floor(i.uv);
 				float2 f = i.uv - cell;
 
-				// 角点即 UV：左下黑、右下红（U 到 1）、左上绿（V 到 1）、右上黄。
-				// 四角是不是 00 / 10 / 01 / 11，看这个就够了
-				fixed4 col = fixed4(f.x, f.y, 0.06, 1.0);
-
-				// 每个整数格给一个稳定色相，相邻格不撞色，混在一起也能数出第几格
-				col.rgb = lerp(col.rgb, HueToRgb(cell.x * 0.618033 + cell.y * 0.381966), _CellMix);
-
-				// 整数边界压暗：格与格之间、UV 单位边界都显出来
-				float line = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
-				col.rgb *= lerp(0.3, 1.0, saturate(line * _LineThickness));
-				return col;
+				if (_Mode < 0.5)
+					return UvView(cell, f);
+				if (_Mode < 1.5)
+					return GradientView(f);
+				return CheckerView(cell, f);
 			}
 			ENDCG
 		}
