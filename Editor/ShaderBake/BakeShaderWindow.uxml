@@ -109,7 +109,7 @@
                                 <xer:IntegerField name="surf-seg-y" label="细分Y" class="field-half" />
                             </ui:VisualElement>
 
-                            <ui:Label class="field-note" text="面片网格（一格一张 UV 区域，向左/下扩展编号递减）" />
+                            <ui:Label class="field-note" text="面片网格" />
                             <ui:Label name="grid-info" class="field-note" text="1 × 1" />
                             <ui:VisualElement class="field-row">
                                 <ui:Button name="grid-left" text="←加列" class="field-quarter" />
@@ -122,13 +122,11 @@
                                 <ui:Button name="face-zero" text="选中面归零" class="field-third" />
                                 <ui:Button name="face-fit" text="选中格铺满" class="field-third" />
                             </ui:VisualElement>
-                            <ui:Label name="face-info" class="field-note" text="在左侧浏览图里点选面片" />
+                            <ui:Label name="face-info" class="field-note" text="点选面片" />
                             <ui:VisualElement class="field-row">
                                 <xer:IntegerField name="face-uv-x" label="UV X" class="field-half" />
                                 <xer:IntegerField name="face-uv-y" label="UV Y" class="field-half" />
                             </ui:VisualElement>
-                            <!-- 只在工具栏「测试视图」点亮时给出这张图的读法 -->
-                            <ui:Label name="debug-note" class="field-note" text="测试视图未开启" />
 
                             <ui:Label class="field-note" text="UV" />
                             <ui:VisualElement class="field-row">
@@ -201,8 +199,7 @@
                                 <ui:Button name="cam-fit" text="框住面片" class="field-half" />
                                 <ui:Button name="cam-selftest" text="管线自检" class="field-half" />
                             </ui:VisualElement>
-                            <ui:Label name="selftest-note" class="field-note"
-                                      text="自检：用不依赖贴图与光照的内置纯色 shader 按同一套矩阵画一次，用来分清是渲染管线的问题还是被测 shader 本身的问题" />
+                            <ui:Label name="selftest-note" class="field-note" text="自检" />
                         </ui:VisualElement>
                     </ui:VisualElement>
 
@@ -210,8 +207,7 @@
                     <ui:VisualElement name="sec-globals" class="section">
                         <ui:Toggle name="sec-globals-head" label="全局参数（光照 / 环境）" value="false" class="section-head" />
                         <ui:VisualElement name="sec-globals-body" class="section-body">
-                            <ui:Label name="globals-note" class="field-note"
-                                      text="引擎在相机流程里才写入的全局量（光照方向、环境光、反射探针）这里默认缺失；勾选的条目在渲染时注入，渲染完立即还原" />
+                            <ui:Label name="globals-note" class="field-note" text="渲染时注入，渲染后还原" />
                             <ui:VisualElement class="field-row">
                                 <ui:Button name="globals-detect" text="扫描 Shader" class="field-half" />
                                 <ui:Button name="globals-presets" text="加入常用预设" class="field-half" />

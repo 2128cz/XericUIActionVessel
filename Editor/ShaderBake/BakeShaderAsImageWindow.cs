@@ -755,28 +755,10 @@ namespace XericUI.ShaderBake.Editor
 			{
 				faceInfo.text = meshMode
 					? "外部网格不参与面片点选"
-					: "选中第 " + (m_SelectedFace + 1) + " 格：UV (" + cell.uvX + ", " + cell.uvY + ")\n" +
-					  FaceCornerText(surface, cell);
+					: "第 " + (m_SelectedFace + 1) + " 格 · UV (" + cell.uvX + ", " + cell.uvY + ")";
 			}
 			SetFaceFieldsEnabled(!meshMode);
 			UpdateFaceOverlay();
-		}
-
-		/// <summary>
-		/// 这一格四个顶点的实际 UV 写出来。"设为 UV0" 的约定就是四角落在 (0,0)(1,0)(0,1)(1,1)，
-		/// 再乘重复、加偏移；把结果摊开显示，是不是这个范围一眼就能核对。
-		/// </summary>
-		private static string FaceCornerText(ShaderBakeSurfaceSettings surface, ShaderBakeFaceCell cell)
-		{
-			Vector2 min = Vector2.Scale(new Vector2(cell.uvX, cell.uvY), surface.uvTiling) + surface.uvOffset;
-			Vector2 max = Vector2.Scale(new Vector2(cell.uvX + 1, cell.uvY + 1), surface.uvTiling) + surface.uvOffset;
-			return "四角 UV：(" + Corners(min.x, max.x) + ", " + Corners(min.y, max.y) + ")";
-		}
-
-		/// <summary> 一个轴的两个角值，左下在前 </summary>
-		private static string Corners(float low, float high)
-		{
-			return low.ToString("0.##") + " / " + high.ToString("0.##");
 		}
 
 		private void SetFaceFieldsEnabled(bool enabled)
@@ -1034,41 +1016,22 @@ namespace XericUI.ShaderBake.Editor
 
 			if (m_DebugView != DebugView.SolidColor)
 			{
-				SetSelfTestNote("自检失败：纯色探针渲不出来 → 问题在渲染管线。" + DescribePipeline());
+				SetSelfTestNote("自检失败：纯色探针画不出来");
 				return;
 			}
 			if (m_LastCoverage < 0f)
 			{
-				SetSelfTestNote("自检读不回像素：显卡或纹理格式不支持这次采样");
+				SetSelfTestNote("自检失败：读不回像素");
 				return;
 			}
 			if (m_LastCoverage <= 0.001f)
 			{
-				SetSelfTestNote("自检未画出任何像素 → 问题在渲染管线。" + DescribePipeline() +
-				               " 先按「框住面片」或「选中格铺满」再自检一次（探针固定 pass 0，pass 不背这个锅）。");
+				SetSelfTestNote("自检失败：空画面");
 				SetStatus("管线自检：空画面");
 				return;
 			}
-			SetSelfTestNote("自检通过：纯色面片盖住画面 " + Mathf.RoundToInt(m_LastCoverage * 100f) +
-			               "%。管线是通的，画面空是被测 shader 自己的事（贴图、pass、混合模式、需要光照）");
+			SetSelfTestNote("自检通过：覆盖 " + Mathf.RoundToInt(m_LastCoverage * 100f) + "%");
 			SetStatus("管线自检：正常");
-		}
-
-		/// <summary>
-		/// 把决定"画不画得见"的那几个数值摊开写一行。空画面的时候最缺的就是这个——
-		/// 否则只能靠猜是相机框不住、面片太小还是 pass 选错。
-		/// </summary>
-		private string DescribePipeline()
-		{
-			ShaderBakeSettings s = m_Renderer.settings;
-			return "正交=" + s.camera.orthographic +
-			       " 半高=" + s.camera.orthographicSize.ToString("0.###") +
-			       " 近/远=" + s.camera.nearClipPlane.ToString("0.###") + "/" + s.camera.farClipPlane.ToString("0.###") +
-			       " 机位=" + s.camera.position +
-			       " 面片=" + s.surface.gridColumns + "×" + s.surface.gridRows + " 格 尺寸=" + s.surface.size +
-			       " 双面=" + s.surface.doubleSided +
-			       " pass=" + s.output.shaderPass + "（探针固定用 0）" +
-			       " 翻转Y=" + s.output.flipY;
 		}
 
 		private void SetSelfTestNote(string text)
@@ -1347,13 +1310,12 @@ namespace XericUI.ShaderBake.Editor
 		private void ShowDebugMenu()
 		{
 			GenericMenu menu = new GenericMenu();
-			AddDebugItem(menu, "无（看真实结果）", DebugView.None);
+			AddDebugItem(menu, "无", DebugView.None);
 			menu.AddSeparator(string.Empty);
-			AddDebugItem(menu, "UV 颜色：红=U 绿=V，四角即 00/10/01/11", DebugView.Uv);
-			AddDebugItem(menu, "UV 梯度：灰度尺，量这一格占画面多大", DebugView.Gradient);
-			AddDebugItem(menu, "棋盘：方块变矩形/平行四边形就是缩放或斜切不对", DebugView.Checker);
-			menu.AddSeparator(string.Empty);
-			AddDebugItem(menu, "纯色（管线自检）：画不出它就不是材质的问题", DebugView.SolidColor);
+			AddDebugItem(menu, "UV", DebugView.Uv);
+			AddDebugItem(menu, "梯度", DebugView.Gradient);
+			AddDebugItem(menu, "棋盘", DebugView.Checker);
+			AddDebugItem(menu, "纯色", DebugView.SolidColor);
 			if (m_DebugButton != null)
 				menu.DropDown(m_DebugButton.worldBound);
 			else
@@ -1392,14 +1354,7 @@ namespace XericUI.ShaderBake.Editor
 			if (m_DebugButton != null)
 				m_DebugButton.text = m_DebugView == DebugView.None
 					? "测试视图 ▾"
-					: "测试视图：" + DebugViewName(m_DebugView) + " ▾";
-
-			Label note = rootVisualElement.Q<Label>("debug-note");
-			if (note == null)
-				return;
-			note.style.display = m_DebugView == DebugView.None ? DisplayStyle.None : DisplayStyle.Flex;
-			if (m_DebugView != DebugView.None)
-				note.text = DebugViewLegend(m_DebugView);
+					: DebugViewName(m_DebugView) + " ▾";
 		}
 
 		private static string DebugViewName(DebugView view)
@@ -1411,26 +1366,6 @@ namespace XericUI.ShaderBake.Editor
 				case DebugView.Checker: return "棋盘";
 				case DebugView.SolidColor: return "纯色";
 				default: return "无";
-			}
-		}
-
-		private static string DebugViewLegend(DebugView view)
-		{
-			switch (view)
-			{
-				case DebugView.Gradient:
-					return "梯度：横向那条尺是 U（左黑右白），顶上窄条是 V（下黑上白），每 0.1 一档压暗，整数 UV 处一条亮线。"
-						+ "尺子只占画面中间一段 → 相机框的是整个网格，按「选中格铺满」把它拉到一格铺满；"
-						+ "尺子之外是棋盘格 → 那些像素没画到东西。";
-				case DebugView.Checker:
-					return "棋盘：半 UV 一格的棋盘 + 每格一个色相，左下角红块、右上角蓝块。"
-						+ "方块变长条=横竖缩放不等，变平行四边形=斜切或透视，红蓝换位=U 或 V 被镜像。";
-				case DebugView.SolidColor:
-					return "纯色：一张不吃贴图、不吃光照、不吃 UV 的绿面片。画得出来 → 管线是通的，空画面是被测 shader "
-						+ "自己的事（贴图没指定、混合模式、需要光照）；画不出来 → 查相机框位与面片尺寸，与材质无关。";
-				default:
-					return "UV：红 = U，绿 = V。一格四角该是 黑(0,0) 红(1,0) 绿(0,1) 黄(1,1)；"
-						+ "整数 UV 处压暗，每格色相不同，能数出这是第几格。四角同色就是 UV 被压成了一个点。";
 			}
 		}
 
@@ -1584,6 +1519,11 @@ namespace XericUI.ShaderBake.Editor
 		private void RestorePrefs()
 		{
 			m_Renderer.settings = ShaderBakeSettings.FromJson(EditorPrefs.GetString(kPrefSettings, string.Empty));
+
+			// 旧存档的"框住"框的是整个网格还带 15% 余量，画面里留了一圈空白。
+			// 约定改成刚好铺满之后，旧配置开窗时重框一次；新存档带着版本号，不会再被动
+			if (m_Renderer.settings.camera.fitRevision < ShaderBakeCameraSettings.kCurrentFitRevision)
+				m_Renderer.FitCameraToGeometry();
 
 			if (m_AutoRefreshToggle != null)
 				m_AutoRefreshToggle.SetValueWithoutNotify(EditorPrefs.GetBool(kPrefAutoRefresh, true));
