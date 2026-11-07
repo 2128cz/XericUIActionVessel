@@ -126,12 +126,60 @@ namespace XericUI.ShaderBake.Editor
 				try
 				{
 					FillFromMaterial(row);
+					Reapply(row);
 				}
 				finally
 				{
 					row.updating = false;
 				}
 			}
+		}
+
+		/// <summary>
+		/// 把值原样再写一遍材质。
+		///
+		/// <para>值本身没变，但"写一次"和"只是存在材质里"对显卡不是一回事：
+		/// 刚换过 shader（或 shader 刚重新编译完）时，材质里记的值和 GPU 上的绑定可能对不上，
+		/// 表现就是界面上明明写着 1，shader 里却是 0，非要手动改一下参数才生效。</para>
+		///
+		/// <para>勾选类属性（<c>[Toggle]</c>/<c>[KeywordEnum]</c>）还要顺手同步关键字——
+		/// 关键字没开的时候，shader 里那段分支根本不会走，同样表现为"没反应"。</para>
+		/// </summary>
+		private void Reapply(Row row)
+		{
+			if (m_Material == null || !m_Material.HasProperty(row.propName))
+				return;
+
+			switch (row.propType)
+			{
+				case ShaderPropertyType.Color:
+					m_Material.SetColor(row.propName, m_Material.GetColor(row.propName));
+					break;
+				case ShaderPropertyType.Vector:
+					m_Material.SetVector(row.propName, m_Material.GetVector(row.propName));
+					break;
+				case ShaderPropertyType.Texture:
+					m_Material.SetTexture(row.propName, m_Material.GetTexture(row.propName));
+					break;
+				case ShaderPropertyType.Int:
+					int intValue = m_Material.GetInt(row.propName);
+					m_Material.SetInt(row.propName, intValue);
+					SyncKeyword(row, intValue != 0);
+					break;
+				default:
+					float value = m_Material.GetFloat(row.propName);
+					m_Material.SetFloat(row.propName, value);
+					SyncKeyword(row, !Mathf.Approximately(value, 0f));
+					break;
+			}
+		}
+
+		private void SyncKeyword(Row row, bool on)
+		{
+			if (row.keyword == null)
+				return;
+			if (on) m_Material.EnableKeyword(row.keyword);
+			else m_Material.DisableKeyword(row.keyword);
 		}
 
 		public void Dispose()
