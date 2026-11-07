@@ -680,6 +680,8 @@ namespace XericUI.ShaderBake.Editor
 			{
 				m_Renderer.settings.surface.ResetGrid();
 				m_SelectedFace = 0;
+				// 回到一格之后相机也得跟着回到"整个面片"，否则画面还停在上一格的放大上
+				m_Renderer.FitCameraToGeometry();
 				Commit();
 			});
 			Click("face-zero", () =>
@@ -704,6 +706,9 @@ namespace XericUI.ShaderBake.Editor
 		/// <summary>
 		/// 在左/右加一列，或上/下加一行。新格的 UV 编号由 <see cref="ShaderBakeSurfaceSettings"/>
 		/// 按贴边那一格往外推，所以向左加出来的一定是 [-1,0] 这种负号区间。
+		///
+		/// <para>加完自动把相机退回"能看到全部格子"——不然画面还停在上一格的放大上，
+		/// 新加的格在哪、现在一共几×几，都看不出来。</para>
 		/// </summary>
 		private void ResizeGrid(bool negativeSide, bool column)
 		{
@@ -712,6 +717,7 @@ namespace XericUI.ShaderBake.Editor
 				surface.AddColumn(!negativeSide);
 			else
 				surface.AddRow(!negativeSide);
+			m_Renderer.FitCameraToGeometry();
 			Commit();
 			SetStatus(surface.gridColumns + " × " + surface.gridRows + " 格");
 		}
