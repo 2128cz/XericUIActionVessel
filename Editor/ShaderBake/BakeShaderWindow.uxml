@@ -231,7 +231,7 @@
 
         <!-- ── 底部状态栏 ── -->
         <x:Toolbar name="status-bar" class="status-bar">
-            <ui:Label name="status-message" class="status-message" text="未渲染" />
+            <ui:Label name="status-message" class="status-message" text="" />
             <x:ToolbarSpacer class="toolbar-gap" />
             <ui:Label name="status-source" class="status-readout" text="-" />
             <ui:Label name="status-size" class="status-readout" text="-" />

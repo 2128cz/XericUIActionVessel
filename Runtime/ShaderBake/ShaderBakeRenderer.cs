@@ -299,7 +299,10 @@ namespace XericUI.ShaderBake
 			for (int i = 0; i < 4; i++)
 			{
 				Vector3 corner = new Vector3((i & 1) == 0 ? x0 : x1, (i & 2) == 0 ? y0 : y1, 0f);
-				Vector4 clip = viewProjection * local.MultiplyPoint3x4(corner);
+				Vector3 world = local.MultiplyPoint3x4(corner);
+				// 必须显式给 w=1：Matrix4x4 * Vector3 会走隐式 Vector3→Vector4（w=0），
+				// 于是 clip.w 恒为 0，下面的可见性判断会把每一格都判成"不在画面里"
+				Vector4 clip = viewProjection * new Vector4(world.x, world.y, world.z, 1f);
 				if (clip.w <= 0.0001f)
 					return false;
 				float u = (clip.x / clip.w + 1f) * 0.5f;

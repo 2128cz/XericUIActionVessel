@@ -180,6 +180,9 @@ namespace XericUI.ShaderBake.Editor
 
 			RestorePrefs();
 			SyncUiFromSettings();
+			// 面片网格的行列数只在 RefreshFaceUi 里回写，开窗时得先走一遍，
+			// 否则那行字会停在 UXML 的默认值上，和实际渲染的格子对不上
+			RefreshFaceUi();
 			AdoptSelectionIfEmpty();
 			AssignSource(m_Source.sourceShader, m_Source.sourceMaterial, true);
 			DoRender();
