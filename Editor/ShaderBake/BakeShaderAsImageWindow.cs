@@ -1471,6 +1471,13 @@ namespace XericUI.ShaderBake.Editor
 			if (!EnsureDebugMaterial())
 				return false;
 
+			// 测试图要把 UV 换算回"每格 0~1"，得知道当前的重复与偏移；这两项随时可改，每次渲染都推一遍
+			if (m_DebugView != DebugView.SolidColor)
+			{
+				m_DebugMaterial.SetVector("_UvTiling", m_Renderer.settings.surface.uvTiling);
+				m_DebugMaterial.SetVector("_UvOffset", m_Renderer.settings.surface.uvOffset);
+			}
+
 			double start = EditorApplication.timeSinceStartup;
 			string error;
 			RenderTexture rt = m_Override.RenderWithMaterial(m_Renderer.settings, m_DebugMaterial, out error);

@@ -6,6 +6,8 @@ Shader "Hidden/XericUI/ShaderBake/Debug View"
 	{
 		_Mode ("视图（0=UV 1=梯度 2=棋盘）", Float) = 0
 		_LineThickness ("整数边界线宽", Range(1, 400)) = 90
+		_UvTiling ("UV 重复次数", Vector) = (1, 1, 0, 0)
+		_UvOffset ("UV 偏移", Vector) = (0, 0, 0, 0)
 	}
 
 	SubShader
@@ -27,6 +29,8 @@ Shader "Hidden/XericUI/ShaderBake/Debug View"
 
 			float _Mode;
 			float _LineThickness;
+			float4 _UvTiling;
+			float4 _UvOffset;
 
 			struct appdata
 			{
@@ -54,11 +58,13 @@ Shader "Hidden/XericUI/ShaderBake/Debug View"
 				return HueToRgb(cell.x * 0.618033 + cell.y * 0.381966);
 			}
 
-			// 整数 UV 边界压暗：格与格之间、UV 单位边界都显出来
-			float EdgeMask(float2 f)
+			// 按<b>绝对 UV</b> 压暗整数边界：重复次数大于 1 时格中间也会有一条，
+			// 这样"这一格跨了几个 UV 单位"数得出来，而不是被静悄悄地截断
+			float EdgeMask(float2 uv)
 			{
 				// 变量别叫 line：HLSL 把它当保留字，fxc 直接报"unexpected token 'line'"
-				float edge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+				float2 toInt = abs(frac(uv + 0.5) - 0.5);
+				float edge = min(toInt.x, toInt.y);
 				return lerp(0.3, 1.0, saturate(edge * _LineThickness));
 			}
 
@@ -72,28 +78,28 @@ Shader "Hidden/XericUI/ShaderBake/Debug View"
 
 			// UV 视图：红 = U，绿 = V。角点即 UV，一格四角该是 黑(0,0) 红(1,0) 绿(0,1) 黄(1,1)。
 			// (0,0) 必须是纯黑——掺了每格色相就分不出哪一头是原点
-			fixed4 UvView(float2 f)
+			fixed4 UvView(float2 f, float2 uv)
 			{
 				fixed3 col = fixed3(f.x, f.y, 0.0);
-				return fixed4(col * EdgeMask(f), 1.0);
+				return fixed4(col * EdgeMask(uv), 1.0);
 			}
 
 			// 梯度视图：两条灰度尺。主体沿 U 由黑到白，顶部窄带沿 V 由黑到白，
 			// 每 0.1 一档压暗。量的是一格铺满之后刻度在画面上跨了多少像素——
 			// 尺子只占画面中间一小段，就说明相机框的是整个网格而不是这一格
-			fixed4 GradientView(float2 f)
+			fixed4 GradientView(float2 f, float2 uv)
 			{
 				float ruler = lerp(f.x, f.y, step(0.86, f.y));
 				float tenth = frac(ruler * 10.0);
 				float tick = min(tenth, 1.0 - tenth);
 				float gray = ruler * lerp(0.35, 1.0, saturate(tick * 40.0));
-				gray *= EdgeMask(f);
+				gray *= EdgeMask(uv);
 				return fixed4(gray, gray, gray, 1.0);
 			}
 
 			// 棋盘视图：半 UV 一格的棋盘 + 每格一个色相 + 左下角红、右上角蓝。
 			// 方块变矩形=横竖缩放不等，变平行四边形=斜切或透视，两角换位置=U 或 V 被镜像
-			fixed4 CheckerView(float2 cell, float2 f)
+			fixed4 CheckerView(float2 cell, float2 f, float2 uv)
 			{
 				float2 q = floor(f * 2.0);
 				float check = fmod(q.x + q.y, 2.0);
@@ -104,19 +110,22 @@ Shader "Hidden/XericUI/ShaderBake/Debug View"
 				float topRight = max(1.0 - f.x, 1.0 - f.y);
 				col = lerp(col, fixed3(1.0, 0.16, 0.16), saturate((0.15 - bottomLeft) * 30.0));
 				col = lerp(col, fixed3(0.16, 0.4, 1.0), saturate((0.15 - topRight) * 30.0));
-				return fixed4(col * EdgeMask(f), 1.0);
+				return fixed4(col * EdgeMask(uv), 1.0);
 			}
 
 			fixed4 frag(v2f i) : SV_Target
 			{
-				float2 cell = floor(i.uv);
-				float2 f = i.uv - cell;
+				// 先把 UV 换算成"每格 0~1"：重复次数不为 1 时直接 frac(uv) 会在每个整数处重置，
+				// 一格明明跨 0~2 却显示成两段；除以重复次数才是一条连续递增的尺子
+				float2 local = (i.uv - _UvOffset.xy) / max(_UvTiling.xy, 0.0001);
+				float2 cell = floor(local);
+				float2 f = local - cell;
 
 				if (_Mode < 0.5)
-					return UvView(f);
+					return UvView(f, i.uv);
 				if (_Mode < 1.5)
-					return GradientView(f);
-				return CheckerView(cell, f);
+					return GradientView(f, i.uv);
+				return CheckerView(cell, f, i.uv);
 			}
 			ENDCG
 		}
