@@ -289,8 +289,10 @@ namespace XericUI.ShaderBake.Editor
 			switch (type)
 			{
 				case ShaderPropertyType.Range:
-					row.rangeMin = ShaderUtil.GetRangeLimits(shader, propIndex, 0);
-					row.rangeMax = ShaderUtil.GetRangeLimits(shader, propIndex, 1);
+					// 0/1/2 依次是 默认值 / 最小值 / 最大值——按 0、1 当最小、最大取，
+					// 滑块区间会变成 0..默认值，手柄永远停在右端，和右边的数值对不上
+					row.rangeMin = ShaderUtil.GetRangeLimits(shader, propIndex, 1);
+					row.rangeMax = ShaderUtil.GetRangeLimits(shader, propIndex, 2);
 					Show(row.rangeGroup);
 					WireSlider(row);
 					WireRangeValue(row);
