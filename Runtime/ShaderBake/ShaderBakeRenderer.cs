@@ -154,7 +154,9 @@ namespace XericUI.ShaderBake
 			EnsureGeometry();
 			if (m_Geometry == null)
 				return;
-			settings.camera.FrameBounds(geometryBounds, settings.aspect);
+			// 余量给 1：烘出来的图和场景里"把材质贴在面片上正对着看"是一个范围，不留白边
+			settings.camera.FrameBounds(geometryBounds, settings.aspect, 1f);
+			settings.camera.fitRevision = ShaderBakeCameraSettings.kCurrentFitRevision;
 		}
 
 		/// <summary>
@@ -172,6 +174,7 @@ namespace XericUI.ShaderBake
 				return false;
 			// padding 给 1：这一格就是要铺满整张输出图，留边就等于把内容缩小
 			settings.camera.FrameBounds(bounds, settings.aspect, 1f);
+			settings.camera.fitRevision = ShaderBakeCameraSettings.kCurrentFitRevision;
 			return true;
 		}
 

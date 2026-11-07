@@ -14,7 +14,7 @@ namespace XericUI.ShaderBake
 		public bool orthographic = true;
 
 		[Tooltip("正交半高（世界单位）：实际能看到的竖向范围是它的两倍")]
-		public float orthographicSize = 0.6f;
+		public float orthographicSize = 0.5f;
 
 		[Tooltip("透视相机的竖向视野角（度），正交时忽略")]
 		public float fieldOfView = 60f;
@@ -30,6 +30,17 @@ namespace XericUI.ShaderBake
 
 		[Tooltip("相机旋转（欧拉角，度）：默认朝 +Z 看，即看着放在原点、面朝 -Z 的面片")]
 		public Vector3 eulerAngles;
+
+		/// <summary>
+		/// 这份相机参数是按哪一版"框住"约定算出来的。
+		///
+		/// <para>早先的"框住"框的是整个网格、还带 15% 余量，画面里于是留了一圈空白；
+		/// 宽度约定改成刚好铺满之后，读到的旧存档会在开窗时重框一次。
+		/// 只认大于等于 <see cref="kCurrentFitRevision"/> 的存档，所以老配置只被纠正一次。</para>
+		/// </summary>
+		public int fitRevision;
+
+		public const int kCurrentFitRevision = 1;
 
 		/// <summary>
 		/// 视口（世界 → 相机）矩阵。
