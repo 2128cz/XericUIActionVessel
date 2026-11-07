@@ -6,7 +6,6 @@ Shader "Hidden/XericUI/ShaderBake/Debug View"
 	{
 		_Mode ("视图（0=UV 1=梯度 2=棋盘）", Float) = 0
 		_LineThickness ("整数边界线宽", Range(1, 400)) = 90
-		_CellMix ("每格色相强度", Range(0, 1)) = 0.22
 	}
 
 	SubShader
@@ -28,7 +27,6 @@ Shader "Hidden/XericUI/ShaderBake/Debug View"
 
 			float _Mode;
 			float _LineThickness;
-			float _CellMix;
 
 			struct appdata
 			{
@@ -72,11 +70,11 @@ Shader "Hidden/XericUI/ShaderBake/Debug View"
 				return o;
 			}
 
-			// UV 视图：红 = U，绿 = V。角点即 UV，一格四角该是 黑(0,0) 红(1,0) 绿(0,1) 黄(1,1)
-			fixed4 UvView(float2 cell, float2 f)
+			// UV 视图：红 = U，绿 = V。角点即 UV，一格四角该是 黑(0,0) 红(1,0) 绿(0,1) 黄(1,1)。
+			// (0,0) 必须是纯黑——掺了每格色相就分不出哪一头是原点
+			fixed4 UvView(float2 f)
 			{
-				fixed3 col = fixed3(f.x, f.y, 0.06);
-				col = lerp(col, CellHue(cell), _CellMix);
+				fixed3 col = fixed3(f.x, f.y, 0.0);
 				return fixed4(col * EdgeMask(f), 1.0);
 			}
 
@@ -115,7 +113,7 @@ Shader "Hidden/XericUI/ShaderBake/Debug View"
 				float2 f = i.uv - cell;
 
 				if (_Mode < 0.5)
-					return UvView(cell, f);
+					return UvView(f);
 				if (_Mode < 1.5)
 					return GradientView(f);
 				return CheckerView(cell, f);

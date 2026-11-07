@@ -844,6 +844,8 @@ namespace XericUI.ShaderBake.Editor
 				kind.RegisterValueChangedCallback(evt =>
 				{
 					m_Renderer.settings.surface.kind = (ShaderBakeSurfaceKind)evt.newValue;
+					// 换了来源，内容的宽高比也跟着换，投影得按新的重算
+					m_Renderer.FitCameraToGeometry();
 					Commit();
 				});
 			}
@@ -896,11 +898,13 @@ namespace XericUI.ShaderBake.Editor
 				importModel.clicked += ImportModel;
 		}
 
-		// 面片那些"改一个分量"的写法摊成方法，绑定处只留一行，读起来不至于全是三元组
-		private void SetSizeX(float v) { Vector2 s = m_Renderer.settings.surface.size; s.x = v; m_Renderer.settings.surface.size = s; }
-		private void SetSizeY(float v) { Vector2 s = m_Renderer.settings.surface.size; s.y = v; m_Renderer.settings.surface.size = s; }
-		private void SetSegmentX(int v) { Vector2Int s = m_Renderer.settings.surface.segments; s.x = v; m_Renderer.settings.surface.segments = s; }
-		private void SetSegmentY(int v) { Vector2Int s = m_Renderer.settings.surface.segments; s.y = v; m_Renderer.settings.surface.segments = s; }
+		// 面片那些"改一个分量"的写法摊成方法，绑定处只留一行，读起来不至于全是三元组。
+		// 形状一变，投影里记的宽高比就过期了，画面会被裁一半或留一圈边；
+		// 这几项改完顺手重框一次，保证内容始终铺满输出
+		private void SetSizeX(float v) { Vector2 s = m_Renderer.settings.surface.size; s.x = v; m_Renderer.settings.surface.size = s; m_Renderer.FitCameraToGeometry(); }
+		private void SetSizeY(float v) { Vector2 s = m_Renderer.settings.surface.size; s.y = v; m_Renderer.settings.surface.size = s; m_Renderer.FitCameraToGeometry(); }
+		private void SetSegmentX(int v) { Vector2Int s = m_Renderer.settings.surface.segments; s.x = v; m_Renderer.settings.surface.segments = s; m_Renderer.FitCameraToGeometry(); }
+		private void SetSegmentY(int v) { Vector2Int s = m_Renderer.settings.surface.segments; s.y = v; m_Renderer.settings.surface.segments = s; m_Renderer.FitCameraToGeometry(); }
 		private void SetUvOffsetX(float v) { Vector2 u = m_Renderer.settings.surface.uvOffset; u.x = v; m_Renderer.settings.surface.uvOffset = u; }
 		private void SetUvOffsetY(float v) { Vector2 u = m_Renderer.settings.surface.uvOffset; u.y = v; m_Renderer.settings.surface.uvOffset = u; }
 		private void SetUvTileX(float v) { Vector2 u = m_Renderer.settings.surface.uvTiling; u.x = v; m_Renderer.settings.surface.uvTiling = u; }
