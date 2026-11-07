@@ -171,19 +171,27 @@
 .section {
     border-bottom-width: 1px;
     border-bottom-color: rgb(52, 52, 52);
-    padding-top: 4px;
+    padding-top: 2px;
     padding-bottom: 6px;
 }
 
-.section-head {
+/* 折叠头：Foldout 自带的三角就是状态指示，整条都能点，悬停给一点底色 */
+.section > .unity-foldout__toggle {
     font-size: 12px;
-    margin-left: 6px;
-    margin-bottom: 2px;
     color: rgb(225, 225, 225);
+    margin-left: 2px;
+    margin-bottom: 2px;
+    padding: 2px 4px;
+    border-radius: 3px;
 }
 
-.section-body {
-    padding-left: 8px;
+.section > .unity-foldout__toggle:hover {
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
+/* 内容左右留边：子项不该贴着三角和面板边 */
+.section > .unity-foldout__content {
+    padding-left: 10px;
     padding-right: 8px;
 }
 

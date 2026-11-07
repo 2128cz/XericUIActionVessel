@@ -74,7 +74,7 @@ public class MeasuringPointPageManager : FlipPageComponentManager
 - **Shader**：按该 shader 造一张临时材质，属性表里改的就是这张副本，关掉窗口即丢。
 - **Material**：复制一份材质再编辑，原资产不会被写脏；要落盘按「写回原材质」，否则按「丢弃改动」回到来源参数。
 
-两者只能有一个，切换时另一个会被清空。属性表按 shader 声明的类型铺行（Range 滑块、Float / Int、`[Toggle]` 关键字、`[Enum]`、Color、Vector、贴图），每次刷新都会把值原样写回材质并同步关键字状态。
+两者只能有一个，切换时另一个会被清空。细节面板的每个板块（输入源 / 输出 / 面片 / 相机 / 全局参数 / 材质属性）都可以点标题折叠，互不影响。属性表按 shader 声明的类型铺行（Range 滑块、Float / Int、`[Toggle]` 关键字、`[Enum]`、Color、Vector、贴图），每次刷新都会把值原样写回材质并同步关键字状态。
 
 ### 输出
 

@@ -58,9 +58,7 @@
                 <ui:VisualElement name="detail-content" class="detail-content">
 
                     <!-- 输入源 -->
-                    <ui:VisualElement name="sec-source" class="section">
-                        <ui:Toggle name="sec-source-head" label="输入源" value="true" class="section-head" />
-                        <ui:VisualElement name="sec-source-body" class="section-body">
+                    <ui:Foldout name="sec-source" text="输入源" value="true" class="section">
                             <x:ObjectField name="src-shader" label="Shader" class="field-full" />
                             <x:ObjectField name="src-material" label="Material" class="field-full" />
                             <ui:Label name="src-note" class="field-note" text="未指定" />
@@ -68,13 +66,10 @@
                                 <ui:Button name="src-apply" text="写回原材质" class="field-half" />
                                 <ui:Button name="src-revert" text="丢弃改动" class="field-half" />
                             </ui:VisualElement>
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                    </ui:Foldout>
 
                     <!-- 输出目标 -->
-                    <ui:VisualElement name="sec-output" class="section">
-                        <ui:Toggle name="sec-output-head" label="输出" value="true" class="section-head" />
-                        <ui:VisualElement name="sec-output-body" class="section-body">
+                    <ui:Foldout name="sec-output" text="输出" value="true" class="section">
                             <ui:VisualElement class="field-row">
                                 <ui:DropdownField name="out-preset" label="预设" class="field-half" />
                                 <ui:Button name="out-fit-aspect" text="匹配面片比例" class="field-half" />
@@ -92,13 +87,10 @@
                             <ui:Toggle name="out-hdr" label="HDR" class="field-toggle" />
                             <ui:Toggle name="out-srgb" label="sRGB 存储" class="field-toggle" />
                             <ui:Toggle name="out-flip" label="翻转 Y" class="field-toggle" />
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                    </ui:Foldout>
 
                     <!-- 面片 -->
-                    <ui:VisualElement name="sec-surface" class="section">
-                        <ui:Toggle name="sec-surface-head" label="面片" value="true" class="section-head" />
-                        <ui:VisualElement name="sec-surface-body" class="section-body">
+                    <ui:Foldout name="sec-surface" text="面片" value="true" class="section">
                             <xer:EnumField name="surf-kind" label="种类" class="field-full" />
                             <ui:VisualElement class="field-row">
                                 <xer:FloatField name="surf-size-x" label="宽" class="field-half" />
@@ -169,13 +161,10 @@
                                 <ui:Button name="surf-flip-u" text="U镜像" class="field-third" />
                                 <ui:Button name="surf-flip-v" text="V镜像" class="field-third" />
                             </ui:VisualElement>
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                    </ui:Foldout>
 
                     <!-- 离屏相机 -->
-                    <ui:VisualElement name="sec-camera" class="section">
-                        <ui:Toggle name="sec-camera-head" label="相机" value="true" class="section-head" />
-                        <ui:VisualElement name="sec-camera-body" class="section-body">
+                    <ui:Foldout name="sec-camera" text="相机" value="true" class="section">
                             <ui:Toggle name="cam-ortho" label="正交" class="field-toggle" />
                             <xer:FloatField name="cam-ortho-size" label="正交半高" class="field-full" />
                             <xer:FloatField name="cam-fov" label="视野角" class="field-full" />
@@ -200,30 +189,23 @@
                                 <ui:Button name="cam-selftest" text="管线自检" class="field-half" />
                             </ui:VisualElement>
                             <ui:Label name="selftest-note" class="field-note" text="自检" />
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                    </ui:Foldout>
 
                     <!-- 全局参数：离屏渲染没有相机流程，光照/环境这类引擎全局量要自己补 -->
-                    <ui:VisualElement name="sec-globals" class="section">
-                        <ui:Toggle name="sec-globals-head" label="全局参数（光照 / 环境）" value="false" class="section-head" />
-                        <ui:VisualElement name="sec-globals-body" class="section-body">
+                    <ui:Foldout name="sec-globals" text="全局参数（光照 / 环境）" value="false" class="section">
                             <ui:Label name="globals-note" class="field-note" text="渲染时注入，渲染后还原" />
                             <ui:VisualElement class="field-row">
                                 <ui:Button name="globals-detect" text="扫描 Shader" class="field-half" />
                                 <ui:Button name="globals-presets" text="加入常用预设" class="field-half" />
                             </ui:VisualElement>
                             <ui:VisualElement name="globals-rows" class="props-rows" />
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                    </ui:Foldout>
 
                     <!-- 材质属性表：行来自 BakeShaderPropertyRow.uxml -->
-                    <ui:VisualElement name="sec-props" class="section">
-                        <ui:Toggle name="sec-props-head" label="材质属性" value="true" class="section-head" />
-                        <ui:VisualElement name="sec-props-body" class="section-body">
+                    <ui:Foldout name="sec-props" text="材质属性" value="true" class="section">
                             <ui:VisualElement name="props-rows" class="props-rows" />
                             <ui:Label name="props-note" class="field-note" text="未指定 shader" />
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                    </ui:Foldout>
 
                 </ui:VisualElement>
             </ui:ScrollView>

@@ -174,7 +174,6 @@ namespace XericUI.ShaderBake.Editor
 			BuildGlobalTable();
 			BindFaceGrid();
 			BindToolbar();
-			BindSections();
 			BindSettings();
 			BindDetailSplit();
 
@@ -412,33 +411,6 @@ namespace XericUI.ShaderBake.Editor
 				return parts[parts.Length - 1];
 			}
 			return "BakedImage";
-		}
-
-		// ── 分组折叠 ────────────────────────────────────────────
-
-		private void BindSections()
-		{
-			// 头部是 Toggle（名字带 -head），外层同名容器只是分组壳，别拿它去 Q<Toggle>
-			Collapsible("sec-source-head", "sec-source-body");
-			Collapsible("sec-output-head", "sec-output-body");
-			Collapsible("sec-surface-head", "sec-surface-body");
-			Collapsible("sec-camera-head", "sec-camera-body");
-			Collapsible("sec-globals-head", "sec-globals-body");
-			Collapsible("sec-props-head", "sec-props-body");
-		}
-
-		private void Collapsible(string headName, string bodyName)
-		{
-			Toggle head = rootVisualElement.Q<Toggle>(headName);
-			VisualElement body = rootVisualElement.Q<VisualElement>(bodyName);
-			if (head == null || body == null)
-			{
-				Debug.LogError("[ShaderBake] 分组节点不成对：" + headName + " / " + bodyName);
-				return;
-			}
-			body.style.display = head.value ? DisplayStyle.Flex : DisplayStyle.None;
-			head.RegisterValueChangedCallback(evt =>
-				body.style.display = evt.newValue ? DisplayStyle.Flex : DisplayStyle.None);
 		}
 
 		// ── 输入源 ──────────────────────────────────────────────
