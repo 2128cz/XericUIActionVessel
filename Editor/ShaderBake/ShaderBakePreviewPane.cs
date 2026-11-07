@@ -43,7 +43,6 @@ namespace XericUI.ShaderBake.Editor
 		private Texture m_Content;
 		private int m_AppliedWidth = -1;
 		private int m_AppliedHeight = -1;
-		private bool m_ReadoutAlert;
 		private Vector2Int m_PixelSize = Vector2Int.zero;
 		private float m_Zoom = 1f;
 		private bool m_AutoFit = true;
@@ -51,10 +50,6 @@ namespace XericUI.ShaderBake.Editor
 		private bool m_PointerMoved;
 		private Vector2 m_DragStart;
 		private Vector2 m_ScrollStart;
-
-		/// <summary> 上一次渲染的不透明像素占比，-1 = 还没测过 </summary>
-		private float m_CoverageRatio = -1f;
-		private Color m_CoverageColor = Color.clear;
 
 		/// <summary> 当前缩放倍率（1 = 一个像素对应屏幕一个点） </summary>
 		public float zoom { get { return m_Zoom; } }
@@ -307,21 +302,9 @@ namespace XericUI.ShaderBake.Editor
 			}
 		}
 
-		/// <summary>
-		/// 报告这次结果里有多少像素不是全透明。看图时最先要确认的就是"到底画没画出来"，
-		/// 而棋盘格背景会让"没画"和"画了个透明的"看起来完全一样。
-		/// </summary>
-		public void SetCoverage(float opaqueRatio, Color averageColor)
-		{
-			m_CoverageRatio = opaqueRatio;
-			m_CoverageColor = averageColor;
-			UpdateReadout();
-		}
-
 		public void Clear()
 		{
 			m_PixelSize = Vector2Int.zero;
-			m_CoverageRatio = -1f;
 			// 清掉记录，下一次 SetResult 才会真的重设背景，而不是当"同一张图"直接重画
 			m_Content = null;
 			m_AppliedWidth = m_AppliedHeight = -1;
@@ -379,30 +362,10 @@ namespace XericUI.ShaderBake.Editor
 				return;
 			}
 			string text = m_PixelSize.x + " × " + m_PixelSize.y + " px    " +
-			              (m_Zoom * 100f).ToString("0.#") + "%" + CoverageText();
+			              (m_Zoom * 100f).ToString("0.#") + "%";
 			// 文字没变就不写：Label 换文字要重新排版，心跳时这个字符串通常是一样的
 			if (m_Readout.text != text)
 				m_Readout.text = text;
-
-			// 全透明是"这次什么都没画出来"的信号，值得比别的读数更抢眼一点
-			bool alert = m_CoverageRatio <= 0.001f;
-			if (alert != m_ReadoutAlert)
-			{
-				m_ReadoutAlert = alert;
-				m_Readout.style.color = new StyleColor(alert
-					? new Color(0.98f, 0.51f, 0.41f)
-					: new Color(0.86f, 0.86f, 0.86f));
-			}
-		}
-
-		/// <summary> 覆盖率后缀；没测过就不占字数 </summary>
-		private string CoverageText()
-		{
-			if (m_CoverageRatio < 0f)
-				return string.Empty;
-			if (m_CoverageRatio <= 0.001f)
-				return "    全透明（没画出像素）";
-			return "    不透明 " + Mathf.RoundToInt(m_CoverageRatio * 100f) + "%";
 		}
 
 		private void OnViewportGeometry(GeometryChangedEvent evt)

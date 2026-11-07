@@ -99,6 +99,8 @@ namespace XericUI.ShaderBake.Editor
 		private double m_NextCoverageCheck;
 		/// <summary> 上一次结果的不透明像素占比，-1 = 没测出来 </summary>
 		private float m_LastCoverage = -1f;
+		/// <summary> 上一次写进日志的覆盖率百分比：只在变化时输出，避免拖滑块刷屏 </summary>
+		private int m_LoggedCoverage = -1;
 		/// <summary> 探针（自检 / 测试视图）活着才能让那张图继续显示；切回真实结果时才收掉 </summary>
 		private readonly ShaderBakeOverrideRenderer m_Override = new ShaderBakeOverrideRenderer();
 		private DebugView m_DebugView = DebugView.None;
@@ -530,7 +532,7 @@ namespace XericUI.ShaderBake.Editor
 			{
 				note.text = m_Source.shader == null
 					? "未指定 shader"
-					: (m_PropertyTable.rowCount + " 项可编辑属性（隐藏属性不列出）");
+					: (m_PropertyTable.rowCount + " 项属性");
 				if (!string.IsNullOrEmpty(textureHint))
 					note.text += "\n" + textureHint;
 			}
@@ -590,7 +592,7 @@ namespace XericUI.ShaderBake.Editor
 		{
 			m_Renderer.settings.globals.AddEnvironmentPresets();
 			RefreshGlobals();
-			SetStatus("已加入常用光照/环境预设（勾选才生效）");
+			SetStatus("已加入预设");
 		}
 
 		// ── 输出 ────────────────────────────────────────────────
@@ -998,11 +1000,11 @@ namespace XericUI.ShaderBake.Editor
 		{
 			if (!m_Renderer.FitCameraOnFace(m_SelectedFace))
 			{
-				SetStatus("选中格铺满不可用：外部网格模式下不分格");
+				SetStatus("外部网格不分格");
 				return;
 			}
 			Commit();
-			SetStatus("第 " + (m_SelectedFace + 1) + " 格已铺满画面，仍有留白就按「匹配面片比例」");
+			SetStatus("第 " + (m_SelectedFace + 1) + " 格已铺满");
 		}
 
 		/// <summary>
@@ -1036,7 +1038,7 @@ namespace XericUI.ShaderBake.Editor
 				SetStatus("管线自检：空画面");
 				return;
 			}
-			SetSelfTestNote("自检通过：覆盖 " + Mathf.RoundToInt(m_LastCoverage * 100f) + "%");
+			SetSelfTestNote("自检通过");
 			SetStatus("管线自检：正常");
 		}
 
@@ -1213,7 +1215,7 @@ namespace XericUI.ShaderBake.Editor
 				// 否则只有一条状态栏提示，很容易被下一次别的状态覆盖掉，看不出来画面已经旧了
 				m_PendingRefresh = true;
 				UpdateRenderButton();
-				SetStatus("参数已改，按「重新渲染」出图");
+				SetStatus("参数已改");
 				return;
 			}
 			if (m_RenderPending)
@@ -1274,7 +1276,7 @@ namespace XericUI.ShaderBake.Editor
 
 			m_Preview.SetResult(rt, m_Renderer.settings.output.size);
 			if (measureCoverage)
-				MeasureCoverage(rt);
+				MeasureCoverage(rt, !fromHeartbeat);
 			// 分格线与编号只跟参数、相机有关，而参数一改必然带一次非心跳渲染；
 			// 心跳时再刷一遍等于每帧让 Yoga 重排整个覆盖层，这是预览发卡的来源之一
 			if (!fromHeartbeat)
@@ -1302,13 +1304,20 @@ namespace XericUI.ShaderBake.Editor
 			return false;
 		}
 
-		private void MeasureCoverage(RenderTexture rt)
+		private void MeasureCoverage(RenderTexture rt, bool log)
 		{
 			float coverage;
 			Color average;
 			m_LastCoverage = ShaderBakeReadback.MeasureCoverage(rt, out coverage, out average) ? coverage : -1f;
-			if (m_LastCoverage >= 0f)
-				m_Preview.SetCoverage(m_LastCoverage, average);
+			if (!log || m_LastCoverage < 0f)
+				return;
+			// 数字不摆在界面上——画没画出来看图就知道了，这里只留给排查时从 Console / Editor.log 里翻。
+			// 只在百分比变了才写一行：拖滑块时画面参数一直在变，读数不变就不该刷屏
+			int percent = Mathf.RoundToInt(m_LastCoverage * 100f);
+			if (percent == m_LoggedCoverage)
+				return;
+			m_LoggedCoverage = percent;
+			Debug.Log("[ShaderBake] 不透明 " + percent + "%");
 		}
 
 		// ── 测试视图 ────────────────────────────────────────────
@@ -1454,7 +1463,7 @@ namespace XericUI.ShaderBake.Editor
 
 			m_Preview.SetResult(rt, m_Renderer.settings.output.size);
 			if (measureCoverage)
-				MeasureCoverage(rt);
+				MeasureCoverage(rt, !fromHeartbeat);
 			if (!fromHeartbeat)
 				UpdateFaceOverlay();
 			UpdateSizeReadout(!fromHeartbeat);
@@ -1482,36 +1491,6 @@ namespace XericUI.ShaderBake.Editor
 					time += " · " + Mathf.RoundToInt(1000f / m_LiveFrameMs) + " fps";
 				m_StatusTime.text = time;
 			}
-			UpdateMeshReadout();
-		}
-
-		private void UpdateMeshReadout()
-		{
-			// 顶点数只在状态栏出现：它决定细分够不够用，但不值得占一行界面
-			Mesh mesh = m_Renderer != null ? m_Renderer.geometry : null;
-			if (m_DebugView != DebugView.None && m_Override.geometry != null)
-				mesh = m_Override.geometry;
-			if (mesh == null || m_StatusMessage == null)
-				return;
-			if (m_StatusMessage.text.StartsWith("导出") || m_StatusMessage.text.StartsWith("参数已改"))
-				return;
-			m_StatusMessage.text = (m_DebugView != DebugView.None ? "测试视图 · " : "已渲染 · ")
-			                     + mesh.vertexCount + " 顶点" + CoverageHint();
-		}
-
-		/// <summary> 状态栏的覆盖率后缀：把"看着像没渲染"拆成"没画出来"和"画出来但是透明的" </summary>
-		private string CoverageHint()
-		{
-			if (m_LastCoverage < 0f)
-				return string.Empty;
-			// 测试图 alpha 恒为 1，这里的占比量的是"几何盖住了多少画面"，和透明没关系——
-			// 用它一眼看出是相机没框住，还是材质渲不出东西
-			if (m_DebugView != DebugView.None)
-				return m_LastCoverage <= 0.001f ? " · 画面全空，面片不在视锥里"
-				                                : " · 画面被面片盖住 " + Mathf.RoundToInt(m_LastCoverage * 100f) + "%";
-			if (m_LastCoverage <= 0.001f)
-				return " · 全透明，一个像素都没画出";
-			return " · 不透明 " + Mathf.RoundToInt(m_LastCoverage * 100f) + "%";
 		}
 
 		private void SetStatus(string message)
