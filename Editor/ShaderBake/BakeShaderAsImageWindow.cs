@@ -769,7 +769,20 @@ namespace XericUI.ShaderBake.Editor
 					: "第 " + (m_SelectedFace + 1) + " 格 · UV (" + cell.uvX + ", " + cell.uvY + ")";
 			}
 			SetFaceFieldsEnabled(!meshMode);
+			// 两个 UV 输入框绑的是"当前选中格"，换格就得跟着换；
+			// 它们只在 SyncUiFromSettings 里同步，点选走的是这条路径，不补这一句就一直停在旧格上
+			SetFaceUvFields(cell);
 			UpdateFaceOverlay();
+		}
+
+		private void SetFaceUvFields(ShaderBakeFaceCell cell)
+		{
+			int uvX = cell != null ? cell.uvX : 0;
+			int uvY = cell != null ? cell.uvY : 0;
+			var x = rootVisualElement.Q<VisualElement>("face-uv-x") as INotifyValueChanged<int>;
+			if (x != null) x.SetValueWithoutNotify(uvX);
+			var y = rootVisualElement.Q<VisualElement>("face-uv-y") as INotifyValueChanged<int>;
+			if (y != null) y.SetValueWithoutNotify(uvY);
 		}
 
 		private void SetFaceFieldsEnabled(bool enabled)
