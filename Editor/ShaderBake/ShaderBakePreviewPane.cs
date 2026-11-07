@@ -39,6 +39,11 @@ namespace XericUI.ShaderBake.Editor
 		private int m_CheckerWidth;
 		private int m_CheckerHeight;
 		private bool m_CheckerVisible;
+		/// <summary> 上一次挂上去的那张图；引用没变就只重画，不重设样式 </summary>
+		private Texture m_Content;
+		private int m_AppliedWidth = -1;
+		private int m_AppliedHeight = -1;
+		private bool m_ReadoutAlert;
 		private Vector2Int m_PixelSize = Vector2Int.zero;
 		private float m_Zoom = 1f;
 		private bool m_AutoFit = true;
@@ -86,11 +91,22 @@ namespace XericUI.ShaderBake.Editor
 		/// <summary> 挂上这次渲染的结果。传 null 表示"没有结果"，只清读数。 </summary>
 		public void SetResult(Texture content, Vector2Int pixelSize)
 		{
+			// 实时预览每秒重画几十次，但画进的是同一张 RT：内容每帧都在变，背景引用没变。
+			// 这时只要一次重画，不必再走一遍样式解析 + 重新适配尺寸 + 重写读数
+			bool sameContent = ReferenceEquals(content, m_Content) && pixelSize == m_PixelSize;
+			m_Content = content;
 			m_PixelSize = pixelSize;
+			if (sameContent)
+			{
+				m_Image.MarkDirtyRepaint();
+				return;
+			}
+
 			m_Image.style.backgroundImage = ToBackground(content);
 			if (m_AutoFit)
 				FitToView();
-			ApplySize();
+			else
+				ApplySize();
 		}
 
 		/// <summary>
@@ -115,7 +131,11 @@ namespace XericUI.ShaderBake.Editor
 				return;
 			m_Checker.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
 			if (visible)
+			{
+				// 尺寸没变时 ApplySize 会跳过写样式，这里要强制走一遍，否则棋盘纹理不会被建出来
+				m_AppliedWidth = m_AppliedHeight = -1;
 				ApplySize();
+			}
 		}
 
 		public void ZoomIn() { SetZoom(m_Zoom * 1.25f); }
@@ -302,6 +322,9 @@ namespace XericUI.ShaderBake.Editor
 		{
 			m_PixelSize = Vector2Int.zero;
 			m_CoverageRatio = -1f;
+			// 清掉记录，下一次 SetResult 才会真的重设背景，而不是当"同一张图"直接重画
+			m_Content = null;
+			m_AppliedWidth = m_AppliedHeight = -1;
 			m_Image.style.backgroundImage = new StyleBackground(StyleKeyword.None);
 			UpdateReadout();
 		}
@@ -327,15 +350,22 @@ namespace XericUI.ShaderBake.Editor
 			{
 				m_Frame.style.width = 0f;
 				m_Frame.style.height = 0f;
+				m_AppliedWidth = m_AppliedHeight = -1;
 				UpdateReadout();
 				return;
 			}
 			int width = Mathf.Max(1, Mathf.RoundToInt(m_PixelSize.x * m_Zoom));
 			int height = Mathf.Max(1, Mathf.RoundToInt(m_PixelSize.y * m_Zoom));
-			m_Frame.style.width = width;
-			m_Frame.style.height = height;
-			if (m_CheckerVisible)
-				EnsureChecker(width, height);
+			// 尺寸没变就别再写一遍：写样式会让整个预览做一次布局，心跳时这是白花的
+			if (width != m_AppliedWidth || height != m_AppliedHeight)
+			{
+				m_AppliedWidth = width;
+				m_AppliedHeight = height;
+				m_Frame.style.width = width;
+				m_Frame.style.height = height;
+				if (m_CheckerVisible)
+					EnsureChecker(width, height);
+			}
 			UpdateReadout();
 		}
 
@@ -348,12 +378,21 @@ namespace XericUI.ShaderBake.Editor
 				m_Readout.text = "无结果";
 				return;
 			}
-			m_Readout.text = m_PixelSize.x + " × " + m_PixelSize.y + " px    " +
-			                 (m_Zoom * 100f).ToString("0.#") + "%" + CoverageText();
+			string text = m_PixelSize.x + " × " + m_PixelSize.y + " px    " +
+			              (m_Zoom * 100f).ToString("0.#") + "%" + CoverageText();
+			// 文字没变就不写：Label 换文字要重新排版，心跳时这个字符串通常是一样的
+			if (m_Readout.text != text)
+				m_Readout.text = text;
+
 			// 全透明是"这次什么都没画出来"的信号，值得比别的读数更抢眼一点
-			m_Readout.style.color = new StyleColor(m_PixelSize.x > 0 && m_CoverageRatio <= 0.001f
-				? new Color(0.98f, 0.51f, 0.41f)
-				: new Color(0.86f, 0.86f, 0.86f));
+			bool alert = m_CoverageRatio <= 0.001f;
+			if (alert != m_ReadoutAlert)
+			{
+				m_ReadoutAlert = alert;
+				m_Readout.style.color = new StyleColor(alert
+					? new Color(0.98f, 0.51f, 0.41f)
+					: new Color(0.86f, 0.86f, 0.86f));
+			}
 		}
 
 		/// <summary> 覆盖率后缀；没测过就不占字数 </summary>

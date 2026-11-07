@@ -39,12 +39,17 @@ namespace XericUI.ShaderBake.Editor
 		/// <summary> 测试视图用的那张 shader（Editor 目录下，见 ShaderBakeDebugView.shader） </summary>
 		private const string kDebugViewShader = "Hidden/XericUI/ShaderBake/Debug View";
 
-		/// <summary> 实时预览的节拍：有焦点时跟上动画，失焦时放慢，不让一张没人看的图占着 GPU </summary>
-		private const double kLiveIntervalFocused = 1.0 / 24.0;
-		private const double kLiveIntervalBlurred = 1.0 / 6.0;
+		/// <summary>
+		/// 实时预览的节拍上限：有焦点时按 60fps 排，失焦降到 20fps。
+		///
+		/// <para>这只是"最早什么时候重画"，真正的帧率还受渲染耗时和编辑器自己的刷新率限制——
+		/// 所以别处只管少做无用功，别指望靠调这个数字把卡顿调掉。</para>
+		/// </summary>
+		private const double kLiveIntervalFocused = 1.0 / 60.0;
+		private const double kLiveIntervalBlurred = 1.0 / 20.0;
 
-		/// <summary> 覆盖率读数降频：它要 ReadPixels，是这一轮里唯一会同步显卡的一步 </summary>
-		private const double kCoverageInterval = 0.5;
+		/// <summary> 覆盖率读数降频：它要 ReadPixels，会同步一次显卡，实时预览里做多了就是顿感来源 </summary>
+		private const double kCoverageInterval = 2.0;
 
 		private const float kDefaultDetailWidth = 340f;
 		private static readonly string[] kAntiAliasingChoices = { "1", "2", "4", "8" };
@@ -86,6 +91,11 @@ namespace XericUI.ShaderBake.Editor
 		private bool m_PendingRefresh;
 		private double m_LastRenderMs = -1;
 		private double m_NextLiveRender;
+		/// <summary> 上一次心跳的时刻；用来量两次心跳之间实际隔了多久 </summary>
+		private double m_LastHeartbeatTime;
+		/// <summary> 实测心跳间隔（毫秒），-1 = 还没量到 </summary>
+		private float m_LiveFrameMs = -1f;
+		private double m_NextStatusUpdate;
 		private double m_NextCoverageCheck;
 		/// <summary> 上一次结果的不透明像素占比，-1 = 没测出来 </summary>
 		private float m_LastCoverage = -1f;
@@ -191,6 +201,16 @@ namespace XericUI.ShaderBake.Editor
 			double now = EditorApplication.timeSinceStartup;
 			if (now < m_NextLiveRender)
 				return;
+
+			// 实测两次心跳之间的间隔。它是"看到的帧率"，和渲染本身花了多少毫秒不是一回事：
+			// 卡在别处时两个数会差很远，只有摆出来才分得清是谁的问题
+			if (m_LastHeartbeatTime > 0.0)
+			{
+				float delta = (float)((now - m_LastHeartbeatTime) * 1000.0);
+				m_LiveFrameMs = m_LiveFrameMs < 0f ? delta : Mathf.Lerp(m_LiveFrameMs, delta, 0.3f);
+			}
+			m_LastHeartbeatTime = now;
+
 			m_NextLiveRender = now + (hasFocus ? kLiveIntervalFocused : kLiveIntervalBlurred);
 			DoRender(true);
 		}
@@ -324,6 +344,8 @@ namespace XericUI.ShaderBake.Editor
 				{
 					// 这个勾就是"要不要一直重画"的总开关：打开时把攒下的待刷新立刻补上，
 					// 关掉时不再重画，只把它记成待刷新显示在「重新渲染」上
+					m_LastHeartbeatTime = 0.0;
+					m_LiveFrameMs = -1f;
 					UpdateRenderButton();
 					if (evt.newValue && m_PendingRefresh)
 						DoRender();
@@ -1258,7 +1280,7 @@ namespace XericUI.ShaderBake.Editor
 
 			bool measureCoverage = ShouldMeasureCoverage(fromHeartbeat);
 			bool wantDebugView = m_DebugView != DebugView.None;
-			if (wantDebugView && RenderDebugView(measureCoverage))
+			if (wantDebugView && RenderDebugView(measureCoverage, fromHeartbeat))
 				return;
 			if (wantDebugView)
 			{
@@ -1277,15 +1299,18 @@ namespace XericUI.ShaderBake.Editor
 			{
 				m_Preview.Clear();
 				SetStatus(string.IsNullOrEmpty(m_Renderer.lastError) ? "渲染失败" : m_Renderer.lastError);
-				UpdateSizeReadout();
+				UpdateSizeReadout(true);
 				return;
 			}
 
 			m_Preview.SetResult(rt, m_Renderer.settings.output.size);
 			if (measureCoverage)
 				MeasureCoverage(rt);
-			UpdateFaceOverlay();
-			UpdateSizeReadout();
+			// 分格线与编号只跟参数、相机有关，而参数一改必然带一次非心跳渲染；
+			// 心跳时再刷一遍等于每帧让 Yoga 重排整个覆盖层，这是预览发卡的来源之一
+			if (!fromHeartbeat)
+				UpdateFaceOverlay();
+			UpdateSizeReadout(!fromHeartbeat);
 			if (fromHeartbeat)
 				return;
 			if (string.IsNullOrEmpty(m_StatusMessage.text) || m_StatusMessage.text.StartsWith("导出") || m_StatusMessage.text.StartsWith("参数已改"))
@@ -1293,8 +1318,8 @@ namespace XericUI.ShaderBake.Editor
 		}
 
 		/// <summary>
-		/// 覆盖率量的是"这一轮画面上有没有东西"，慢变化，半秒一次足够；
-		/// 心跳 24fps 时每次都量的话，每帧都要同步一次显卡，实时预览就变成卡顿本身。
+		/// 覆盖率量的是"这一轮画面上有没有东西"，慢变化，两秒一次足够；参数一改则立刻量。
+		/// 心跳时每次都量的话，每帧都要同步一次显卡，实时预览就变成卡顿本身。
 		/// 不量的时候沿用上一个读数，界面不会因此少信息。
 		/// </summary>
 		private bool ShouldMeasureCoverage(bool fromHeartbeat)
@@ -1471,7 +1496,7 @@ namespace XericUI.ShaderBake.Editor
 		///
 		/// <para>只换"看"的那张图：导出、材质属性表、写回原材质都不受影响，仍走真实材质。</para>
 		/// </summary>
-		private bool RenderDebugView(bool measureCoverage)
+		private bool RenderDebugView(bool measureCoverage, bool fromHeartbeat)
 		{
 			if (!EnsureDebugMaterial())
 				return false;
@@ -1489,17 +1514,33 @@ namespace XericUI.ShaderBake.Editor
 			m_Preview.SetResult(rt, m_Renderer.settings.output.size);
 			if (measureCoverage)
 				MeasureCoverage(rt);
-			UpdateFaceOverlay();
-			UpdateSizeReadout();
+			if (!fromHeartbeat)
+				UpdateFaceOverlay();
+			UpdateSizeReadout(!fromHeartbeat);
 			return true;
 		}
 
-		private void UpdateSizeReadout()
+		/// <param name="immediate">
+		/// 参数改动、换测试视图这类"画面刚变"的时刻要立刻反映；
+		/// 心跳则走 5Hz 节流——数字每帧变一次等于每帧都让状态栏重排一遍
+		/// </param>
+		private void UpdateSizeReadout(bool immediate)
 		{
+			double now = EditorApplication.timeSinceStartup;
+			if (!immediate && now < m_NextStatusUpdate)
+				return;
+			m_NextStatusUpdate = now + 0.2;
+
 			if (m_StatusSize != null)
 				m_StatusSize.text = m_Renderer.settings.output.width + "×" + m_Renderer.settings.output.height;
 			if (m_StatusTime != null)
-				m_StatusTime.text = m_LastRenderMs < 0.0 ? "-" : m_LastRenderMs.ToString("0.0") + " ms";
+			{
+				string time = m_LastRenderMs < 0.0 ? "-" : m_LastRenderMs.ToString("0.0") + " ms";
+				// 只在实时预览开着时报帧率：关掉之后那个数是上一次的，摆着会误导
+				if (m_LiveFrameMs > 0.5f && m_AutoRefreshToggle != null && m_AutoRefreshToggle.value)
+					time += " · " + Mathf.RoundToInt(1000f / m_LiveFrameMs) + " fps";
+				m_StatusTime.text = time;
+			}
 			UpdateMeshReadout();
 		}
 
