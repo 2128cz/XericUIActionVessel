@@ -1879,7 +1879,7 @@ UI Toolkit 里 `flexShrink` 默认为 1，窗口矮了，被压扁的就是**最
 他报"矢量场现在没有在渲染"。我从 `Assets/Prefabs/0n_Panel/SP_盾构机掘进姿态 Variant.prefab` 里直接读到：
 
 - 数据表：**x / y / z 三个数值维**，记录值量级 **−100 .. 50**（三条以上）；
-- 箭头元素：`m_Enabled=1`、`m_VectorMode=0(Absolute)`、`m_Continuous=0`、`m_UseColorDimensions=0`、`m_MaxArrowCount=512`。
+- 箭头元素：`m_Enabled=1`、`m_VectorMode=0(Absolute)`（这一档 2026-11-08 已删，那份资产的值当场迁成 1，见 §33.4）、`m_Continuous=0`、`m_UseColorDimensions=0`、`m_MaxArrowCount=512`。
 
 ⇒ 形状是够的（需要 3、现有 3；面板那句"一条都不画"不会亮，报表 `dims=3/3` 也正常），
 所以问题不在 §25.1 那一层，而在**尺度**这一层。
@@ -2002,7 +2002,7 @@ P18 那次我读不到库那个包（被拦过一次），就照着自己代码�
 4. 若画面仍然什么都没有 ⇒ 读报表那一行的 `path= / arrows= / markers= / curveVerts=`。
    现在箭头这条路上没有"填充"那一层了，读数能给的解释比上一版窄——这正是这次改动的目的。
 
-## 30. P24：方向来源四档、头的尺寸吃投影、锚点字段（2026-10-26 他三条要求）
+## 30. P24：方向来源四档（0 号 2026-11-08 删，见 §33.4）、头的尺寸吃投影、锚点字段（2026-10-26 他三条要求）
 
 ### 30.1 他指出的两件事
 
@@ -2013,23 +2013,23 @@ P18 那次我读不到库那个包（被拦过一次），就照着自己代码�
 2. **`Absolute` 下"方向的来源"应该是可选的**，而且支数要跟着一起来：
    他说"要让一个箭头对应两组数据，32 个点上就只该有 16 个箭头，而现在有 32 个"。
 
-### 30.2 四档方向来源（`XChartArrowDirectionSource`，算式全在 `XChartVectorFieldMath`）
+### 30.2 方向来源（`XChartArrowDirectionSource`，算式全在 `XChartVectorFieldMath`）——三档，序号 0 是空的
 
 | 档 | 起点 | 方向／第二量 | 支数 | 要几个数值维 |
 | --- | --- | --- | --- | --- |
-| `NextRecordAsVector`（旧 Absolute） | 第 i 条 0~2 | 第 i+1 条 0~2（折进盒子后的坐标当方向） | N−1 | 3 |
 | `NextRecordAsPoint`（旧 Relative） | 第 i 条 0~2 | 第 i+1 条 0~2（**第二个点**，作差） | N−1 | 3 |
 | `ThisRecordCarriesVector` | 第 i 条 0~2 | **同一条**的 3~5（原始矢量） | N | 6 |
 | `AlternatingRecords`（分段） | **偶数**条 0~2 | **奇数**条 0~2（原始矢量） | N÷2 | 3 |
 
 - **支数与维数只有这一个实现**：`ArrowCount(source,…)` / `RequiredCoordinateDimensions(source)`。
-  四档的算法（`N−1 / N / N÷2`、`3 / 6`）一旦在工具里各写一遍，画面上只是"少几支"，最难查。
+  三档的算法（`N−1 / N / N÷2`、`3 / 6`）一旦在工具里各写一遍，画面上只是"少几支"，最难查。
 - **方向是原始矢量，绝不按位置的显示范围折**（`TryReadRaw`）：折一次就把"朝哪"变成"在哪"——
   一个 `(0,1,0)` 会被折成一个偏移量，于是整场箭头一起跑偏。它的尺度由 `DirectionScale`（每数据单位给多少立方体单位）说话。
-- **兼容**：新枚举的 0/1 就是旧 `XChartArrowVectorMode` 的 Absolute/Relative，字段另加了
-  `[FormerlySerializedAs("m_VectorMode")]` ⇒ 他场景里存过的值不用重设（"换类型不换序号"是"改名静默丢值"的反面做法）。
+- **兼容**：新枚举的 1 就是旧 `XChartArrowVectorMode.Relative`，字段另加了
+  `[FormerlySerializedAs("m_VectorMode")]` ⇒ 存过的值不用重设（"换类型不换序号"是"改名静默丢值"的反面做法）。
+  序号 0 从 2026-11-08 起没有读法（那一档被删），资产里存过 0 的要跑迁移脚本（§33.4）。
 - 他说"相对模式是一个点到另一个点，不用再算一次投影"：这条本来就成立（两端都是投影点），
-  所以 `Tip` 只在 `NextRecordAsPoint` 那一档作差，其余三档第二量直接就是方向。
+  所以 `Tip` 只在 `NextRecordAsPoint` 那一档作差，其余两档第二量直接就是方向。
 
 ### 30.3 头的尺寸吃投影 + 锚点
 
@@ -2180,6 +2180,7 @@ P18 那次我读不到库那个包（被拦过一次），就照着自己代码�
 
 ⇒ 前两档"没意义"是因为他的表里**没有方向列**（把位置当方向用，本来就是凑数的一档）；
 第四档才是真 bug：**位置除以了跨度、方向没有**——同一个 `DirectionScale` 底下一套值两种单位。
+（上表是删之前的观察：2026-11-08 他把第一档删了、存的值 0 迁到 1，见 §33.4。）
 
 ### 33.2 修法：方向走"差折法"，只缩不移位
 
@@ -2198,9 +2199,26 @@ P18 那次我读不到库那个包（被拦过一次），就照着自己代码�
 - `p4_control` **73** 支各红在点名断言上（新 2 支：把方向按位置折（偏移混进来）／方向干脆不缩＝他那根巨箭的形状）。
 - 编译门 runtime + player + editor + 3 对照绿（`chain_p29.txt`）。
 
-### 33.4 还等他定的那一半（没擅自做）
+### 33.4 0 号档的去留（2026-11-08 他定了：删档，存的值迁到 `NextRecordAsPoint`）
 
-旧 `NextRecordAsVector` 的去留：他预制里存的就是这一档（`m_VectorMode: 0`）。三个选项与我的建议已经给他
-（① 改名并写明"只给把方向写进位置列的表用"；② 删，序号 0 迁到 `AlternatingRecords`；③ 删，迁到 `NextRecordAsPoint`——我建议这个）。
-**删除或改默认都会改他画面上的东西**，所以这是待答项，不是我该替他拍的实现细节。
-他那边真要让矢量场有内容，缺的是**方向列**：多一列（或奇数行放方向），`AlternatingRecords` / `ThisRecordCarriesVector` 才是给矢量场用的两档。
+三个选项（① 改名写明用途、② 删并把序号 0 让给 `AlternatingRecords`、③ 删、值迁到 1）里他选了 ③。落码：
+
+- **序号 1/2/3 不许改**：资产存的就是这些数（`m_DirectionSource`），换序号就是换含义——② 被排除正是这个原因，
+  它会把存着的 0 读成另一档。所以 0 号是**空档**，只有值迁移，没有重新编号。
+- **默认值**跟着改到 `NextRecordAsPoint`（`ChartToolVectorArrows` 与 `XChartVolumeConfigs` 两处字段初值）。
+  默认只管新建的元素：他预制里那个 0 不靠默认值救，靠迁移。
+- **迁移**＝`.ximage-gate/migrate_direction_source.py`：扫工程 `Assets` 下的 `.prefab`/`.unity`，两种字段名都认
+  （现名 `m_DirectionSource` 和 `[FormerlySerializedAs]` 的旧名 `m_VectorMode`）。判决读回文件而不是信改写：
+  先落备份再写，写后重新读，期望行 `m_DirectionSource: 1` 真出现才算通过，残留 0 就红。
+  本轮的两份日志正好是一对：迁移前 `--check` 红（1 条，退出 1），迁移后 `--check` 绿（0 条，退出 0）；
+  被改的那一条就是 `Assets/Prefabs/0n_Panel/SP_盾构机掘进姿态 Variant.prefab` 第 703 行。
+  **画面要重导入才变**：改的是 YAML 本体，编辑器里那张图得重导入或重启。
+- **限制说清楚**：迁移只扫了他当前工程的 `Assets`（1 处）。别的项目或备份里存 0 的资产不会报错——
+  它会靠 `switch` 的 `default` 那一支跑，画出来的正是被删掉的那个含义（"把坐标当方向"），而面板下拉里
+  已经没有这一项，所以 Inspector 上会显示成对不上号的值。这不是崩溃，是"读法靠 default 兜着、名字里没有了"。
+
+判据跟着改：探针 **473** 条照旧 0 失败（"方向是矢量本身"那条从 0 号档改打在 `AlternatingRecords`，"点到点作差"
+照打 `NextRecordAsPoint`——两条还是能在同一份数据上分开，覆盖没少）；`p4_control` **73** 支照旧各红在点名断言上
+（那支改名 `point-to-point reuses the carries-direction rule`，期望断言标签同步改，否则臂红了却没人认它的断言）；
+编译门 runtime + player + editor + 3 对照绿。要让矢量场真有内容，缺的还是**方向列**：多 3 列（凑 6 个数值维）
+或者让奇数行放方向，`ThisRecordCarriesVector` / `AlternatingRecords` 才是给矢量场用的两档。

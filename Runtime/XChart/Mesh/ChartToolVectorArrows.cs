@@ -34,8 +34,8 @@ namespace XericUI.XChart.Mesh
         private int m_CoordinateDimension;
         /// <summary>坐标的维度下标（x/y/z 三维）</summary>
         public int CoordinateDimension { get => m_CoordinateDimension; set { m_CoordinateDimension = value; MarkDirty(); } }
-        private XChartArrowDirectionSource m_DirectionSource = XChartArrowDirectionSource.NextRecordAsVector;
-        /// <summary>方向从哪来（四档，箭数与维数需求都跟着它变；算式在 XChartVectorFieldMath 里）</summary>
+        private XChartArrowDirectionSource m_DirectionSource = XChartArrowDirectionSource.NextRecordAsPoint;
+        /// <summary>方向从哪来（三档，箭数与维数需求都跟着它变；算式在 XChartVectorFieldMath 里）</summary>
         public XChartArrowDirectionSource DirectionSource
         {
             get => m_DirectionSource;
@@ -266,7 +266,7 @@ namespace XericUI.XChart.Mesh
                     m_PointsSkipped++;
                     continue;
                 }
-                // 读法在纯算术里：相邻两条·下一条是第二个点 ⇒ 作差；其余三档 ⇒ 第二量本身就是方向
+                // 读法在纯算术里：点到点那一档 ⇒ 作差；其余两档 ⇒ 第二量本身就是方向
                 Vector3 tip = XChartVectorFieldMath.Tip(DirectionSource, origin, second, DirectionScale);
                 AddShaft(space, origin, tip, ColorAt(source, FirstRecordOf(i)), ColorAt(source, SecondRecordOf(i)));
                 m_ArrowsBuilt++;

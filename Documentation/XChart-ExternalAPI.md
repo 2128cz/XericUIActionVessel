@@ -102,11 +102,10 @@ public float Radius { get => m_Radius; set { m_Radius = value; MarkDirty(); } }
 
 ## 5. 矢量场（箭头）：方向从哪来、头贴在哪、尺寸怎么算
 
-`ChartToolVectorArrows` 是"线 + 库的原生标记"，**没有填充几何**（§29）。四档方向来源决定支数和维数需求（§30）：
+`ChartToolVectorArrows` 是"线 + 库的原生标记"，**没有填充几何**（§29）。三档方向来源决定支数和维数需求（§30；序号 0 已删，资产里存过 0 的要迁移）：
 
 | `DirectionSource` | 起点 | 方向／第二量 | 支数 | 需要的数值维 |
 | --- | --- | --- | --- | --- |
-| `NextRecordAsVector`（旧 Absolute） | 第 i 条 0~2 | 第 i+1 条 0~2 | N−1 | 3 |
 | `NextRecordAsPoint`（旧 Relative，**首尾相接**） | 第 i 条 0~2 | 第 i+1 条 0~2（作差） | N−1 | 3 |
 | `ThisRecordCarriesVector`（**一条记录一个箭头**） | 第 i 条 0~2 | **同一条**的 3~5（原始矢量） | N | 6 |
 | `AlternatingRecords`（**分段**：偶点奇向） | 偶数条 0~2 | 奇数条 0~2（原始矢量） | N÷2 | 3 |

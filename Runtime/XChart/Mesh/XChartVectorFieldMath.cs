@@ -7,14 +7,13 @@ namespace XericUI.XChart.Mesh
     /// 一支箭头的<b>方向从哪来</b>（他 2026-10-26 补的口径：光有"相对/绝对"两个词表达不出
     /// "一条记录自带方向"和"偶数点是点、奇数点是方向"这两种存法）。
     ///
-    /// <para><b>编号是有意接旧的</b>：0/1 就是原来 <c>XChartArrowVectorMode</c> 的 Absolute/Relative，
-    /// 所以场景里存过的 <c>m_VectorMode</c> 值不用动就还是同一个意思（枚举换类型而序号不改＝静默丢值的反面）。
-    /// 2/3 是新增的两档"方向是矢量"的存法。</para>
+    /// <para><b>序号 0 是空的</b>：那里原来是"把下一条记录<b>折好的坐标</b>当方向"（旧 Absolute）。
+    /// 它只在"把方向写进位置列"的表上有读法——三列 x/y/z 的表里它等于拿位置凑方向，
+    /// 2026-11-08 他定了删掉这一档，数据一律走点到点。<b>1/2/3 不许改号</b>：资产里存的就是这些数
+    /// （<c>m_DirectionSource</c>），换序号就是换含义；存着 0 的资产由迁移脚本改成 1，逐资产点名。</para>
     /// </summary>
     public enum XChartArrowDirectionSource
     {
-        /// <summary>相邻两条、重叠：本条＝起点，下一条的<b>坐标</b>就是方向矢量（旧 Absolute）。箭数＝N−1</summary>
-        NextRecordAsVector = 0,
         /// <summary>相邻两条、重叠：本条＝起点，下一条＝<b>第二个点</b>（旧 Relative，首尾相接）。箭数＝N−1</summary>
         NextRecordAsPoint = 1,
         /// <summary>一条记录自带：0~2 维是点、3~5 维是方向矢量。箭数＝N（要 6 个数值维）</summary>
@@ -104,7 +103,7 @@ namespace XericUI.XChart.Mesh
         /// 末端位置。<paramref name="source"/>＝<see cref="XChartArrowDirectionSource.NextRecordAsPoint"/> 时
         /// <paramref name="second"/> 是<b>第二个点</b>（起点 + 差向量×倍率，首尾相接）；
         /// 其余三档它就是<b>方向矢量</b>本身（起点 + 方向×倍率）。
-        /// 相邻两条的两档在同一个数据上画出来是两幅图：一片"刺猬"对一串首尾相接。
+        /// <para>同一个数据上两种读法是两幅图：一串首尾相接（点到点）对一片"刺猬"（方向由记录自己带）。</para>
         /// </summary>
         public static Vector3 Tip(XChartArrowDirectionSource source, Vector3 first, Vector3 second, float scale)
         {
@@ -116,7 +115,7 @@ namespace XericUI.XChart.Mesh
 
         /// <summary>
         /// 这一档方向来源<b>每个箭头自己要吃几个数值维</b>：自带方向那档要 6 个（0~2 点、3~5 方向），
-        /// 其余三档只要 3 个（方向从别的记录来）。
+        /// 其余两档只要 3 个（方向从别的记录来）。
         ///
         /// <para>面板拿它和表里现有的维数对印（§25.1）：维数不够时元素一支都不画，
         /// 报出来必须是"需要几个、现有几个"两个数，不能只说"没显示"。</para>
@@ -127,7 +126,7 @@ namespace XericUI.XChart.Mesh
                 : XChartArrowConfig.CoordinateDimensionCount;
 
         /// <summary>
-        /// 给定记录数与上限，这一档来源能画几支。四种算法各不同，所以都得在这里，
+        /// 给定记录数与上限，这一档来源能画几支。三种算法各不同，所以都得在这里，
         /// 由调用方现问而不是在工具里各写一遍（"N−1／N／N÷2"三个数写错一个，画面上只是少几支，最难查）。
         /// </summary>
         public static int ArrowCount(XChartArrowDirectionSource source, int recordCount, int maxArrows)
@@ -139,7 +138,7 @@ namespace XericUI.XChart.Mesh
             {
                 case XChartArrowDirectionSource.ThisRecordCarriesVector: pairs = recordCount; break;
                 case XChartArrowDirectionSource.AlternatingRecords: pairs = recordCount / 2; break;
-                default: pairs = recordCount < 2 ? 0 : recordCount - 1; break;   // 相邻两条那两档
+                default: pairs = recordCount < 2 ? 0 : recordCount - 1; break;   // 相邻两条·点到点那一档
             }
             if (maxArrows > 0 && maxArrows < pairs) return maxArrows;
             return pairs;

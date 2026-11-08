@@ -147,11 +147,11 @@ namespace XericUI.XChart.Mesh
         [SerializeField, Tooltip("坐标从第几个数值维开始（一条记录 3 维：x/y/z）；一支箭头由**相邻两条记录**构成")]
         private int m_CoordinateDimension;
 
-        [SerializeField, Tooltip("方向从哪来（旧「相对/绝对」就是这里的前两项，存的值不用重设）：" +
-                                 "相邻两条·下一条的坐标当方向 / 相邻两条·下一条是第二个点（首尾相接） / " +
-                                 "本条记录自带方向（0~2 是点、3~5 是方向） / 分段（偶数记录是点、奇数是方向）")]
+        [SerializeField, Tooltip("方向从哪来：相邻两条·下一条是第二个点（首尾相接，旧 Relative，存的值 1 照旧） / " +
+                                 "本条记录自带方向（0~2 是点、3~5 是方向） / 分段（偶数记录是点、奇数是方向）。" +
+                                 "旧的「绝对」那一档（存的值 0）已删——资产里还存着 0 的要跑迁移脚本改成 1")]
         [FormerlySerializedAs("m_VectorMode")]
-        private XChartArrowDirectionSource m_DirectionSource = XChartArrowDirectionSource.NextRecordAsVector;
+        private XChartArrowDirectionSource m_DirectionSource = XChartArrowDirectionSource.NextRecordAsPoint;
 
         [SerializeField, Tooltip("把每条记录的坐标按顺序连成一条路径（贝塞尔细分，接缝不断口）。" +
                                  "打开之后「相对/绝对」被隐藏——连起来的是一条空间路径，谈不到这两者")]
