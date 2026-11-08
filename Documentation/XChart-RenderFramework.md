@@ -2306,3 +2306,85 @@ P18 那次我读不到库那个包（被拦过一次），就照着自己代码�
 - 现场看三件事：① 立方体的填充面和圆柱的填充应上屏；② 报表 `fillCr=yes` 且 `fillShipped>0`；
   ③ 数据喂到超上限时是 `fillRefused>0`，而不是抛 `Mesh can not have more than 65000 vertices`。
 - 如果 `fillCr=yes`、`fillShipped>0` 而画面还空，那 §34.3 的机制就不是全部——这条要说清楚，别把"修了形状"当"修了画面"。
+
+## 35. P26：标签是"列"，不是每条记录随身的一串（2026-11-08）
+
+### 35.1 他要的形状
+
+前几轮的原话："标签是和数据元素对应的……每个数据项目都对应数个 float 维度，和一个 string 维度……
+直接将这个 string 维度放在数据编辑器窗口的前面直接编辑。"
+
+落成三条硬边界：
+
+1. **1:1 是结构保证**：一条记录的标签数组长度**恒等于**标签列（`Kind == Label`）的个数；
+2. **标签元素读的是"某一标签列在每一行上的那一格"**，不是"这条记录的第几个字符串"；
+3. **数据窗口里标签格排在最前面**，就地改的就是那一格。
+
+### 35.2 口径只有一处：`XChartColumnMath` 的标签半边
+
+`LabelCount` / `LabelSlotOf` / `DefinitionOfLabelSlot` 与数值那三支（`ValueCount` / `ValueSlot` /
+`DefinitionOfValueSlot`）完全对称；`SizedLabels` 是"记录标签长度"的**唯一**定长处。
+
+- 记录身上两个数组都是**槽下标**（Number 列里的序号 / Label 列里的序号），不是表行号——
+  表是 `x, tag, t, note` 时，`note` 在表里是第 3 行、在标签数组里是第 1 格（§21.7 的同一条规矩）。
+- **为什么必须在门口拦**：一条记录能带出比列更多的字符串，那些字符串没有一个列叫得出名字——
+  于是窗口显示得出来、元素读不到；导入能塞进去、导出再读回来就变样。所以 `TryAddRecord` 在
+  `labels` 非 null 且长度 ≠ `LabelDimensionCount` 时整条拒收；导入按 `labelFields != labelCount` 拒并点名行号；
+  删列之后按 `SizedLabels` 重排（唯一路径）。
+- 文本格式第 2 版本来就带标签字段；本轮补的是**导入侧的校验**（以前默认"多出来的那些就是标签"），
+  顺带补上"记录行少到连时间戳都没有"时点名拒绝——那条路原来直接读 `fields[1]`，抛的是异常不是判决。
+
+### 35.3 数据窗口：一个显示序，两个读者
+
+- `ComputeColumnSlots` 一次算出 `m_ColumnValueSlots`、`m_ColumnLabelSlots`、`m_TableDisplayOrder`（标签列在前）；
+  表头与行**都**遍历这一个显示序——两处各排一遍，就会出现"表头写的是标签、格子填的是数值"。
+- 每格的身份是 `CellRef { IsLabel, Slot }`：`-1` 仍然只有一个含义（这一列不占格），不拿它兼任"标签格"。
+- 标签格走 `CommitCell` 的**字符串**分支（`TrySetLabel`）：数字解析会把"甲""巷道1"当错报拒掉，
+  而"就地编辑却碰壁"正是他要的那条路被堵死的样子。
+- 工具栏加了「＋标签」：加的是 `XChartDimensionKind.Label` 维，走 `SetDimensions`（唯一定长路径），
+  老记录那一格补空串、**不挤走旧标签**。
+- 表格签名带上 `L<slot>` / `V<slot>`：两张表列数相同但种类不同（或标签列换位置）时，旧行必须重造。
+
+### 35.4 标签元素（`ChartToolLabels` + `XChartLabelConfig`）
+
+- 13 个旋钮，**全部**经 `MarkDirty`（`dirty_gate` 149/149）。
+- 位置与折法和散点/圆柱走同一份：`XChartCubeFoldMath`，显示范围只定标尺（§32），超范围三档自己决定。
+- 文本走池：`RequestTextSlots(records)`；**比记录多的槽位必须擦**——上一轮表更长时留下的字会原地不动，
+  而那在画面上和"新数据"长得一样。
+- 锚点与对齐出自**一张表**：`AnchorOf` 给 pivot，`AlignmentFor` 由同一个锚点算出来；`anchorMin/Max`
+  **不写**（保持池默认），否则 `anchoredPosition` 的参照点会跟着换，同一个读数在两种锚法下答得不同。
+- 报表一行：
+  `labelSlot= dim= records= want= have= pending= written= cleared= empty= hidden= skipped= out= anchor= wrap=`。
+  **数据侧**（`skipped` 读不出 / `empty` 那格是空的 / `hidden` 这一档自己藏了）与**槽位侧**
+  （`want/have/pending`）必须分开：`pending` 是"件还没发落"，不是"这一行没标签"。
+- 面板把"要几个标签列、表里有几个"和数值维、记录数**一起**印（§25.1 的第三半，`RequiredLabelColumns`）。
+
+### 35.5 探针在这一轮抓到两个真缺陷
+
+- `SizedLabels(null, n)` 返回的是 **null 元素**而不是空串：窗口里两者都显示为空，但"这一格是空的"这条判据上
+  null 与 `""` 各答一套（导入写出的永远是 `""`，往返一次就变了样）。改成空位一律 `string.Empty`。
+- 九档锚点表**漏了 `MiddleRight`**，落到 `default`（Center）：所谓"九档"实际只有八档，
+  而"贴在右边中点"与"贴在正中心"在画面上只差半格——探针的"九个点互不相同"当场红。
+- 这两条都是**判据先红、代码后改**（不是事后补判据）：new assertion → red → fix → green。
+
+### 35.6 判据
+
+- **探针 492 条 0 失败**：新增两组——`label columns:`（只数 Label 列 / 表行→槽 / 反查 / 定长三种输入 /
+  门口 1:1 / 改与越界 / 空 vs 不存在 / 删列对位）与 `label anchor:`（九档互异 + 五个坐标 + 非有限偏移）；
+  原 `data text:` 的标签断言按新口径重写（记录带 1 个标签列；没给标签的记录**仍有那一格**、是空串）。
+- **`label_gate.py`**：15 条 claim、15 支臂全红（每条 claim 一支变异：标签槽手数 / 标签走数字门 / 标签列不在最前 /
+  绕开唯一定长 / 对齐不再读锚点表 / 对齐留池默认 / pivot 居中 / 原始偏移 / 多余槽位不擦 / 读数混在一起 /
+  空串当缺失 / 永远读第 0 列 / 面板不印要求 / 导入不查字段数 / 门口不查长度）。
+  C7 的 forbidden 只认**写**（`anchorMin =`）：注释里解释"为什么不写"不算违规——判据不许打在文字上。
+- **`p4_control` 78 支**（新增 5 支：标签槽手数、记录自定标签长度、边中点锚点落到中心、非有限偏移直通、
+  删标签列留错那一格）。原来"删列留旧值"那支的锚点因 `TryRemoveDimension` 重写而失效，已**重定靶**（不是删掉）。
+- **`dirty_gate`** 149 旋钮 149 生效（新增 13 个；清单 `Text/ChartToolLabels.cs` 已登记）；
+  **`slot_reset_gate`** 不变（P26a 的池复位早就在里面）；编译门 runtime + player + editor + 3 对照绿，
+  并且 `source present:` 逐条点名四个新文件（`XChartLabelAnchorMath` / `ChartToolLabels` / `XChartLabelConfig` / `XChartDataText`）。
+
+### 35.7 覆盖不到什么 / 他侧验收
+
+- 离线判不到 TMP：`AlignmentFor` 返回 TMPro 类型，探针引用不到那个程序集——"对齐出自同一表"这一半由源码门
+  （C5/C6）判，画面归他。
+- 现场看三件事：① 数据窗口每行**最前面**是标签格，改完图上的字跟着变；② 报表 `written=` 等于有字标签的记录数、
+  `pending=0`；③ 点「＋标签」后老记录那一格是空的（不是把旧标签挤走）。

@@ -213,6 +213,14 @@ namespace XericUI.XChart
                         return false;
                     }
 
+                    // 少字段的行要在门口拒：直接读 fields[1] 会抛出去，而"导入失败"的语义是
+                    // **指出行号并整份拒绝**，不是把异常丢给调用方（半份数据比没数据更坏）
+                    if (fields.Length < 2)
+                    {
+                        error = "第 " + (i + 1) + " 行的记录少了时间戳字段";
+                        return false;
+                    }
+
                     double timestamp;
                     if (!TryParseDouble(fields[1], out timestamp))
                     {
@@ -224,9 +232,20 @@ namespace XericUI.XChart
                     for (int d = 0; d < dimensions.Count; d++)
                         if (dimensions[d].Kind == XChartDimensionKind.Number) numericCount++;
 
+                    // 标签段的长度由**标签列个数**定（同一处规则：XChartColumnMath.LabelCount）。
+                    // 多出来的字符串没有列叫得出它的名字：它落进记录后窗口显示得出来、元素却读不到，
+                    // 所以这里当场拒收并点名行号，而不是"先收下再说"。
+                    int labelCount = XChartColumnMath.LabelCount(dimensions);
+                    int labelFields = fields.Length - 2 - numericCount;
+
                     if (fields.Length - 2 < numericCount)
                     {
                         error = "第 " + (i + 1) + " 行的数值个数（" + (fields.Length - 2) + "）少于数值维个数（" + numericCount + "）";
+                        return false;
+                    }
+                    if (labelFields != labelCount)
+                    {
+                        error = "第 " + (i + 1) + " 行的标签个数（" + labelFields + "）与标签列个数（" + labelCount + "）对不上";
                         return false;
                     }
 
@@ -247,8 +266,8 @@ namespace XericUI.XChart
                         values[d] = (float)value;
                     }
 
-                    var labels = new string[Math.Max(fields.Length - 2 - numericCount, 0)];
-                    for (int l = 0; l < labels.Length; l++) labels[l] = fields[2 + numericCount + l];
+                    var labels = new string[labelCount];
+                    for (int l = 0; l < labelCount; l++) labels[l] = fields[2 + numericCount + l];
 
                     timestamps.Add(timestamp);
                     recordValues.Add(values);

@@ -222,17 +222,26 @@ namespace XericUI.XChart
         /// </summary>
         public int NumericDimensionCount => XChartColumnMath.ValueCount(m_Dimensions);
 
+        /// <summary>
+        /// 标签列个数＝每条记录标签数组的长度（<see cref="XChartColumnMath.LabelCount"/>，唯一那一条规则）。
+        /// <b>1:1 是形状而不是一句承诺</b>：记录身上可以写出比标签列更多的字符串，那些字符串没有一个列
+        /// 叫得出名字，屏幕上就凭空多出一个标签，而报表里看不出是谁写的。
+        /// </summary>
+        public int LabelDimensionCount => XChartColumnMath.LabelCount(m_Dimensions);
+
         public void SetDimensions(IList<XChartDimensionDefinition> dimensions)
         {
             m_Dimensions.Clear();
             if (dimensions != null) for (int i = 0; i < dimensions.Count; i++) m_Dimensions.Add(dimensions[i]);
             int numericCount = NumericDimensionCount;
+            int labelCount = LabelDimensionCount;
             for (int i = 0; i < m_Records.Count; i++)
             {
                 var values = new float[numericCount];
                 int copyCount = Math.Min(values.Length, m_Records[i].Values.Count);
                 for (int j = 0; j < copyCount; j++) values[j] = m_Records[i].Values[j];
-                m_Records[i] = new XChartRecord(m_Records[i].RecordId, m_Records[i].Timestamp, values, CopyLabels(m_Records[i].Labels));
+                m_Records[i] = new XChartRecord(m_Records[i].RecordId, m_Records[i].Timestamp, values,
+                    XChartColumnMath.SizedLabels(m_Records[i].Labels, labelCount));
             }
             Publish();
         }
@@ -293,19 +302,26 @@ namespace XericUI.XChart
             // 值数组按"数值维中的序号"排，不是按维度表下标排：中间夹一个非数值维时两者会错开
             // 值下标由那一条规则给（非数值列返回 -1：本来就没有格要摘）
             int column = XChartColumnMath.ValueSlot(m_Dimensions, index);
+            int labelSlot = XChartColumnMath.LabelSlotOf(m_Dimensions, index);
 
             m_Dimensions.RemoveAt(index);
 
-            if (column >= 0)
+            if (column >= 0 || labelSlot >= 0)
             {
                 for (int i = 0; i < m_Records.Count; i++)
                 {
                     var record = m_Records[i];
-                    if (column >= record.Values.Count) continue;   // 这一行短了一截：本就没有这一格
-                    var values = new float[record.Values.Count - 1];
+
+                    // 标签列同理：摘掉的是"这一列在标签数组里那一格"，不是"第 index 个字符串"
+                    var values = new float[column >= 0 ? record.Values.Count - 1 : record.Values.Count];
                     for (int j = 0, k = 0; j < record.Values.Count; j++)
-                        if (j != column) values[k++] = record.Values[j];
-                    m_Records[i] = new XChartRecord(record.RecordId, record.Timestamp, values, CopyLabels(record.Labels));
+                        if (column < 0 || j != column) values[k++] = record.Values[j];
+
+                    var labels = new string[labelSlot >= 0 ? record.Labels.Count - 1 : record.Labels.Count];
+                    for (int j = 0, k = 0; j < record.Labels.Count; j++)
+                        if (labelSlot < 0 || j != labelSlot) labels[k++] = record.Labels[j];
+
+                    m_Records[i] = new XChartRecord(record.RecordId, record.Timestamp, values, CopyLabels(labels));
                 }
             }
 
@@ -313,10 +329,17 @@ namespace XericUI.XChart
             return true;
         }
 
+        /// <summary>
+        /// 加一条记录。两个数组都必须<b>对得上当前的列</b>：值数组长度＝数值列个数，
+        /// 标签数组长度＝标签列个数（或 <c>null</c>＝这一条还没有标签）。
+        /// 长度不对就整条拒收、不改一半——"多出来的那个字符串"没有列叫得出它的名字，
+        /// 落进表里就是屏幕上一个没主的标签（1:1 靠门口这一关守住，不靠调用方自觉）。
+        /// </summary>
         public bool TryAddRecord(double timestamp, float[] values, string[] labels = null)
         {
             if (double.IsNaN(timestamp) || double.IsInfinity(timestamp) || values == null || values.Length != NumericDimensionCount) return false;
             for (int i = 0; i < values.Length; i++) if (float.IsNaN(values[i]) || float.IsInfinity(values[i])) return false;
+            if (labels != null && labels.Length != LabelDimensionCount) return false;
             if (m_Records.Count > 0 && timestamp < m_Records[m_Records.Count - 1].Timestamp) return false;
             if (m_Records.Count == Capacity)
             {
@@ -325,7 +348,7 @@ namespace XericUI.XChart
             }
             var copy = new float[values.Length];
             Array.Copy(values, copy, values.Length);
-            m_Records.Add(new XChartRecord(m_NextRecordId++, timestamp, copy, labels ?? Array.Empty<string>()));
+            m_Records.Add(new XChartRecord(m_NextRecordId++, timestamp, copy, CopyLabels(labels)));
             Publish();
             return true;
         }
@@ -377,15 +400,19 @@ namespace XericUI.XChart
             return true;
         }
 
-        /// <summary>改某条记录的某个标签（下标越界或空串一律拒绝）</summary>
-        public bool TrySetLabel(int recordIndex, int labelIndex, string text)
+        /// <summary>
+        /// 改某条记录在某一标签列上的字符串。<b>下标是标签下标</b>（第几个标签列，不是表里的行号），
+        /// 由 <see cref="XChartColumnMath.LabelSlotOf"/> 换算。行号或下标越界拒绝；<b>空串是合法值</b>
+        /// （把标签清空），所以清空与"这一列本来没有格"分得开——后者压根进不到这里。
+        /// </summary>
+        public bool TrySetLabel(int recordIndex, int labelSlot, string text)
         {
             if (recordIndex < 0 || recordIndex >= m_Records.Count) return false;
             var record = m_Records[recordIndex];
-            if (labelIndex < 0 || labelIndex >= record.Labels.Count) return false;
+            if (labelSlot < 0 || labelSlot >= LabelDimensionCount) return false;
 
             var labels = CopyLabels(record.Labels);
-            labels[labelIndex] = text ?? string.Empty;
+            labels[labelSlot] = text ?? string.Empty;
             m_Records[recordIndex] = new XChartRecord(record.RecordId, record.Timestamp, CopyValues(record.Values), labels);
             Publish();
             return true;
@@ -482,6 +509,20 @@ namespace XericUI.XChart
         {
             definition = XChartColumnMath.DefinitionOfValueSlot(m_Dimensions, dimension);
             return definition != null;
+        }
+
+        /// <summary>
+        /// 取某条记录在某一标签列上的字符串（<b>标签下标</b>，第几个标签列）。
+        /// 行号或下标越界返回 false；列存在但那一格是空串时返回 true + 空串——
+        /// "这一列没这一格"和"这一格是空的"是两件事，画不画由调用方决定。
+        /// </summary>
+        public bool TryGetLabelAt(int recordIndex, int labelSlot, out string text)
+        {
+            text = null;
+            if (recordIndex < 0 || recordIndex >= m_Records.Count) return false;
+            if (labelSlot < 0 || labelSlot >= LabelDimensionCount) return false;
+            text = m_Records[recordIndex].Labels[labelSlot] ?? string.Empty;
+            return true;
         }
 
         /// <summary>
@@ -620,12 +661,10 @@ namespace XericUI.XChart
             return low;
         }
 
-        private static string[] CopyLabels(IReadOnlyList<string> labels)
-        {
-            var copy = new string[labels.Count];
-            for (int i = 0; i < labels.Count; i++) copy[i] = labels[i];
-            return copy;
-        }
+        /// <summary>标签数组的拷贝<b>并且按那一条规则定长</b>——长度只由标签列个数决定，
+        /// 所以任何一次写入之后，"这一行的标签个数"都还等于表里的标签列数。</summary>
+        private string[] CopyLabels(IReadOnlyList<string> labels)
+            => XChartColumnMath.SizedLabels(labels, LabelDimensionCount);
     }
 
     public class XChartDataModel3D

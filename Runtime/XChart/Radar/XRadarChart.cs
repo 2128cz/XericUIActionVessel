@@ -208,18 +208,32 @@ namespace XericUI.XChart.Radar
         /// <summary>设置维度名称</summary>
         public void SetDimensions(params string[] dimensionNames)
         {
-            m_DataModel.SetDimensions(dimensionNames);
-            var dimensions = new System.Collections.Generic.List<XChartDimensionDefinition>(dimensionNames.Length);
-            for (int i = 0; i < dimensionNames.Length; i++)
-                dimensions.Add(new XChartDimensionDefinition($"radar_{i}", dimensionNames[i], XChartDimensionKind.Number));
-            DataModel.SetDimensions(dimensions);
-            // 由 Update 自动同步
+            ApplyDimensionNames(dimensionNames);
         }
 
         /// <summary>设置维度名称（从列表）</summary>
         public void SetDimensions(System.Collections.Generic.IList<string> dimensionNames)
         {
+            var names = new string[dimensionNames != null ? dimensionNames.Count : 0];
+            for (int i = 0; i < names.Length; i++) names[i] = dimensionNames[i];
+            ApplyDimensionNames(names);
+        }
+
+        /// <summary>
+        /// 两个重载都走这里：<see cref="AddSeries"/> 给每条记录带一个系列名，
+        /// 而共享表要有一个<b>标签列</b>那个名字才落得进去（1:1 是门口那条规矩）。
+        /// 只更新雷达自己的模型、不交代共享表，系列名就会被整条记录一起拒掉。
+        /// </summary>
+        private void ApplyDimensionNames(string[] dimensionNames)
+        {
             m_DataModel.SetDimensions(dimensionNames);
+            if (dimensionNames == null) return;
+
+            var dimensions = new System.Collections.Generic.List<XChartDimensionDefinition>(dimensionNames.Length + 1);
+            for (int i = 0; i < dimensionNames.Length; i++)
+                dimensions.Add(new XChartDimensionDefinition($"radar_{i}", dimensionNames[i], XChartDimensionKind.Number));
+            dimensions.Add(new XChartDimensionDefinition("series", "系列", XChartDimensionKind.Label));
+            DataModel.SetDimensions(dimensions);
         }
 
         /// <summary>添加一个数据系列（自动分配颜色）</summary>

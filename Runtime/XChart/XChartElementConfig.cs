@@ -115,6 +115,13 @@ namespace XericUI.XChart
         public virtual int RequiredRecordCount => 0;
 
         /// <summary>
+        /// 这个元素要<b>几个标签列</b>才画得出来（0＝不需要）。标签元素读的是那一列在每一行上的那一格：
+        /// 表里没有标签列时它一条都不画，而这在画面上和"没数据"长得一模一样——所以"要几个、表里有几个"
+        /// 必须和数值维、记录数一起印出来（§25.1 的第三半）。
+        /// </summary>
+        public virtual int RequiredLabelColumns => 0;
+
+        /// <summary>
         /// 互斥显示：<paramref name="fieldName"/> 这个字段在当前配置下要不要从面板上<b>藏掉</b>。
         ///
         /// <para>他 2026-10-25 要的用法："我勾选'连续绘制'，配置里就失去'相对还是绝对'那个选项；

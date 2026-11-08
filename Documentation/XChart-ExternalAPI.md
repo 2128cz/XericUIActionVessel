@@ -66,20 +66,27 @@ public void Drive()
 
 | API | 语义 | 失败时 |
 | --- | --- | --- |
-| `SetDimensions(list)` | 换整张表的列（会按新列重排已有记录的值） | — |
-| `TryAddRecord(time, values, labels?)` | 追加一条（时间戳必须**非递减**） | `false`，原因在数据窗口/报表里看得见 |
+| `SetDimensions(list)` | 换整张表的列（会按新列重排已有记录的值与标签） | — |
+| `TryAddRecord(time, values, labels?)` | 追加一条（时间戳必须**非递减**；`labels` 非 null 时长度必须＝标签列个数，否则拒） | `false`，原因在数据窗口/报表里看得见 |
 | `TrySetValue(recordIndex, numericDim, value)` | 改一个数 | 越界／非有限 ⇒ `false` |
 | `TrySetTime(recordIndex, time, out reason)` | 改时间戳（会破坏单调性时拒） | `false` + `reason` |
-| `TrySetLabel` / `TryRemoveRecord` / `TryRemoveDimension` | 改标签、删行、删列 | `false` + `reason` |
+| `TrySetLabel(recordIndex, labelSlot, text)` | 改某一行的第 `labelSlot` 个标签（空串＝清空那一格，合法） | 越界 ⇒ `false` |
+| `TryRemoveRecord` / `TryRemoveDimension` | 删行、删列（删 Label 列会连带丢掉每行的那个标签格） | `false` + `reason` |
 | `TrySetDomainOverride(dim, overrideMin, min, overrideMax, max)` | 钉住某一维的显示范围（**分侧**可钉） | 越界列 ⇒ `false` |
 | `Clear()` / `Capacity`（环形上限）/ `DroppedCount` | 清空、容量、被丢了多少条 | — |
-| `Version` / `RecordCount` / `NumericDimensionCount` / `Snapshot` | 读数（工具靠 `Version` 判要不要重算） | — |
+| `Version` / `RecordCount` / `NumericDimensionCount` / `LabelDimensionCount` / `Snapshot` | 读数（工具靠 `Version` 判要不要重算） | — |
 
-只读侧统一走 `IXChartDataSource`（`GetValueAt(record, dim)` 等），元素工具只认它——不要伸手去摸 `Records`。
+**标签是"列"，不是每条记录随身的一串**：一条记录的标签数组长度**恒等于**标签列（`Kind == Label`）的个数，
+下标是"第几个标签列"而不是表里的行号。多出来的字符串没有一个列能叫出它的名字，所以 `TryAddRecord` 在门口就拒；
+文本导入同样按标签字段个数校验并点名行号。窗口里标签列排在最前面，那些格子就地改的就是这个数组。
+
+只读侧统一走 `IXChartDataSource`（`GetValueAt(record, dim)`、`TryGetLabelAt(record, labelSlot, out text)` 等），
+元素工具只认它——不要伸手去摸 `Records`。`TryGetLabelAt` 对"没有这一格"答 `false`，对"这一格是空的"答 `true` + 空串：
+这两件事在画面上同形，在读数上必须分得开。
 
 ## 4. 入口 B：元素的参数（setter 自己置脏）
 
-每个元素工具的公开属性都是这个形状（P20 立的规矩，`dirty_gate` 数着：**133 个旋钮，133 个设了就生效**）：
+每个元素工具的公开属性都是这个形状（P20 立的规矩，`dirty_gate` 数着：**149 个旋钮，149 个设了就生效**）：
 
 ```csharp
 public float Radius { get => m_Radius; set { m_Radius = value; MarkDirty(); } }
@@ -99,6 +106,10 @@ public float Radius { get => m_Radius; set { m_Radius = value; MarkDirty(); } }
 | `ChartToolCubeBg`（`BG Cube Wire`） | `FrontEdgeColor/BackEdgeColor/EdgeThickness/ShowBackEdges` |
 | `ChartToolScatterPoints` | `AutoFromData/DimensionX/Y/Z` · 外观 10 个（`PointSize/PointType/PointSizeMode/PointColor/CenterColor/BorderColor/BorderThickness/SideCount/ChamferSize/PointAngle`，走 `SyncShapeParams`） · `EnableColorMapping/ColorMapMin/ColorMapMax/ColorMapDimension` |
 | `ChartToolAxis` | `SlotId`（**宿主**：板上现在发 `mesh.face.<0..5>` 与 `mesh.face.<f>.side.<0..3>` 共 30 个可当选；边号 0 底·1 左·2 顶·3 右，见规范 §31。下拉里不会再出现 `…grid.S/T`，那是「对齐格线」的输入） · `AlignToGrid/Direction/StartRatio/EndRatio/CrossRatio` · 刻度（`Dimension/Scale/AutoStep/ManualStep/TargetMajorCount/MinorTickCount`） · 线与标签（`LineColor/LineThickness/Major…/Minor…/LabelSource/LabelFormat/CustomLabels/Label…`） |
+| `ChartToolLabels`（数据标签） | `LabelSlot`（第几个**标签列**，不是表行号） · `DimensionX/Y/Z`（标签挂在哪条记录的那一点上） · `Transform/OutOfRange` · `Anchor`（9 档，`XChartLabelAnchor`） · `Offset/FontSize/LabelColor/OutlineWidth/RectSize/Wrap` |
+
+`ChartToolLabels` 的一条规矩：**锚点和对齐出自同一档**。`Anchor` 同时决定 pivot（矩形从哪一侧从点起排）和
+`alignment`（字在矩形里怎么排），没有第二个"对齐"字段——贴在左下角却把字居中，字就横跨在那一点两侧（规范 §35.4）。
 
 ## 5. 矢量场（箭头）：方向从哪来、头贴在哪、尺寸怎么算
 
@@ -172,6 +183,10 @@ chart.Space.CenterOffset = new Vector2(0, 40f);
 | `path=none` | 曲线渲染器没建起来 ⇒ 箭头什么都画不出（箭头的唯一绘制出口就是它） |
 | `colors=overlap` | 颜色维起点撞上坐标／方向列 ⇒ 实际画的是单色 |
 | `arrows=31 arrowFaces=…`（旧版本）/ `markers=` | 提交了多少：与"看得见"是两件事，先跟上面几项对齐 |
+| `labels=0/1`（面板元素块） | 这个标签元素要 1 个标签列，表里没有 ⇒ 它一条都不画。去数据窗口点「＋标签」，再把那一格填上 |
+| `labelSlot=0 records=N` | 标签元素在看第几个标签列、表里几条记录 |
+| `written=` / `empty=` / `hidden=` / `skipped=` | 写了几个字 / 那几格是空的 / 被"超范围怎么办"这一档藏了 / 数据读不出来（分属三件事，不要合看） |
+| `pending=N`、`have<want` | 文本槽位还没发下来：这一帧是"件没到"，不是"这一行没标签" |
 
 开关报表：图表 Inspector 底部「自述报表 开/关」（= 工程根放一个 `xchart.dump.on`，每 0.4 秒追加一次，删掉就停）。
 **编辑期要有重绘帧才会跑**（`[ExecuteAlways]`）：编辑器静止时外部写要等一帧——滚一下 Scene 视图即可。

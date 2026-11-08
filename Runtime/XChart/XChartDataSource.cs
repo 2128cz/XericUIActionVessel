@@ -155,6 +155,12 @@ namespace XericUI.XChart
         /// <summary>数值维度数量</summary>
         int NumericDimensionCount { get; }
 
+        /// <summary>
+        /// 标签（String）列数量＝每条记录身上标签数组的长度。<b>元素只能读到这里说得出的那些格</b>：
+        /// 记录里比这更多的字符串没有一个列能叫出名字，所以这一数就是"1:1"的形状判据。
+        /// </summary>
+        int LabelDimensionCount { get; }
+
         /// <summary>是否有数据</summary>
         bool HasData { get; }
 
@@ -181,6 +187,14 @@ namespace XericUI.XChart
         /// 用它拿默认格式，标签模式用它拿显示名。下标越界返回 false（不抛，渲染路径里调用）。
         /// </summary>
         bool TryGetDimension(int dimension, out XChartDimensionDefinition definition);
+
+        /// <summary>
+        /// 取某条记录在某一标签列上的字符串。<b>下标是标签下标</b>（同一个口径：
+        /// <see cref="XChartColumnMath.LabelSlotOf"/> 把"表里那一列"换算成它）。
+        /// 越界返回 false（渲染路径里调用，不抛）——"这一格没有"和"这一格是空串"要分得开，
+        /// 所以空串照实返回 true，由调用方决定要不要画。
+        /// </summary>
+        bool TryGetLabelAt(int recordIndex, int labelSlot, out string text);
 
         /// <summary>按时间窗打开一个范围游标（虚拟指针）</summary>
         XChartRangeCursor OpenRange(int dimension, double fromTime, double toTime);

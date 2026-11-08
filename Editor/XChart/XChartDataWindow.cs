@@ -41,8 +41,21 @@ namespace XericUI.XChart.Editor
         /// <summary>每一列对应的值下标（-1＝这一列不占值格）；表头与格子共用，规则来自 <see cref="XChartColumnMath"/></summary>
         private int[] m_ColumnValueSlots = new int[0];
 
-        /// <summary>上面那组的签名：换一张同列数但种类不同的图时，旧行里的格子必须重造</summary>
+        /// <summary>每一列对应的<b>标签</b>下标（-1＝这一列不占标签格）。与值下标是同一套规则的两半：
+        /// 值数组按"第几个数值列"排，标签数组按"第几个标签列"排，所以两边都只有一个换算处</summary>
+        private int[] m_ColumnLabelSlots = new int[0];
+
+        /// <summary>表页的显示序：<b>标签列排在最前</b>（他 2026-10-26 要的是"这一族直接在窗口里编辑"，
+        /// 排在每行最前面才不用横向拖到表尾去找）。表头和行里的格子按同一份排，否则列标题和格子对不上。</summary>
+        private int[] m_TableDisplayOrder = new int[0];
+
+        /// <summary>值格分布的签名（表里的行序）：范围页按它判"要不要整页重建"——一列一行不能指错列</summary>
         private string m_ColumnValueSignature = string.Empty;
+
+        /// <summary>行里那一排格子的签名（种类 + 下标 + 显示序）：换一张同列数、种类不同的图，
+        /// 或标签列排到了前面，旧行的格子必须重造。只看列数会把"这一格是标签格还是数值格"当成没变——
+        /// 那正是往错的列写数的路</summary>
+        private string m_TableSignature = string.Empty;
 
         /// <summary>范围页是在哪一份值格分布上建的：对不上就整页重建（一列一行不能指错列）</summary>
         private string m_RangeSignature = string.Empty;
@@ -246,12 +259,35 @@ namespace XericUI.XChart.Editor
         {
             int dimensions = model != null ? model.Dimensions.Count : 0;
             m_ColumnValueSlots = new int[dimensions];
+            m_ColumnLabelSlots = new int[dimensions];
             for (int i = 0; i < dimensions; i++)
+            {
                 m_ColumnValueSlots[i] = XChartColumnMath.ValueSlot(model.Dimensions, i);
+                m_ColumnLabelSlots[i] = XChartColumnMath.LabelSlotOf(model.Dimensions, i);
+            }
 
-            var signature = new System.Text.StringBuilder();
-            for (int i = 0; i < dimensions; i++) signature.Append(m_ColumnValueSlots[i]).Append('|');
-            m_ColumnValueSignature = signature.ToString();
+            // 显示序：标签列在前、其余列照表里的顺序。这里<b>只算一次</b>，表头和行共用，
+            // 所以"第几列显示在哪"与"这一格属于哪一列"不会各数各的。
+            m_TableDisplayOrder = new int[dimensions];
+            int at = 0;
+            for (int i = 0; i < dimensions; i++)
+                if (m_ColumnLabelSlots[i] >= 0) m_TableDisplayOrder[at++] = i;
+            for (int i = 0; i < dimensions; i++)
+                if (m_ColumnLabelSlots[i] < 0) m_TableDisplayOrder[at++] = i;
+
+            var valueSignature = new System.Text.StringBuilder();
+            var tableSignature = new System.Text.StringBuilder();
+            for (int i = 0; i < dimensions; i++)
+            {
+                valueSignature.Append(m_ColumnValueSlots[i]).Append('|');
+
+                int column = m_TableDisplayOrder[i];
+                tableSignature.Append(m_ColumnLabelSlots[column] >= 0
+                    ? "L" + m_ColumnLabelSlots[column]
+                    : "V" + m_ColumnValueSlots[column]).Append('|');
+            }
+            m_ColumnValueSignature = valueSignature.ToString();
+            m_TableSignature = tableSignature.ToString();
         }
 
         /// <summary>工具栏上的一个下拉：条目按顺序排，点哪个跑哪个</summary>
@@ -294,16 +330,20 @@ namespace XericUI.XChart.Editor
             });
             m_Header.Add(new Label("时间") { style = { width = kTimeWidth } });
 
-            for (int i = 0; i < dimensions; i++)
+            for (int pos = 0; pos < dimensions; pos++)
             {
-                int index = i;
-                int valueSlot = m_ColumnValueSlots[i];
+                int index = m_TableDisplayOrder[pos];
+                int valueSlot = m_ColumnValueSlots[index];
+                bool isLabel = m_ColumnLabelSlots[index] >= 0;
+
                 var cell = new VisualElement { style = { flexDirection = FlexDirection.Row, width = kCellWidth } };
 
                 var name = new TextField { style = { flexGrow = 1 } };
                 name.SetValueWithoutNotify(ColumnName(model, index));
                 name.tooltip = "列标题＝这一维的显示名；改它只改显示名，维度序号不动"
-                    + (valueSlot < 0 ? "（这一列不占值格：种类不是 Number）" : string.Empty);
+                    + (isLabel
+                        ? "（这一列占的是标签格：每一行在这一格直接写字符串）"
+                        : (valueSlot < 0 ? "（这一列不占值格：种类不是 Number）" : string.Empty));
                 name.RegisterCallback<KeyDownEvent>(evt =>
                 {
                     if (evt.keyCode != KeyCode.Return && evt.keyCode != KeyCode.KeypadEnter) return;
@@ -329,8 +369,14 @@ namespace XericUI.XChart.Editor
                 style = { width = kAddColumnWidth },
                 tooltip = "加一列（新增一个数值维，默认名 D<n>，随后可在这里改名）",
             });
-            m_Header.Add(new Label("标签") { style = { flexGrow = 1 }, tooltip = "记录自带的标签（只读）" });
-            // 行末"删"那一格的位置：表头留同样的宽度，否则标签列和删列对不齐
+            m_Header.Add(new ToolbarButton(AddLabelColumn)
+            {
+                text = "+标签",
+                style = { width = 52 },
+                tooltip = "加一个标签列（String 维）：每一行在最前面那一格直接写它。"
+                    + "记录身上的标签数组长度＝标签列个数，所以这一格没有列叫得出名字时它压根存不进去",
+            });
+            // 行末"删"那一格的位置：表头留同样的宽度，否则最后一列和删列对不齐
             m_Header.Add(new Label { style = { width = kDeleteWidth } });
         }
 
@@ -377,6 +423,29 @@ namespace XericUI.XChart.Editor
             RebuildColumns();
             RebuildList();
             SetMessage("已加一列（" + key + "）：老记录这一维补 0");
+        }
+
+        /// <summary>
+        /// 加一个标签列＝新增一个 String 维。走的是 <c>SetDimensions</c> 那一条路（唯一的定长处），
+        /// 所以老记录的标签数组会跟着变长、补空串——不是在窗口里凭空多一个"没主的格子"。
+        /// </summary>
+        private void AddLabelColumn()
+        {
+            var model = m_Chart != null ? m_Chart.DataModel : null;
+            if (model == null) { SetMessage("先指定一个图表"); return; }
+
+            var dimensions = new List<XChartDimensionDefinition>(model.Dimensions);
+            string key = "label" + dimensions.Count;
+            dimensions.Add(new XChartDimensionDefinition(key,
+                "标签" + (XChartColumnMath.LabelCount(dimensions) + 1), XChartDimensionKind.Label));
+            model.SetDimensions(dimensions);
+            EditorUtility.SetDirty(m_Chart);
+            m_Chart.ForceRefresh();
+
+            RebuildColumns();
+            RebuildList();
+            SetMessage("已加一个标签列（" + key + "）：老记录这一格补空串，现在每行 "
+                + model.NumericDimensionCount + " 个值、" + model.LabelDimensionCount + " 个标签");
         }
 
         /// <summary>
@@ -503,26 +572,40 @@ namespace XericUI.XChart.Editor
             cells.Add(widgets.Time);
 
             int dimensions = Mathf.Max(m_DimensionCount, 0);
-            widgets.Values = new TextField[dimensions];
-            widgets.Slots = m_ColumnValueSignature;
-            for (int i = 0; i < dimensions; i++)
+            widgets.Cells = new TextField[dimensions];
+            widgets.Slots = m_TableSignature;
+            for (int pos = 0; pos < dimensions; pos++)
             {
-                int valueSlot = i < m_ColumnValueSlots.Length ? m_ColumnValueSlots[i] : -1;
-                var cell = new TextField { userData = valueSlot, style = { width = kCellWidth } };
-                if (valueSlot < 0)
+                int column = pos < m_TableDisplayOrder.Length ? m_TableDisplayOrder[pos] : -1;
+                int labelSlot = column >= 0 ? m_ColumnLabelSlots[column] : -1;
+                int valueSlot = column >= 0 ? m_ColumnValueSlots[column] : -1;
+
+                var target = new CellRef { IsLabel = labelSlot >= 0, Slot = labelSlot >= 0 ? labelSlot : valueSlot };
+                var cell = new TextField { userData = target, style = { width = kCellWidth } };
+
+                if (labelSlot >= 0)
                 {
-                    // 非数值列：没有对应的值格。留一个禁用的格子而不是让人填进去再被拒——
-                    // 他填过却存不进去，比一眼看出"这一格不归我改"更坏。
-                    cell.SetEnabled(false);
-                    cell.tooltip = "这一列的种类不是 Number ⇒ 它不占值格（值数组里没有它的位置）";
+                    // 标签格：这一族的本分就是就地编辑（他 2026-10-26 要的"直接在前面上编辑"）。
+                    // 它不能走数字解析那一支——标签是字符串，把"不是数字"当错报会把正常的标签拒掉。
+                    cell.tooltip = "这一行的标签（String 维）：直接写，回车或失焦提交。"
+                        + "标签元素按记录读它（一条记录一个标签），所以这一格存的就是画面上那个字";
+                    HookCommit(cell, () => CommitCell(cell));
                 }
-                else HookCommit(cell, () => CommitCell(cell));
-                widgets.Values[i] = cell;
+                else if (valueSlot >= 0)
+                {
+                    HookCommit(cell, () => CommitCell(cell));
+                }
+                else
+                {
+                    // 既不占值格也不占标签格（比如 Time 列在表里的那一行）：留一个禁用的格子而不是
+                    // 让人填进去再被拒——他填过却存不进去，比一眼看出"这一格不归我改"更坏。
+                    cell.SetEnabled(false);
+                    cell.tooltip = "这一列不占格：种类既不是 Number 也不是 Label（值数组和标签数组里都没有它的位置）";
+                }
+
+                widgets.Cells[pos] = cell;
                 cells.Add(cell);
             }
-
-            widgets.Labels = new Label { style = { flexGrow = 1 } };
-            cells.Add(widgets.Labels);
 
             widgets.Delete = new ToolbarButton(() => DeleteRecord(widgets))
             {
@@ -553,10 +636,11 @@ namespace XericUI.XChart.Editor
             var existing = element.Q("row-cells");
             var widgets = existing != null ? existing.userData as RowWidgets : null;
             int want = Mathf.Max(m_DimensionCount, 0);
-            // 列数一样但"哪一列有值格"变了（换了一张同列数、种类不同的图）：格子的可编辑性与
-            // 值下标都记在格子上，只看列数会把这一列当成能改的，于是往错的列写数
-            if (widgets != null && widgets.Values != null && widgets.Values.Length == want
-                && widgets.Slots == m_ColumnValueSignature) return widgets;
+            // 列数一样但"每一格是哪一列、哪个种类"变了（换了一张同列数、种类不同的图，或者标签列
+            // 排到了前面）：格子的可编辑性与下标都记在格子上，只看列数会把标签格当数值格解析，
+            // 于是正常的标签被"不是数字"拒掉
+            if (widgets != null && widgets.Cells != null && widgets.Cells.Length == want
+                && widgets.Slots == m_TableSignature) return widgets;
 
             element.Clear();
             var fresh = MakeRow();
@@ -620,11 +704,28 @@ namespace XericUI.XChart.Editor
             if (widgets == null || widgets.RecordIndex < 0) return;
             int recordIndex = widgets.RecordIndex;
             bool isTime = ReferenceEquals(field, widgets.Time);
-            int slot = field.userData is int value ? value : -1;
-            if (!isTime && slot < 0) return;   // 非数值列的格子是禁用的，压根不该走到这里
+            var target = field.userData as CellRef;
+            int slot = target != null ? target.Slot : -1;
+            if (!isTime && slot < 0) return;   // 不占格的列：格子是禁用的，压根不该走到这里
 
             var model = m_Chart.DataModel;
             if (model == null || recordIndex < 0 || recordIndex >= model.RecordCount) return;
+
+            if (!isTime && target.IsLabel)
+            {
+                // 标签格走字符串那一支：数字解析会把正常的标签（"甲"、"巷道1"）当错报拒掉，
+                // 而"这一格存不进去"正是他要就地编辑却碰壁的那条路。
+                if (!model.TrySetLabel(recordIndex, slot, field.value))
+                {
+                    SetMessage("第 " + recordIndex + " 行的第 " + slot + " 个标签改不动（行号或标签列下标越界）");
+                    RefreshRow(widgets, recordIndex);
+                    return;
+                }
+
+                m_Chart.ForceRefresh();
+                SetMessage("第 " + recordIndex + " 行的标签已改（标签元素按这一格读）");
+                return;
+            }
 
             double parsed;
             if (!double.TryParse(field.value, System.Globalization.NumberStyles.Float,
@@ -670,18 +771,34 @@ namespace XericUI.XChart.Editor
             widgets.Index.text = "#" + index;
             widgets.Time.SetValueWithoutNotify(model.GetTimeAt(index).ToString("0.###"));
 
-            for (int d = 0; d < widgets.Values.Length; d++)
-            {
-                if (widgets.Values[d] == null) continue;
-                // 格子的下标是**表里的列号**，值数组的下标是**第几个数值列**：中间夹一个非数值列时
-                // 两者就差开了，所以这里问的是行控件建好时记下的那一对（widgets.Slots）。
-                int slot = d < m_ColumnValueSlots.Length ? m_ColumnValueSlots[d] : -1;
-                string text = slot >= 0 ? model.GetValueAt(index, slot).ToString("0.####") : "-";
-                widgets.Values[d].SetValueWithoutNotify(text);
-            }
-
             var record = model.Records[index];
-            widgets.Labels.text = record.Labels.Count > 0 ? string.Join(", ", record.Labels) : string.Empty;
+
+            // 每一格读自己那块牌（CellRef）：格子的**显示位置**是显示序（标签格排前面），
+            // 而值/标签数组的下标是"第几个那一类的列"，两者对不上是这套表页的基本事实——
+            // 按位置数格子就是"上一版把标签格当数值格填"的那条路。
+            for (int d = 0; d < widgets.Cells.Length; d++)
+            {
+                var cell = widgets.Cells[d];
+                if (cell == null) continue;
+                var target = cell.userData as CellRef;
+                if (target == null || target.Slot < 0)
+                {
+                    cell.SetValueWithoutNotify("-");   // 不占格的列（比如 Time 那一行）
+                    continue;
+                }
+
+                string text;
+                if (target.IsLabel)
+                {
+                    // 空串照实显示（这一格被清空过），不是"没有这一格"：两者要分得开
+                    text = target.Slot < record.Labels.Count ? (record.Labels[target.Slot] ?? string.Empty) : string.Empty;
+                }
+                else
+                {
+                    text = model.GetValueAt(index, target.Slot).ToString("0.####");
+                }
+                cell.SetValueWithoutNotify(text);
+            }
         }
 
         /// <summary>删一行＝删一条记录。删完立刻重排行号（列表多/少一行都要跟着改）</summary>
@@ -715,7 +832,10 @@ namespace XericUI.XChart.Editor
 
             if (m_Stats != null)
             {
+                // 每行的两个数组长度都在这里印出来：1:1 是形状，看得见的那个数字才是判据
                 m_Stats.text = "总行 " + total + "　维度 " + dimensions
+                    + "　每行 " + (model != null ? model.NumericDimensionCount : 0) + " 个值、"
+                    + (model != null ? model.LabelDimensionCount : 0) + " 个标签"
                     + "　已丢弃 " + (model != null ? model.DroppedCount : 0);
             }
 
@@ -1135,12 +1255,23 @@ namespace XericUI.XChart.Editor
             public int RecordIndex = -1;
             public Label Index;
             public TextField Time;
-            public TextField[] Values;
 
-            /// <summary>建这一行时"哪一列有值格"的签名；对不上就整条重造（格子是禁用的还是可编辑的都记在格子上）</summary>
+            /// <summary>每一列的格子，按<b>显示序</b>排（标签格在前，其后数值格）。
+            /// 格子种类不同（标签写字符串、数值写数字）所以不能靠"第几格"猜它是哪一列</summary>
+            public TextField[] Cells;
+
+            /// <summary>建这一行时"每一格是哪个种类、哪一下标"的签名；对不上就整条重造
+            /// （格子是禁用的还是可编辑的、走数字解析还是字符串提交，都记在格子上）</summary>
             public string Slots;
-            public Label Labels;
             public ToolbarButton Delete;
+        }
+
+        /// <summary>格子背后那一列的身份：<c>IsLabel</c> 决定 <c>Slot</c> 是标签下标还是值下标。
+        /// 两个含义不许挤在同一个数上（-1 已经被"这一列不占格"占了），所以种类写在明面上。</summary>
+        private sealed class CellRef
+        {
+            public bool IsLabel;
+            public int Slot = -1;
         }
 
         /// <summary>范围页里一列的那一行控件</summary>

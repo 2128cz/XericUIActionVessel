@@ -229,9 +229,15 @@ namespace XericUI.XChart.Editor
                     // 位置是唯一权威——再多两个手填的格子，就会出现"位置与数字各说一套"，
                     // 而"上移之后绘制顺序到底变没变"这个问题就没人回答得了。
 
-                    // 这个元素要几个数值维、几条记录，表里现在各有多少——**三个数一起印**（§25.1）。
+                    // 这个元素要几个数值维、几条记录、几个标签列，表里现在各有多少——**三个数一起印**（§25.1）。
                     // "加了工具但什么都没显示"最常见的原因就是形状不够，而画面上两者长得一模一样。
-                    if (config.RequiredNumericDimensions > 0)
+                    // 标签列也归进来：标签元素读的是"某一列在每一行上的那一格"，表里没这一列时它一条都不画，
+                    // 而这一支在画面上和"没数据"同形——只印数值维和记录数就会漏掉这一半。
+                    int needDims = config.RequiredNumericDimensions;
+                    int needRecords = config.RequiredRecordCount;
+                    int needLabels = config.RequiredLabelColumns;
+
+                    if (needDims > 0 || needRecords > 0 || needLabels > 0)
                     {
                         int haveDims = chart != null && chart.DataModel != null
                             ? chart.DataModel.NumericDimensionCount
@@ -239,18 +245,27 @@ namespace XericUI.XChart.Editor
                         int haveRecords = chart != null && chart.DataModel != null
                             ? chart.DataModel.RecordCount
                             : 0;
-                        int needDims = config.RequiredNumericDimensions;
-                        int needRecords = config.RequiredRecordCount;
+                        int haveLabels = chart != null && chart.DataModel != null
+                            ? chart.DataModel.LabelDimensionCount
+                            : 0;
 
                         string dimsPart = "需要 " + needDims + " 个数值维，表现在有 " + haveDims + " 个";
                         string recordsPart = needRecords > 0
                             ? "；需要 " + needRecords + " 条记录，表现在有 " + haveRecords + " 条"
                             : string.Empty;
-                        bool shortOfShape = haveDims < needDims || haveRecords < needRecords;
-                        block.Body.Add(MakeReadonly(dimsPart + recordsPart
+                        string labelsPart = needLabels > 0
+                            ? "；需要 " + needLabels + " 个标签列，表现在有 " + haveLabels + " 个"
+                            : string.Empty;
+
+                        bool shortOfShape = haveDims < needDims
+                            || haveRecords < needRecords
+                            || haveLabels < needLabels;
+
+                        block.Body.Add(MakeReadonly(dimsPart + recordsPart + labelsPart
                             + (shortOfShape
                                 ? "　⇒ 画不出来（报表里 dims=" + haveDims + "/" + needDims
-                                  + " records=" + haveRecords + "）"
+                                  + " records=" + haveRecords
+                                  + " labels=" + haveLabels + "/" + needLabels + "）"
                                 : string.Empty)));
                     }
 
