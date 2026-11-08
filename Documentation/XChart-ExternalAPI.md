@@ -183,12 +183,13 @@ chart.Space.CenterOffset = new Vector2(0, 40f);
 3. **元素靠类型去重**：`AddDefaultElement<T>` 同类型只补一份；真要两份（两条轴）就 `AddElement` 并让名字不同名（面板会自动加序号，配对按 `ElementNameFor`）。
 4. **"图里一定有一个空间工具"是不变量**：删掉/停用空间元素会被补回默认（删掉它≠图没了），要拿回旋钮就重新 Add 一条。
 5. **箭头/圆柱的数据驱动模式要"几条记录凑一个图元"**：`GroupSize`（圆柱，默认 2）与箭头的四档来源都在说这件事——支数＝记录数的函数，不是记录数本身。
-6. **65535 顶点上限**：填充/线网格按预算自动分块（`chunks=`/`fillMaxVerts=` 读数）；自己加图元时不要绕开预算。
-7. **`UICurveRenderer.LiveVertexCount` 不是本实例的数**（报表里 `curveVerts=` 是"库里一共活着多少顶点"，P23 待办）；要判自己那份，读 `curves=`/`markers=`。
+6. **65535 顶点上限**：库那三个渲染器（线/曲线/散点）按预算自动分块；**填充这一侧不分块**（2026-11-08 他要求：一个 Graphic 自己画，没有 chunk 子物体）——超上限时按提交顺序**整段放弃**并报 `fillRefused=`，不是抛异常。填充的读数换成 `fillPlan=`/`fillShipped=`/`fillRefused=`/`fillCr=`（规范 §34）。自己加图元时不要绕开预算。
+7. **`UICurveRenderer.LiveVertexCount` 不是本实例的数**（报表里 `curveVerts=` 是"库里一共活着多少顶点"）；要判自己那份，读 `curves=`/`markers=`。P23（"发了但不上屏"）已于 2026-11-08 修掉，机制和读数见规范 §34。
 8. **雷达图与伪 3D 图是两套空间**：`XRadarChart` 用自己的 `XChartRadarDataModel`（2D 极坐标），不吃立方体的 `TryResolveDomain` 那套。
 9. **别在元素自己的对象上做手脚**：工具与它生成的节点是运行时的（`HideAndDontSave`），重建一次就换一批——把状态存在你自己的组件或配置里。
 10. **显示范围只定标尺，不决定数据画不画**（§32）：散点／矢量／圆柱各有一个 `OutOfRange` 三档（`RenderAsIs` 默认＝超范围的点画到盒子外面、`ClampToRange`＝贴回盒壁、`HideOutOfRange`＝整条不画），轴与格线**永远**按范围、没有这个开关。想让点"限定在网格内"就把那一档调成 `ClampToRange`——默认已经不是了。报表里 `hidden=`（策略隐的）与 `skipped=`（数据不可用的）是两个数。
 11. **从对象池拿到的文本件是干净的**（§P26a）：颜色/字号/旋转/矩形在复用时会恢复默认，所以你的元素"没写的属性"不会继承上一个元素写过的值；反过来，**你在元素上没设的属性就是那一份默认**（14 号字、白色、不换行、居中对齐）。
+12. **运行时新建的 Graphic 必须自己带 `CanvasRenderer`**（§34，P23 的根因）：`Graphic` 只 `RequireComponent(RectTransform)`，`AddComponent` 不会替它补那个组件，而 `Graphic.Rebuild` 第一句就是 `if (canvasRenderer == null || canvasRenderer.cull) return`——网格照填、不画、也不报错。工具的 `CreateChild` 已经写全（`RectTransform` + `CanvasRenderer`），所以走工具建的子渲染器没问题；**绕过 `CreateChild` 自己 `new GameObject` 挂 Graphic 时**，要自己补那个组件（类上也贴 `[RequireComponent(typeof(CanvasRenderer))]`，跟库里三个基类同一个形状），并把 `AddComponent` 放在 `SetParent` 之后——`OnEnable` 里的 `CacheCanvas` / `GraphicRegistry` 读的是当时的父级。判"有没有"用 `GetComponent<CanvasRenderer>()`，别读 `canvasRenderer` 属性（缺的时候它自己会 `AddComponent`，读它就把"有没有"变成"我补了一个"）。
 
 ## 10. 端到端：一个"掘进姿态"箭头
 

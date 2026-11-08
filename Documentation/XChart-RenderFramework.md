@@ -464,6 +464,10 @@ chart.RebuildToolPools()          // 帧首或脏标记后调用
    所以画家序不变）。**判据**：探针 5 条（每块不超预算、覆盖不重不漏且保序、最大值真是最大、单面超预算也自成一块不丢面、
    零面零块），对照臂 R「把切块关掉（永远一块）」⇒ 第一条红；**现场读数**：圆柱与箭头两个按记录数长网格的工具
    各自在报表里印 `fillChunks=` 与 `fillMaxVerts=`（"最大的那个 Graphic 有多少顶点"）。
+   **这一套在 2026-11-08 被他推翻**（"自己写个简单填充就行，不要那套 chunk 子物体"）⇒ 填充这一侧现在是
+   **一个 Graphic 自己画**，判据从"切成几块"换成"装不下的按提交顺序整段放弃、而且必须报出来"，读数换成
+   `fillPlan=/fillShipped=/fillRefused=/fillCr=`；全套在 §34。**库那三个基类的分块照旧**（散点/曲线/线仍按记录数
+   长网格，那一条没被推翻，被推翻的只是填充这一侧的实现形状）。
    **库侧分块已做一半（2026-10-23）**：`PrimitiveCacheRendererBase`（**散点走它**）与 `CurveCacheRendererBase`
    都改成"本体不画、按 `ChunkVertexBudget = 16000` 把条目切块、每块一个子 Graphic"，
    块内索引按块内顶点起点**重基**（`PopulateSlice`）；顺序不变（块按提交顺序、块内也按顺序）⇒ 画家序不动。
@@ -494,7 +498,9 @@ chart.RebuildToolPools()          // 帧首或脏标记后调用
    **已修**（两棵库树按符号名对齐：`LiveVertexCount` 各 6 处、`RemoveRange` 各 5 处）：重建时把缓存 shrink 到
    当前真正需要的顶点/索引数，并暴露 `LiveVertexCount`（**当帧真提交量**，不是水位）。
    **报告口径**：每个按数据量长网格的元素都印自己组件的提交量 —— 散点 `points= / pointVerts=`、
-   箭头 `arrowFaces= / fillChunks= / fillMaxVerts=`、圆柱再加 `curveVerts= / wireVerts=`、轴线 `wireVerts=`。
+   箭头 `arrowFaces= / curves= / markers=`（箭头不再经过填充渲染器，§29）、圆柱再加 `curveVerts= / wireVerts=`、
+   轴线 `wireVerts=`。填充那一侧的三个数分开印（§34）：`fillPlan=`（算出来的）/ `fillShipped=`（真写进网格的）/
+   `fillRefused=`（被上限挤掉的）+ `fillCr=`（有没有 CanvasRenderer）——这四个数就是"发"与"画"的分界线。
    **跨包编译顺序也补上了**（否则一改库就满屏 `CS1061` 假红）：`run_gate_lib.py` 先把库编出来，
    `run_gate.py` 再把渲染里指向 dag 旧 `Lrss3.Deconstruction.ref.dll` 的引用重定向到本次产出
    （打印 `lib_ref=N`，N 必须 ≥ 1 ——"重定向真的发生了"本身是判据）。
@@ -1975,6 +1981,9 @@ P18 那次我读不到库那个包（被拦过一次），就照着自己代码�
   `fillMaxVerts=248`（＝62×4 个顶点，一个不多）⇒ **面提交了、子块建了、网格也真填了顶点**，画面上却没有。
   所以不是数据形状、不是开关、不是顶点预算，是**填充渲染器到 Canvas 的那一跳**。（那一跳本轮没修：
   箭头不再经过它，所以箭头上屏了，而网格背景/圆柱填充那两类如果也看不见，就是同一个坏点还没除掉。）
+  **2026-11-08 那一跳找到了并修掉**（§34）：填充那一类是**我们自己写的 Graphic**，而 `Graphic` 不要求
+  `CanvasRenderer`——工具建子物体时也没给——所以它从来没有那个组件，`Graphic.Rebuild` 第一句就 return：
+  网格照填、不画、不报错。走库渲染器的元素（散点/线/曲线）都有那个组件，所以它们上屏；只有自写的这一类不上屏。
 - **顺手抓到的一条会撒谎的读数**：同一行里 `curves=0` 但 `curveVerts=66`——`UICurveRenderer.LiveVertexCount`
   **不是这个实例自己的数**（同一时刻圆柱那一行也印 66）。所以 `curveVerts=` 只能当"库里现在一共活着多少顶点"读，
   不能当"我这条曲线提交了几个顶点"读；要看自己那份，读 `curves=`（条目数）与 `markers=`。已记进 P23 待办。
@@ -2222,3 +2231,78 @@ P18 那次我读不到库那个包（被拦过一次），就照着自己代码�
 （那支改名 `point-to-point reuses the carries-direction rule`，期望断言标签同步改，否则臂红了却没人认它的断言）；
 编译门 runtime + player + editor + 3 对照绿。要让矢量场真有内容，缺的还是**方向列**：多 3 列（凑 6 个数值维）
 或者让奇数行放方向，`ThisRecordCarriesVector` / `AlternatingRecords` 才是给矢量场用的两档。
+
+## 34. P25/P23：填充自己写（一个 Graphic，没有子物体），以及"发"与"画"的分界线（2026-11-08）
+
+### 34.1 他要的形状
+
+原话："这个填充我之前说的是需要你写一个简单的填充脚本就可以，也就是自己实现，不需要额外的渲染脚本实现。"
+（加上"自己写简单填充，替掉 chunk 式填充渲染器"）。落码后 `XChartMeshFillRenderer.cs` 里**只剩一个类**：
+
+- `AddFace` / `AddFaceLinear` 收面，`OnPopulateMesh` 把面写进**自己**的 `VertexHelper`；
+- 没有 `FaceChunk`、没有子 GameObject、没有 `EnsureChunkCount`、没有"本体不画、交给块画"那二层；
+- 三档上色（`Flat`/`Radial`/`Linear`）不变，每面顶点数仍只有**一个**定义
+  （`XChartMeshBudget.VerticesPerFace`）——预算侧和渲染侧都吃它，两边各写一套就会出现"预算以为 4 个、实际发 5 个"。
+
+顺手补回一条：`OnPopulateMesh` 里的 `vh.Clear()` 是渲染器自己的责任（`DoMeshGeneration` 只在"矩形无效"那一支
+才替它清，ugui@1.0.0 `Graphic.cs:694-700`），不写就会把上一批顶点留在网格里，读数也跟着撒谎。
+
+### 34.2 上限超了怎么办：只能按提交顺序整段放弃
+
+不分块 ⇒ 一个 Graphic 就是 65535 的整个额度，`XChartMeshBudget.FacesWithinCap` 取**前缀**。
+
+- 为什么是前缀而不是"跳过装不下的"：提交顺序＝绘制顺序（调用方按深度从远到近喂，画家算法），重排就是改画面。
+  所以超了只能放弃后面整段，不能挑着收。
+- 放弃必须报：报表里 `fillRefused=`。"悄悄少画"和"崩溃"是同一种坏——他 2026-10-23 那次是崩，这一种是数字好看、画面缺一块。
+- 实际用量离上限差一个数量级（立方体 6 面、圆柱一片轮廓 ≤ 1024 面）⇒ 这一档平时是 0。它存在是为了"数据喂大了要看得见它挤掉了"。
+
+### 34.3 P23 的真相：`Graphic` 不要求 CanvasRenderer
+
+- 证据（本工程实际加载的 ugui@1.0.0 源，不是我记忆里的版本）：`Graphic.cs:17-18` 只声明
+  `DisallowMultipleComponent` + `RequireComponent(RectTransform)`——**没有** `CanvasRenderer`；
+  `Graphic.cs:640` 的 `Rebuild` 第一句是 `if (canvasRenderer == null || canvasRenderer.cull) return`。
+  运行时 `AddComponent` 出来的 Graphic 没有那个组件 ⇒ 网格照填、不画、也不报错。
+- 对照：库里三个渲染器基类（line/curve/primitive）**都显式贴了** `[RequireComponent(typeof(CanvasRenderer))]`
+  ⇒ 走它们的元素上屏；只有"我们自己写的那类 Graphic"不上屏。这正好解释了他报的现象组合：散点、格线、箭头都在，
+  填充没有；Inspector 里那个块是个没材质的空壳；报表数字全对。
+- 修法两处（都在单一入口）：① `XChartToolBase.CreateChild` 建子物体时写全 `RectTransform` + `CanvasRenderer`，
+  工具子物体的整族一起修；② 类上贴 `[RequireComponent(typeof(CanvasRenderer))]`（跟库里三个基类同一个形状）。
+  顺序照旧：`AddComponent` 放在 `SetParent` 之后，因为 `OnEnable` 的 `CacheCanvas` / `GraphicRegistry` 读的是当时的父级。
+- 判"有没有"必须用 `GetComponent<CanvasRenderer>()`：`Graphic.canvasRenderer` 那个 getter 在缺的时候自己
+  `AddComponent`（`Graphic.cs:453-467`），读它就把"有没有"变成"我补了一个"——判据不许写被检对象的状态。
+
+### 34.4 四个读数就是"发"与"画"的分界线
+
+| 读数 | 谁产生的 | 说明 |
+| --- | --- | --- |
+| `fillPlan=` | `Apply()` | 提交那一刻算出来要发几个顶点 |
+| `fillShipped=` | `OnPopulateMesh` | canvas 更新循环**真写进网格**的顶点数 |
+| `fillRefused=` | `Apply()` | 被上限挤掉的面数 |
+| `fillCr=` | 报表读 `HasCanvasRenderer` | 这个 Graphic 到底有没有 CanvasRenderer |
+
+判据形状：`fillPlan>0` 而 `fillShipped=0` ⇒ 发出去了但没上屏（P23 的形状）；`fillCr=NO` ⇒ 那一跳的入口不在；
+三个数都正常而画面还空 ⇒ 我不再猜，直接说"离线门看不到引擎的 Canvas 收集这一步，现场才算数"。
+注意报表里原先那两个读数（`fillChunks=`/`fillMaxVerts=`）没了——块没有了，读数自然跟着换。
+
+### 34.5 判据
+
+- **源码门** `.ximage-gate/fill_gate.py`（claims A–E，7 支臂）：A 类上那个属性 / B `CreateChild` 写全 /
+  C 渲染器自己不建子物体 / D 渲染路径真吃上限与前缀、且每面顶点数只有一份定义 / E 报表印齐四个读数且 presence 走 `GetComponent`。
+  clean tree 全绿，7 支各红在点名 claim（F1 摘属性、F2 `CreateChild` 只给 RectTransform、F3 chunk 子物体放回来、
+  F4 `OnPopulateMesh` 无视前缀、F5 预算自己再写一套 5-vs-4、F6 报表只印 plan、F7 用那个会写状态的 getter）。
+  注意 claim C/D/E 只扫代码行，不扫文档注释：文件把 `canvasRenderer` 的坑写在注释里，判据如果打在文字上就是在判文本不是判代码。
+- **探针 474 条 0 失败**（6 条打在 `FacesWithinCap`）：不超上限、装不下时真挤掉、前缀收到装不下为止、
+  装得下就整批收、单面超上限一个都不收、零面零收。断言的读数不许越界取 `counts[accepted]`：臂把上限关掉时
+  `accepted` 就是全表，探针会在断言之前先越界死掉——那种"红"是仪器坏不是判据红（本轮真踩到一次，已修）。
+- **`p4_control` 73 支**照旧各红在点名断言上；原来那支"把切块关掉（永远一块）"换成"上限从不被 consulted"（臂 26），
+  期望标签同步换成新的 3 条。
+- **`dirty_gate.py`** 136 旋钮 136 生效；编译门 runtime + player + editor + 3 对照绿（`engine_remapped` 照旧打印，
+  因为记着的引擎安装路径已经不在了，读的是 `G:/Unity_EngineFlie/Unity 2022.1.24f1`）。
+
+### 34.6 覆盖不到什么 / 他侧验收（Ctrl+R 后）
+
+- 离线门判不到"真上屏"：Graphic 到 Canvas 那一跳（Canvas 什么时候把 CanvasRenderer 收进批次）不在我们代码里，
+  所以 §34.3 的修法在离线侧只有"形状判据 + 读数"，画面归他。
+- 现场看三件事：① 立方体的填充面和圆柱的填充应上屏；② 报表 `fillCr=yes` 且 `fillShipped>0`；
+  ③ 数据喂到超上限时是 `fillRefused>0`，而不是抛 `Mesh can not have more than 65000 vertices`。
+- 如果 `fillCr=yes`、`fillShipped>0` 而画面还空，那 §34.3 的机制就不是全部——这条要说清楚，别把"修了形状"当"修了画面"。

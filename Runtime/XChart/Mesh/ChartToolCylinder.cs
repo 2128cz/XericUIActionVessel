@@ -734,8 +734,11 @@ namespace XericUI.XChart.Mesh
             sb.Append(" outlinePoints=").Append(m_OutlineCount)
               .Append(" curveEntries=").Append(m_CurveEntries)
               .Append(" fill=").Append(ShowFill)
-              .Append(" fillChunks=").Append(FillRenderer != null ? FillRenderer.ChunkCount : 0)
-              .Append(" fillMaxVerts=").Append(FillRenderer != null ? FillRenderer.MaxChunkVertices : 0)
+              .Append(" fillPlan=").Append(FillRenderer == null ? -1 : FillRenderer.PlannedVertexCount)
+              .Append(" fillShipped=").Append(FillRenderer == null ? -1 : FillRenderer.ShippedVertexCount)
+              .Append(" fillRefused=").Append(FillRenderer == null ? -1 : FillRenderer.RefusedFaces)
+              .Append(" fillCr=").Append(FillRenderer == null ? "fill-NULL"
+                  : (FillRenderer.HasCanvasRenderer ? "yes" : "NO"))
               .Append(" curveVerts=").Append(CurveRenderer != null ? CurveRenderer.LiveVertexCount : 0)
               .Append(" wireVerts=").Append(WireRenderer != null ? WireRenderer.LiveVertexCount : 0)
               .Append(" ringStart=").Append(ShowStartRing)

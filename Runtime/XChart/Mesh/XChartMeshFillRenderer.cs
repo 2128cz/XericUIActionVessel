@@ -24,89 +24,72 @@ namespace XericUI.XChart.Mesh
     }
 
     /// <summary>
-    /// 顶点预算分块（纯算，离线可验）。
+    /// 顶点预算（纯算，离线可验）。
     ///
-    /// <para><b>为什么要有它</b>：UGUI 的 65535 顶点上限是<b>每个 Graphic 各自</b>的，而有些元素是
-    /// 按记录数长网格的（箭头一条记录 2 个四边形、散点一个点 1 个四边形）⇒ 记录一多必然撞上
-    /// （他 2026-10-23 灌 10000 条时现场抛 `Mesh can not have more than 65000 vertices`）。
-    /// 所以提交前先按预算把面切成若干块，每块一个 Graphic。</para>
+    /// <para><b>为什么要有它</b>：UGUI 的 65535 顶点上限是<b>每个 Graphic 各自</b>的
+    /// （`VertexHelper.FillMesh` 超了就抛 `Mesh can not have more than 65000 vertices`，他 2026-10-23
+    /// 现场中过一次），而有些元素是按记录数长网格的（散点一个点 1 个四边形、圆柱填充一片轮廓）
+    /// ⇒ 数据一多就会撞。</para>
+    ///
+    /// <para>填充这一侧<b>不分块</b>（2026-11-08 他要求：自己写简单填充，不要那套 chunk 子物体），
+    /// 所以判据从"切成几块"换成<b>"装不下的那部分必须整段放弃、并且必须报出来"</b>——
+    /// 悄悄少画和崩溃是同一种坏。</para>
     /// </summary>
     public static class XChartMeshBudget
     {
-        /// <summary>每块顶点上限。65535 是硬上限，这里留足余量（还要给别的顶点与实现细节留空间）。</summary>
-        public const int ChunkVertexBudget = 16000;
+        /// <summary>UGUI 每个 Graphic 的硬上限（`VertexHelper.FillMesh` 超过就抛）</summary>
+        public const int GraphicVertexCap = 65535;
 
         /// <summary>
-        /// 切块：把 <paramref name="faceCount"/> 个面按"每面顶点数"切成若干块，
-        /// 各块起始面下标写进 <paramref name="starts"/>，返回块数。
-        /// 块 k 覆盖面 <c>[starts[k], starts[k+1])</c>，最后一块到 <paramref name="faceCount"/>。
-        /// 顺序不变、不重不漏；单面就超过预算时它自成一块（无解，只能交给渲染器）。
+        /// 按提交顺序能装进 <paramref name="cap"/> 的<b>前缀</b>面数。
+        ///
+        /// <para>只取前缀是硬要求：提交顺序＝绘制顺序（画家算法），所以"装不下的"不能重排、
+        /// 也不能插到前面去——只能整段放弃。被放弃的面由渲染器报出来（报表里的 `fillRefused=`），
+        /// 不能悄悄少画。</para>
         /// </summary>
-        public static int Split(int[] faceVertexCounts, int faceCount, int budget, int[] starts)
+        public static int FacesWithinCap(int[] faceVertexCounts, int faceCount, int cap)
         {
             if (faceVertexCounts == null) throw new ArgumentNullException(nameof(faceVertexCounts));
-            if (starts == null) throw new ArgumentNullException(nameof(starts));
-            if (starts.Length < 1) throw new ArgumentException("starts 至少要有 1 个位置");
-            if (faceCount <= 0)
-            {
-                starts[0] = 0;
-                return 0;
-            }
-            if (budget < 1) budget = 1;
+            if (faceCount <= 0) return 0;
+            if (cap < 1) return 0;
 
-            int chunks = 0;
-            int start = 0;
+            int accepted = 0;
             int used = 0;
             for (int i = 0; i < faceCount; i++)
             {
                 int vertices = Mathf.Max(1, faceVertexCounts[i]);
-                if (used > 0 && used + vertices > budget)
-                {
-                    starts[chunks++] = start;
-                    start = i;
-                    used = 0;
-                }
+                // 装不下的只能整段放弃（顺序不许重排），被放弃的面由报表 fillRefused= 报出来
+                if (used + vertices > cap) break;
                 used += vertices;
+                accepted++;
             }
-            starts[chunks++] = start;
-            return chunks;
-        }
-
-        /// <summary>各块顶点数的最大值（报表用：报告"最大的那个 Graphic 有多少顶点"）</summary>
-        public static int MaxChunkVertices(int[] faceVertexCounts, int faceCount, int[] starts, int chunkCount)
-        {
-            int max = 0;
-            for (int c = 0; c < chunkCount; c++)
-            {
-                int end = (c + 1 < chunkCount) ? starts[c + 1] : faceCount;
-                int sum = 0;
-                for (int i = starts[c]; i < end; i++) sum += Mathf.Max(1, faceVertexCounts[i]);
-                if (sum > max) max = sum;
-            }
-            return max;
+            return accepted;
         }
 
         /// <summary>
-        /// 一块面要几个顶点：只有<b>径向渐变</b>要多一个中心顶点（5 个、4 三角），
+        /// 一个面要几个顶点：只有<b>径向渐变</b>要多一个中心顶点（5 个、4 三角），
         /// 平坦与线性渐变都是 4 顶点 2 三角。
         ///
-        /// <para>分块预算吃的是这个数（65535 是<b>每个 Graphic 各自</b>的上限），所以它必须是单一定义：
-        /// 渲染侧按它写顶点、预算侧按它算块，两处各写一套就会出现"预算以为 4 个、实际发 5 个"
-        /// ——那种分块会在恰好卡线时撞上限。</para>
+        /// <para>预算和渲染两侧必须吃这<b>同一个</b>定义：两边各写一套就会出现"预算以为 4 个、
+        /// 实际发 5 个"，正好卡线时撞上限。</para>
         /// </summary>
         public static int VerticesPerFace(XChartFaceFillKind kind)
             => kind == XChartFaceFillKind.Radial ? 5 : 4;
     }
 
     /// <summary>
-    /// 面填充渲染器：提交若干四边形，<b>按顶点预算自动分块</b>，每块一个子 Graphic。
+    /// 面填充渲染器：把四边形<b>写进自己这一个 Graphic 的网格</b>——没有子物体，也没有第二套渲染脚本。
     ///
-    /// <para>每面可以纯色填充，也可以"四角色 + 中心色"径向渐变（背景做浅淡的立体感很需要这个）。
-    /// 面的<b>提交顺序就是绘制顺序</b>，所以调用方要按深度从远到近喂（画家算法）——
-    /// 半透明面叠在一起时，顺序错了颜色就错了。分块不改这个顺序：块按提交顺序排，块内也按顺序。</para>
+    /// <para>每面可以纯色填充，也可以"四角色 + 中心色"径向渐变（背景做浅淡的立体感很需要这个），
+    /// 或"一对边各一色"的线性渐变。</para>
+    ///
+    /// <para>面的<b>提交顺序就是绘制顺序</b>，所以调用方要按深度从远到近喂（画家算法）——
+    /// 半透明面叠在一起时，顺序错了颜色就错了。这条决定了上限超了以后只能<b>按顺序整段放弃</b>：
+    /// 不能把装不下的面挪到前面去（<see cref="XChartMeshBudget.FacesWithinCap"/>），也不能悄悄少画。</para>
     ///
     /// <para>不参与射线检测（背景不该挡住交互）。</para>
     /// </summary>
+    [RequireComponent(typeof(CanvasRenderer))]
     [AddComponentMenu(XericRegistrationPaths.Chart + "/Mesh/Cube Face Fill Renderer")]
     public sealed class XChartMeshFillRenderer : MaskableGraphic
     {
@@ -122,35 +105,32 @@ namespace XericUI.XChart.Mesh
             public XChartFaceFillKind Kind;
         }
 
-        /// <summary>一块：只画 [Start, End) 之间的面。顶点数受预算限制，所以不会撞 65535 上限。</summary>
-        private sealed class FaceChunk : MaskableGraphic
-        {
-            public XChartMeshFillRenderer Owner;
-            public int FirstFace;
-            public int LastFace;
-
-            protected override void OnEnable()
-            {
-                base.OnEnable();
-                raycastTarget = false;
-            }
-
-            protected override void OnPopulateMesh(VertexHelper vh)
-            {
-                vh.Clear();
-                if (Owner != null) Owner.PopulateSlice(vh, FirstFace, LastFace);
-            }
-        }
-
         private readonly List<FaceQuad> m_Faces = new List<FaceQuad>(8);
-        private readonly List<FaceChunk> m_Chunks = new List<FaceChunk>();
         private int[] m_FaceVertexCounts = new int[0];
-        private int[] m_ChunkStarts = new int[8];
 
-        /// <summary>报表用：这一帧提交了几个面 / 切成几块 / 最大的那块有多少顶点</summary>
+        // 三个数分开看，因为 P23 那个坏点就是"提交侧的数好看、画面是空的"：
+        // PlannedVertexCount 是提交那一刻算出来的，ShippedVertexCount 是 canvas 更新循环真写进
+        // VertexHelper 的，HasCanvasRenderer 是"这一跳的入口在不在"。三个数凑不齐就是还没画。
+        private int m_PlannedVertexCount;
+        private int m_ShippedVertexCount;
+        private int m_RefusedFaces;
+        private int m_AcceptedFaces;
+
+        /// <summary>报表用：提交了几个面 / 算出来要发几个顶点 / 真写进网格的顶点数 / 被上限挤掉的面</summary>
         public int FaceCount => m_Faces.Count;
-        public int ChunkCount => m_Chunks.Count;
-        public int MaxChunkVertices { get; private set; }
+        public int PlannedVertexCount => m_PlannedVertexCount;
+        public int ShippedVertexCount => m_ShippedVertexCount;
+        public int RefusedFaces => m_RefusedFaces;
+
+        /// <summary>
+        /// 报表用：这个 Graphic 到底有没有 CanvasRenderer。
+        ///
+        /// <para>必须走 <c>GetComponent</c>：`Graphic.canvasRenderer` 那个 getter 在缺的时候会被访问
+        /// （它自己会 AddComponent），读它就把"有没有"变成"我补了一个"——判据不许写被检对象的状态。
+        /// 缺的后果是 <c>Graphic.Rebuild</c> 第一句 `if (canvasRenderer == null …) return`
+        /// （ugui@1.0.0 Graphic.cs:640）：网格填了、不画、也不报错。</para>
+        /// </summary>
+        public bool HasCanvasRenderer => GetComponent<CanvasRenderer>() != null;
 
         protected override void OnEnable()
         {
@@ -205,71 +185,37 @@ namespace XericUI.XChart.Mesh
             });
         }
 
-        /// <summary>提交：按预算分块，然后各块重画</summary>
+        /// <summary>
+        /// 提交：按"每面顶点数"算这个 Graphic 装得下前几面（装不下的整段放弃、报出来），然后置脏
+        /// 让 canvas 更新循环去发顶点。
+        /// </summary>
         public void Apply()
-        {
-            RebuildChunks();
-            SetVerticesDirty();   // 本体不画东西，但仍刷一次，保证子块的顺序紧跟其后
-            for (int i = 0; i < m_Chunks.Count; i++) m_Chunks[i].SetVerticesDirty();
-        }
-
-        private void RebuildChunks()
         {
             if (m_FaceVertexCounts.Length < m_Faces.Count) m_FaceVertexCounts = new int[m_Faces.Count];
             for (int i = 0; i < m_Faces.Count; i++)
                 m_FaceVertexCounts[i] = XChartMeshBudget.VerticesPerFace(m_Faces[i].Kind);
 
-            if (m_ChunkStarts.Length < m_Faces.Count + 1) m_ChunkStarts = new int[m_Faces.Count + 1];
-            int chunks = XChartMeshBudget.Split(m_FaceVertexCounts, m_Faces.Count,
-                XChartMeshBudget.ChunkVertexBudget, m_ChunkStarts);
-            MaxChunkVertices = XChartMeshBudget.MaxChunkVertices(m_FaceVertexCounts, m_Faces.Count,
-                m_ChunkStarts, chunks);
+            m_AcceptedFaces = XChartMeshBudget.FacesWithinCap(m_FaceVertexCounts, m_Faces.Count,
+                XChartMeshBudget.GraphicVertexCap);
 
-            EnsureChunkCount(chunks);
-            for (int c = 0; c < chunks; c++)
-            {
-                m_Chunks[c].FirstFace = m_ChunkStarts[c];
-                m_Chunks[c].LastFace = (c + 1 < chunks) ? m_ChunkStarts[c + 1] : m_Faces.Count;
-                m_Chunks[c].enabled = true;
-            }
-            for (int c = chunks; c < m_Chunks.Count; c++) m_Chunks[c].enabled = false;   // 多余的块停掉，不画空网格
+            int used = 0;
+            for (int i = 0; i < m_AcceptedFaces; i++) used += m_FaceVertexCounts[i];
+            m_PlannedVertexCount = used;
+            m_RefusedFaces = m_Faces.Count - m_AcceptedFaces;
+
+            SetVerticesDirty();
         }
 
-        private void EnsureChunkCount(int count)
+        protected override void OnPopulateMesh(VertexHelper vh)
         {
-            while (m_Chunks.Count < count)
-            {
-                var chunk = new GameObject("FillChunk" + m_Chunks.Count, typeof(RectTransform)).AddComponent<FaceChunk>();
-                chunk.Owner = this;
-                var rect = (RectTransform)chunk.transform;
-                rect.SetParent(transform, false);
-                rect.anchorMin = Vector2.zero;
-                rect.anchorMax = Vector2.one;
-                rect.offsetMin = Vector2.zero;
-                rect.offsetMax = Vector2.zero;
-                chunk.raycastTarget = false;
-                m_Chunks.Add(chunk);
-            }
-        }
+            // `Graphic` 自己不清：s_VertexHelper 是静态共用的那一个，Clear 是 OnPopulateMesh 的责任
+            // （ugui@1.0.0 Graphic.cs:694-700 —— 只有"矩形无效"那一支才替它清）。不清就会把上一批
+            // 顶点留在网格里，读数也会跟着撒谎。
+            vh.Clear();
 
-        /// <summary>本体不画东西：所有面都交给受预算约束的子块</summary>
-        protected override void OnPopulateMesh(VertexHelper vh) => vh.Clear();
-
-        private static bool IsGradient(FaceQuad face)
-        {
-            // Color32 是逐字节比较："两色不同"就说明这次要做渐变
-            return face.CenterColor.r != face.EdgeColor.r
-                || face.CenterColor.g != face.EdgeColor.g
-                || face.CenterColor.b != face.EdgeColor.b
-                || face.CenterColor.a != face.EdgeColor.a;
-        }
-
-        internal void PopulateSlice(VertexHelper vh, int start, int end)
-        {
-            if (start < 0) start = 0;
-            if (end > m_Faces.Count) end = m_Faces.Count;
-
-            for (int i = start; i < end; i++)
+            // 只写提交侧认下来的那前 m_AcceptedFaces 个面：提交顺序就是画家序，不能重排。
+            // 读数用 vh.currentVertCount（真写进去的），不用"应该是几个"——两者相等才是这条链真的跑到终点。
+            for (int i = 0; i < m_AcceptedFaces && i < m_Faces.Count; i++)
             {
                 FaceQuad face = m_Faces[i];
                 int first = vh.currentVertCount;
@@ -301,16 +247,8 @@ namespace XericUI.XChart.Mesh
                     vh.AddTriangle(first + 2, first + 3, first + 0);
                 }
             }
-        }
 
-        protected override void OnDisable()
-        {
-            base.OnDisable();
-            // 图形停用时子块也得停，否则会留下"看不见但还在"的空网格
-            for (int i = 0; i < m_Chunks.Count; i++)
-            {
-                if (m_Chunks[i] != null) m_Chunks[i].enabled = false;
-            }
+            m_ShippedVertexCount = vh.currentVertCount;
         }
     }
 }

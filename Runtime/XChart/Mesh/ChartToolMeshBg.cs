@@ -493,7 +493,11 @@ namespace XericUI.XChart.Mesh
                   : "DIFF drawn=" + m_GridLinesDrawn + " want=" + want)
               .Append(" lines=").Append(m_LinesS).Append('/').Append(m_LinesT)
               .Append(" frames=").Append(valid).Append('/').Append(m_FaceFrames.Length)
-              .Append(" chunks=").Append(FillRenderer != null ? FillRenderer.ChunkCount : -1)
+              .Append(" fillPlan=").Append(FillRenderer == null ? -1 : FillRenderer.PlannedVertexCount)
+              .Append(" fillShipped=").Append(FillRenderer == null ? -1 : FillRenderer.ShippedVertexCount)
+              .Append(" fillRefused=").Append(FillRenderer == null ? -1 : FillRenderer.RefusedFaces)
+              .Append(" fillCr=").Append(FillRenderer == null ? "fill-NULL"
+                  : (FillRenderer.HasCanvasRenderer ? "yes" : "NO"))
               .Append(" renderers=").Append(FillRenderer == null ? "fill-NULL" : "ok")
               .Append('/').Append(GridRenderer == null ? "grid-NULL" : "ok");
         }

@@ -189,7 +189,11 @@ namespace XericUI.XChart
 
         protected RectTransform CreateChild(string childName)
         {
-            var child = new GameObject(childName, typeof(RectTransform));
+            // CanvasRenderer 必须在这里给全：`Graphic` 只 RequireComponent(RectTransform)、不要求它
+            // （ugui@1.0.0 Graphic.cs:17-18），运行时 AddComponent 不会替工具补，而 `Graphic.Rebuild`
+            // 第一句 `if (canvasRenderer == null || canvasRenderer.cull) return`（Graphic.cs:640）
+            // —— 缺了它 mesh 照填、不画、也不报错。这就是 P23"发了但不上屏"的入口。
+            var child = new GameObject(childName, typeof(RectTransform), typeof(CanvasRenderer));
             child.transform.SetParent(RootTransform, false);
             child.hideFlags = CurrentFlags;
 
