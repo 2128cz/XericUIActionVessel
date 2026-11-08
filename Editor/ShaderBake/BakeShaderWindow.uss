@@ -1,0 +1,336 @@
+/* ============================================================
+   Bake Shader As Image 窗口样式。
+   结构见 BakeShaderWindow.uxml，这里只放尺寸与配色；
+   工具栏一族（Toolbar*）自带引擎配色与高度，不要再给它设背景。
+   ============================================================ */
+
+.bake-root {
+    flex-direction: column;
+    flex-grow: 1;
+    background-color: rgb(38, 38, 38);
+}
+
+/* ── 顶部 / 底部工具栏 ── */
+.main-toolbar,
+.status-bar {
+    flex-shrink: 0;
+}
+
+.toolbar-gap {
+    flex-grow: 1;
+}
+
+.tool-narrow {
+    min-width: 26px;
+    width: 26px;
+}
+
+.toolbar-emphasize {
+    -unity-text-align: middle-center;
+    font-size: 12px;
+}
+
+.status-message {
+    font-size: 12px;
+    -unity-text-align: middle-left;
+    color: rgb(210, 210, 210);
+}
+
+.status-readout {
+    font-size: 11px;
+    -unity-text-align: middle-right;
+    color: rgb(160, 160, 160);
+    margin-left: 6px;
+    margin-right: 6px;
+}
+
+/* ── 中部：左浏览图 + 右细节 ── */
+.main-row {
+    flex-direction: row;
+    flex-grow: 1;
+    min-height: 120px;
+}
+
+.preview-pane {
+    flex-direction: column;
+    flex-grow: 1;
+    min-width: 200px;
+}
+
+.preview-viewport {
+    flex-grow: 1;
+    background-color: rgb(48, 48, 48);
+    /* 浏览区是一块画布，不该有内边距把图挤到角上 */
+    padding: 0;
+}
+
+.preview-viewport > .unity-scroll-view__content-container {
+    flex-grow: 1;
+}
+
+.preview-stage {
+    flex-grow: 1;
+    align-items: center;
+    justify-content: center;
+    min-width: 100%;
+}
+
+.preview-frame {
+    position: relative;
+    margin: 12px;
+    border-width: 1px;
+    border-color: rgb(90, 90, 90);
+}
+
+.preview-checker,
+.preview-image {
+    position: absolute;
+    left: 0;
+    top: 0;
+    /* 两张都按画面尺寸摆放，谁大谁小由代码算，样式不掺和 */
+    width: 100%;
+    height: 100%;
+}
+
+.preview-checker {
+    opacity: 0.9;
+}
+
+.preview-readout {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    font-size: 11px;
+    color: rgb(220, 220, 220);
+    background-color: rgba(0, 0, 0, 0.45);
+    padding: 1px 6px;
+    border-radius: 3px;
+}
+
+.detail-split {
+    width: 3px;
+    flex-shrink: 0;
+    background-color: rgb(60, 60, 60);
+}
+
+.detail-split:hover {
+    background-color: rgb(94, 142, 206);
+}
+
+.detail-pane {
+    width: 340px;
+    min-width: 240px;
+    flex-shrink: 0;
+    background-color: rgb(42, 42, 42);
+    border-left-width: 1px;
+    border-left-color: rgb(60, 60, 60);
+}
+
+/* 2021.2 之前叫 content-viewport，之后叫 content-container，两个都写上省得按版本失效 */
+.detail-pane > .unity-scroll-view__content-container,
+.detail-pane > .unity-scroll-view__content-viewport {
+    width: 100%;
+    flex-shrink: 0;
+}
+
+.detail-content {
+    width: 100%;
+    flex-shrink: 0;
+    padding-bottom: 8px;
+}
+
+/* ── 分组 ── */
+.section {
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(52, 52, 52);
+    padding-top: 4px;
+    padding-bottom: 6px;
+}
+
+.section-head {
+    font-size: 12px;
+    margin-left: 6px;
+    margin-bottom: 2px;
+    color: rgb(225, 225, 225);
+}
+
+.section-body {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+/* ── 控件排布 ── */
+.field-row {
+    flex-direction: row;
+    align-items: center;
+}
+
+.field-full {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+/*
+ * flex-basis: 0 是关键：默认 auto 会按内容宽度（标题 + 输入框）定基宽，
+ * 一行两栏/三栏加起来必然超过侧栏宽度，输入框被挤到可视区外——表现就是"数值文本不显示"。
+ */
+.field-half {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0;
+    min-width: 0;
+    margin-right: 4px;
+}
+
+.field-third {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0;
+    min-width: 0;
+    margin-right: 4px;
+}
+
+.field-quarter {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0;
+    min-width: 0;
+    margin-right: 3px;
+    font-size: 10px;
+}
+
+/* 2021.3 的字段标题默认吃 120px 左右，窄栏里会把输入区压没；侧栏内统一收窄 */
+.detail-content .unity-base-field__label,
+.detail-content .unity-text-field__label,
+.detail-content .unity-base-text-field__label {
+    min-width: 30px;
+    flex-shrink: 1;
+    overflow: hidden;
+}
+
+.detail-content .unity-base-field__input,
+.detail-content .unity-text-field__input,
+.detail-content .unity-base-text-field__input {
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+/* ── 浏览图里的选中面片高亮 ── */
+.face-overlay {
+    position: absolute;
+    display: none;
+    border-width: 1px;
+    border-color: rgb(255, 196, 64);
+    background-color: rgba(255, 196, 64, 0.14);
+}
+
+.face-overlay-label {
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    font-size: 10px;
+    color: rgb(255, 224, 160);
+    background-color: rgba(0, 0, 0, 0.55);
+    padding: 0 4px;
+    border-radius: 2px;
+}
+
+.field-toggle {
+    font-size: 11px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.field-note {
+    font-size: 10px;
+    color: rgb(150, 150, 150);
+    margin-top: 6px;
+    margin-bottom: 2px;
+}
+
+/* ── 材质属性行 ── */
+.props-rows {
+    flex-shrink: 0;
+}
+
+.prop-row {
+    flex-direction: row;
+    align-items: center;
+    min-height: 18px;
+}
+
+.prop-label {
+    width: 108px;
+    flex-shrink: 0;
+    font-size: 11px;
+    color: rgb(200, 200, 200);
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.prop-field {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+}
+
+.prop-inline {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+}
+
+.prop-range {
+    flex-grow: 1;
+    flex-direction: row;
+    align-items: center;
+    min-width: 0;
+}
+
+.prop-slider {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.prop-range-value {
+    width: 58px;
+    flex-shrink: 0;
+}
+
+.prop-vector {
+    flex-grow: 1;
+    flex-direction: row;
+    align-items: center;
+    min-width: 0;
+}
+
+.prop-vec-part {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    margin-right: 2px;
+}
+
+/* ── 全局参数行 ── */
+.global-enabled {
+    margin-right: 4px;
+}
+
+.global-name {
+    width: 118px;
+    font-size: 10px;
+}
+
+.prop-vec-part > .unity-label {
+    min-width: 12px;
+    font-size: 10px;
+}
+
+/* 属性行里的数字框不要各自那套标题——标签已经在行首了 */
+.prop-inline > .unity-label,
+.prop-range-value > .unity-label {
+    display: none;
+}

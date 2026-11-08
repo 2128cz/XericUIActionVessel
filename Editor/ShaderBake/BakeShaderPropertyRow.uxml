@@ -1,0 +1,29 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:x="UnityEditor.UIElements" xmlns:xer="XericUI.ShaderBake.Editor">
+    <!--
+        材质属性表的一行模板：结构写在这里，控件种类摊开成兄弟节点，
+        BakeShaderPropertyTable.cs 负责"留哪一个、其余收起来"。
+        行里的 name 会在多行之间重复，所以取控件一律在克隆出来的行内查（row.Q），不查全局。
+        样式跟着窗口根上的 BakeShaderWindow.uss 走，这里不重复挂样式表。
+    -->
+    <ui:VisualElement name="prop-row" class="prop-row">
+        <ui:Label name="prop-label" class="prop-label" text="属性" />
+        <ui:VisualElement name="prop-field" class="prop-field">
+            <xer:FloatField name="prop-float" class="prop-inline" />
+            <xer:IntegerField name="prop-int" class="prop-inline" />
+            <ui:Toggle name="prop-toggle" class="prop-inline" />
+            <ui:DropdownField name="prop-enum" class="prop-inline" />
+            <x:ColorField name="prop-color" class="prop-inline" />
+            <x:ObjectField name="prop-texture" class="prop-inline" />
+            <ui:VisualElement name="prop-range" class="prop-range">
+                <ui:Slider name="prop-slider" class="prop-slider" />
+                <xer:FloatField name="prop-range-value" class="prop-range-value" />
+            </ui:VisualElement>
+            <ui:VisualElement name="prop-vector" class="prop-vector">
+                <xer:FloatField name="prop-vec-x" label="X" class="prop-vec-part" />
+                <xer:FloatField name="prop-vec-y" label="Y" class="prop-vec-part" />
+                <xer:FloatField name="prop-vec-z" label="Z" class="prop-vec-part" />
+                <xer:FloatField name="prop-vec-w" label="W" class="prop-vec-part" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>
