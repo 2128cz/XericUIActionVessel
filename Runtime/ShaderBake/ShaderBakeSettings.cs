@@ -22,6 +22,9 @@ namespace XericUI.ShaderBake
 		[Tooltip("渲染前注入的全局参数（光照方向、环境光、反射贴图等）")]
 		public ShaderBakeGlobalSettings globals = new ShaderBakeGlobalSettings();
 
+		[Tooltip("时间轴：单张渲染注入的 _Time 与序列导出的帧数 / 步长")]
+		public ShaderBakeTimeSettings time = new ShaderBakeTimeSettings();
+
 		/// <summary> 画面宽高比 </summary>
 		public float aspect
 		{
@@ -38,6 +41,7 @@ namespace XericUI.ShaderBake
 			output.Clamp();
 			surface.Clamp();
 			camera.Clamp();
+			time.Clamp();
 		}
 
 		/// <summary> 复制一份（编辑器窗口拿它当工作副本，改坏了不至于污染存下来的那份） </summary>

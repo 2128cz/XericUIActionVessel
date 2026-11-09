@@ -582,6 +582,10 @@ namespace XericUI.ShaderBake.Editor
 				preset.RegisterValueChangedCallback(evt => ApplySizePreset(evt.newValue));
 			}
 			Click("out-fit-aspect", FitOutputAspect);
+			BindFloat("time-seconds", () => m_Renderer.settings.time.seconds, v => m_Renderer.settings.time.seconds = v);
+			BindFloat("time-step", () => m_Renderer.settings.time.frameStep, v => m_Renderer.settings.time.frameStep = v);
+			BindInt("time-frames", () => m_Renderer.settings.time.frameCount, v => m_Renderer.settings.time.frameCount = v);
+			BindInt("time-columns", () => m_Renderer.settings.time.sheetColumns, v => m_Renderer.settings.time.sheetColumns = v);
 
 			BindInt("out-width", () => m_Renderer.settings.output.width, v => m_Renderer.settings.output.width = v);
 			BindInt("out-height", () => m_Renderer.settings.output.height, v => m_Renderer.settings.output.height = v);

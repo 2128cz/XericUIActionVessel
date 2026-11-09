@@ -87,6 +87,14 @@
                             <ui:Toggle name="out-hdr" label="HDR" class="field-toggle" />
                             <ui:Toggle name="out-srgb" label="sRGB 存储" class="field-toggle" />
                             <ui:Toggle name="out-flip" label="翻转 Y" class="field-toggle" />
+                            <ui:VisualElement class="field-row">
+                                <xer:FloatField name="time-seconds" label="时间" class="field-half" />
+                                <xer:FloatField name="time-step" label="每帧时间" class="field-half" />
+                            </ui:VisualElement>
+                            <ui:VisualElement class="field-row">
+                                <xer:IntegerField name="time-frames" label="帧数" class="field-half" />
+                                <xer:IntegerField name="time-columns" label="宫格列" class="field-half" />
+                            </ui:VisualElement>
                     </ui:Foldout>
 
                     <!-- 面片 -->

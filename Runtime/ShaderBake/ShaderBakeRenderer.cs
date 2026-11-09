@@ -58,7 +58,7 @@ namespace XericUI.ShaderBake
 		/// 非空时渲进调用方那张（要求宽高与 settings.output 一致，否则 Unity 只会画一部分）。
 		/// 返回真正写入了结果的那张 RT，可能是传入的那张，也可能是内部那张。
 		/// </summary>
-		public RenderTexture Render(RenderTexture target = null)
+		public RenderTexture Render(RenderTexture target = null, float? timeOverride = null)
 		{
 			lastError = string.Empty;
 
@@ -92,7 +92,7 @@ namespace XericUI.ShaderBake
 			bool needResolve = settings.output.antiAliasing > 1 && target == null && m_MultiSampleSource != null;
 			RenderTexture drawn = needResolve ? m_MultiSampleSource : dest;
 
-			DrawInto(drawn);
+			DrawInto(drawn, timeOverride);
 
 			if (needResolve)
 				Graphics.Blit(m_MultiSampleSource, dest);
@@ -101,9 +101,9 @@ namespace XericUI.ShaderBake
 		}
 
 		/// <summary> 渲成可读 Texture2D（调用方负责销毁）。导出文件与存资产都从这里出发。 </summary>
-		public Texture2D RenderToTexture2D(bool generateMips = false)
+		public Texture2D RenderToTexture2D(bool generateMips = false, float? timeOverride = null)
 		{
-			RenderTexture rt = Render();
+			RenderTexture rt = Render(null, timeOverride);
 			if (rt == null)
 				return null;
 			var texture = ShaderBakeReadback.ToTexture2D(rt, settings.output.textureFormat, settings.output.isLinearTexture, generateMips);
@@ -390,7 +390,7 @@ namespace XericUI.ShaderBake
 			return m_OwnedTarget;
 		}
 
-		private void DrawInto(RenderTexture rt)
+		private void DrawInto(RenderTexture rt, float? timeOverride)
 		{
 			if (m_Buffer == null)
 			{
@@ -427,6 +427,9 @@ namespace XericUI.ShaderBake
 			bool previousInvert = GL.invertCulling;
 			GL.invertCulling = previousInvert != settings.output.flipY;
 			List<Action> restoreGlobals = settings.globals != null ? settings.globals.Apply() : null;
+			bool timed = timeOverride.HasValue;
+			if (timed)
+				ApplyTimeGlobals(timeOverride.Value);
 			try
 			{
 				Graphics.ExecuteCommandBuffer(m_Buffer);
@@ -434,6 +437,9 @@ namespace XericUI.ShaderBake
 			finally
 			{
 				GL.invertCulling = previousInvert;
+				// 时间改的是引擎全局量，画完必须交还，否则场景/预览里的动画会停在烘焙的那一帧
+				if (timed)
+					RestoreTimeGlobals();
 				// 画完立刻还原：这些是编辑器全局状态，留一次烘焙的值下来会污染别处的渲染
 				if (restoreGlobals != null)
 				{
@@ -442,6 +448,45 @@ namespace XericUI.ShaderBake
 				}
 			}
 			m_Buffer.Clear();
+		}
+
+		/// <summary>
+		/// 把时间灌进引擎全局量：<c>_Time</c> 与派生出来的 <c>_SinTime</c> / <c>_CosTime</c>、<c>unity_DeltaTime</c>。
+		/// 布局照抄 Unity 内置（_Time = (t/20, t, t*2, t*3)），shader 里照常写就行。
+		///
+		/// <para><b>为什么不能走材质或属性块</b>：<c>_Time</c> 是引擎的全局常量，不在材质的
+		/// per-material 常量里，只有改全局才真的能让 shader 读到；代价是画完得交还，
+		/// 见 <see cref="RestoreTimeGlobals"/>。</para>
+		/// </summary>
+		private static void ApplyTimeGlobals(float seconds)
+		{
+			Shader.SetGlobalVector("_Time", TimeVector(seconds));
+			Shader.SetGlobalVector("_SinTime", new Vector4(
+				Mathf.Sin(seconds / 8f), Mathf.Sin(seconds / 4f), Mathf.Sin(seconds / 2f), Mathf.Sin(seconds)));
+			Shader.SetGlobalVector("_CosTime", new Vector4(
+				Mathf.Cos(seconds / 8f), Mathf.Cos(seconds / 4f), Mathf.Cos(seconds / 2f), Mathf.Cos(seconds)));
+			// 逐帧烘焙没有真实帧间隔，按 1/60 秒给个定值，免得依赖它的 shader 被 0 除出无穷大
+			Shader.SetGlobalVector("unity_DeltaTime", new Vector4(1f / 60f, 60f, 1f / 60f, 60f));
+		}
+
+		/// <summary>
+		/// 交还时间：Unity 每帧会重发这些全局量，这里只要回到"当前时钟"，
+		/// 就不会让场景或预览里的动画停在烘焙用的那一帧。
+		/// </summary>
+		private static void RestoreTimeGlobals()
+		{
+			float now = Application.isPlaying ? Time.time : Time.realtimeSinceStartup;
+			Shader.SetGlobalVector("_Time", TimeVector(now));
+			Shader.SetGlobalVector("_SinTime", new Vector4(
+				Mathf.Sin(now / 8f), Mathf.Sin(now / 4f), Mathf.Sin(now / 2f), Mathf.Sin(now)));
+			Shader.SetGlobalVector("_CosTime", new Vector4(
+				Mathf.Cos(now / 8f), Mathf.Cos(now / 4f), Mathf.Cos(now / 2f), Mathf.Cos(now)));
+			Shader.SetGlobalVector("unity_DeltaTime", new Vector4(1f / 60f, 60f, 1f / 60f, 60f));
+		}
+
+		private static Vector4 TimeVector(float seconds)
+		{
+			return new Vector4(seconds / 20f, seconds, seconds * 2f, seconds * 3f);
 		}
 
 		/// <summary>
