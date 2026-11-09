@@ -123,6 +123,7 @@ P26 标签是"记录上的标签列"，不是随身的一串字符串（规范 �
 修 Range 属性的滑块区间取错：`ShaderUtil.GetRangeLimits` 的 0/1/2 依次是 默认值/最小/最大，按 0/1 取会让区间变成 0..默认值，手柄永远顶在右端
 修属性行数值框被挤出面板：主题滑块默认不收缩，显式 `flex-shrink: 1` 并把数值框钉死 58px
 细节面板六个板块改用 Foldout 折叠（原来是带复选框的 Toggle，看着不像能折），标题左侧的三角就是状态，整条可点；全局参数默认折叠
+合并 dev2 的另外 23 条 ShaderBake 提交（2026-11-07，到 `8262d5a`）到 thr_dev/dev_chart（`f6a8838`，**未推**）：文件集与 XChart 那侧不交叉，只有 CHANGELOG 撞在同一个插入点——两侧都是各自新增的行、谁也没删对方的内容，所以两边条目都保留。合并后在合并树上重跑整套判据：编译门 runtime + player + editor 三臂 + 3 对照绿，并且这一轮把"新文件真进了被编译的清单"从散文变成正向断言（`run_gate.py` 新增 `assert_dir_compiled`：逐个数 `Runtime/ShaderBake` **11** 个、`Editor/ShaderBake` **9** 个，含这次合并带进来的 `ShaderBakeOverrideRenderer.cs`，少一个就红而不是绿着跳过）；探针 **492** 项 0 失败、`p4_control` **78** 支全红在点名断言、`dirty_gate` 149/149、`label_gate` 15/15、`fill_gate` PASS、`slot_reset_gate` PASS。判的那棵树钉在指纹 `bb28ea2515ef1b358cb32fc9220a48278a42ca519ff9412973d97a5423fb3b53`（260 个 .cs，`.ximage-gate/p30_tree_fp.txt`）。他的新代码走 `XericRegistrationPaths.ToolBar` 常量，没有硬编码菜单串。自己的错照记：`python3` 在这台机器是 Windows Store 的空壳（exit 49、无输出），跑门要用 `C:/ProgramData/anaconda3/python.exe`；第一次解冲突时脚本打印了结果却没落盘，靠读回文件才发现——写文件之后必须以读回为准。
 
 ## [0.1.6] - 2026-07-01
 
