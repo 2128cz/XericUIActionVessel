@@ -154,7 +154,78 @@ namespace XericUI.ShaderBake
 			EnsureGeometry();
 			if (m_Geometry == null)
 				return;
-			settings.camera.FrameBounds(geometryBounds, settings.aspect);
+			// 余量给 1：烘出来的图和场景里"把材质贴在面片上正对着看"是一个范围，不留白边
+			settings.camera.FrameBounds(geometryBounds, settings.aspect, 1f);
+			settings.camera.fitRevision = ShaderBakeCameraSettings.kCurrentFitRevision;
+		}
+
+		/// <summary>
+		/// 把相机挪到刚好框住<b>某一格</b>。
+		///
+		/// <para><b>为什么需要单独按格框</b>：<see cref="FitCameraToGeometry"/> 框的是整个网格，
+		/// 多格时每格只占画面宽高的 1/列数、1/行数，还额外带 15% 余量。于是"场景里一张面片贴满物体"
+		/// 的效果在这里变成画面正中的一小块，看上去像 shader 只画了九宫格的中间那格。
+		/// 想要和场景一致的比例，就按这一格来框（余量取 1，不留边）。</para>
+		/// </summary>
+		public bool FitCameraOnFace(int faceIndex)
+		{
+			Bounds bounds;
+			if (!TryGetFaceWorldBounds(faceIndex, out bounds))
+				return false;
+			// padding 给 1：这一格就是要铺满整张输出图，留边就等于把内容缩小
+			settings.camera.FrameBounds(bounds, settings.aspect, 1f);
+			settings.camera.fitRevision = ShaderBakeCameraSettings.kCurrentFitRevision;
+			return true;
+		}
+
+		/// <summary> 某一格在世界空间的包围盒（外部网格不参与，返回 false） </summary>
+		public bool TryGetFaceWorldBounds(int faceIndex, out Bounds bounds)
+		{
+			bounds = default(Bounds);
+			ShaderBakeSurfaceSettings surface = settings.surface;
+			Vector2 rectMin, rectMax;
+			if (!TryGetFaceLocalRect(surface, faceIndex, out rectMin, out rectMax))
+				return false;
+
+			Matrix4x4 local = surface.localMatrix;
+			Vector3 min = new Vector3(rectMin.x, rectMin.y, 0f);
+			Vector3 max = new Vector3(rectMax.x, rectMax.y, 0f);
+			Vector3 worldMin = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+			Vector3 worldMax = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+			for (int i = 0; i < 8; i++)
+			{
+				Vector3 corner = new Vector3((i & 1) == 0 ? min.x : max.x,
+				                             (i & 2) == 0 ? min.y : max.y,
+				                             (i & 4) == 0 ? min.z : max.z);
+				Vector3 world = local.MultiplyPoint3x4(corner);
+				worldMin = Vector3.Min(worldMin, world);
+				worldMax = Vector3.Max(worldMax, world);
+			}
+			bounds = new Bounds((worldMin + worldMax) * 0.5f, worldMax - worldMin);
+			return true;
+		}
+
+		/// <summary> 某一格在面片局部空间里的矩形。网格整体以原点为中心，第 0 行在最下 </summary>
+		private static bool TryGetFaceLocalRect(ShaderBakeSurfaceSettings surface, int faceIndex,
+			out Vector2 rectMin, out Vector2 rectMax)
+		{
+			rectMin = Vector2.zero;
+			rectMax = Vector2.zero;
+			if (surface.kind == ShaderBakeSurfaceKind.Mesh)
+				return false;
+
+			int columns = Mathf.Max(surface.gridColumns, 1);
+			int rows = Mathf.Max(surface.gridRows, 1);
+			if (faceIndex < 0 || faceIndex >= columns * rows)
+				return false;
+
+			int column = faceIndex % columns;
+			int row = faceIndex / columns;
+			float x0 = -surface.size.x * columns * 0.5f + column * surface.size.x;
+			float y0 = -surface.size.y * rows * 0.5f + row * surface.size.y;
+			rectMin = new Vector2(x0, y0);
+			rectMax = new Vector2(x0 + surface.size.x, y0 + surface.size.y);
+			return true;
 		}
 
 		/// <summary>
@@ -214,26 +285,24 @@ namespace XericUI.ShaderBake
 				return false;
 
 			ShaderBakeSurfaceSettings surface = settings.surface;
-			int columns = Mathf.Max(surface.gridColumns, 1);
-			int rows = Mathf.Max(surface.gridRows, 1);
-			if (faceIndex < 0 || faceIndex >= columns * rows)
+			Vector2 rectMin, rectMax;
+			if (!TryGetFaceLocalRect(surface, faceIndex, out rectMin, out rectMax))
 				return false;
 
-			float faceWidth = surface.size.x;
-			float faceHeight = surface.size.y;
-			int column = faceIndex % columns;
-			int row = faceIndex / columns;
-			float x0 = -faceWidth * columns * 0.5f + column * faceWidth;
-			float y0 = -faceHeight * rows * 0.5f + row * faceHeight;
-			float x1 = x0 + faceWidth;
-			float y1 = y0 + faceHeight;
+			float x0 = rectMin.x;
+			float y0 = rectMin.y;
+			float x1 = rectMax.x;
+			float y1 = rectMax.y;
 
 			Matrix4x4 local = surface.localMatrix;
 			bool first = true;
 			for (int i = 0; i < 4; i++)
 			{
 				Vector3 corner = new Vector3((i & 1) == 0 ? x0 : x1, (i & 2) == 0 ? y0 : y1, 0f);
-				Vector4 clip = viewProjection * local.MultiplyPoint3x4(corner);
+				Vector3 world = local.MultiplyPoint3x4(corner);
+				// 必须显式给 w=1：Matrix4x4 * Vector3 会走隐式 Vector3→Vector4（w=0），
+				// 于是 clip.w 恒为 0，下面的可见性判断会把每一格都判成"不在画面里"
+				Vector4 clip = viewProjection * new Vector4(world.x, world.y, world.z, 1f);
 				if (clip.w <= 0.0001f)
 					return false;
 				float u = (clip.x / clip.w + 1f) * 0.5f;

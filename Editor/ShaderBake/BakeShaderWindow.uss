@@ -96,6 +96,34 @@
     opacity: 0.9;
 }
 
+/* 分格线浮在图上：1px 白线 + 每格一个 UV 编号，都用百分比定位，缩放/滚动不用重排 */
+.grid-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    /* 贴边的编号宁可被裁掉，也不该糊到图上之外 */
+    overflow: hidden;
+}
+
+.grid-line {
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.38);
+}
+
+.grid-cell-label {
+    position: absolute;
+    font-size: 10px;
+    /* 白字压在半透明黑底上：浅色贴图上白字会糊掉，垫一层才读得出来 */
+    color: rgba(255, 255, 255, 0.88);
+    background-color: rgba(0, 0, 0, 0.38);
+    padding: 0 4px;
+    border-radius: 2px;
+    -unity-text-align: middle-left;
+}
+
 .preview-readout {
     position: absolute;
     left: 8px;
@@ -143,19 +171,27 @@
 .section {
     border-bottom-width: 1px;
     border-bottom-color: rgb(52, 52, 52);
-    padding-top: 4px;
+    padding-top: 2px;
     padding-bottom: 6px;
 }
 
-.section-head {
+/* 折叠头：Foldout 自带的三角就是状态指示，整条都能点，悬停给一点底色 */
+.section > .unity-foldout__toggle {
     font-size: 12px;
-    margin-left: 6px;
-    margin-bottom: 2px;
     color: rgb(225, 225, 225);
+    margin-left: 2px;
+    margin-bottom: 2px;
+    padding: 2px 4px;
+    border-radius: 3px;
 }
 
-.section-body {
-    padding-left: 8px;
+.section > .unity-foldout__toggle:hover {
+    background-color: rgba(255, 255, 255, 0.07);
+}
+
+/* 内容左右留边：子项不该贴着三角和面板边 */
+.section > .unity-foldout__content {
+    padding-left: 10px;
     padding-right: 8px;
 }
 
@@ -292,11 +328,15 @@
 
 .prop-slider {
     flex-grow: 1;
-    min-width: 0;
+    /* 主题里的滑块默认不收缩：不显式压回 1，它会占满整行并把右边的数值框挤出面板 */
+    flex-shrink: 1;
+    min-width: 40px;
 }
 
 .prop-range-value {
     width: 58px;
+    min-width: 58px;
+    max-width: 58px;
     flex-shrink: 0;
 }
 

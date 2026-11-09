@@ -25,6 +25,7 @@
             <x:ToolbarButton name="zoom-actual" text="1:1" />
             <x:ToolbarButton name="zoom-in" text="+" class="tool-narrow" />
             <x:ToolbarToggle name="show-checker" text="透明底" />
+            <x:ToolbarButton name="debug-view" text="测试视图 ▾" />
             <x:ToolbarSpacer class="toolbar-gap" />
             <x:ToolbarButton name="reset-settings" text="重置参数" />
         </x:Toolbar>
@@ -38,6 +39,8 @@
                         <ui:VisualElement name="preview-frame" class="preview-frame">
                             <ui:Image name="preview-checker" class="preview-checker" />
                             <ui:Image name="preview-image" class="preview-image" />
+                            <!-- 分格线与每格的 UV 编号：位置按百分比算，缩放时不用重排 -->
+                            <ui:VisualElement name="grid-overlay" class="grid-overlay" />
                             <!-- 选中面片的高亮：位置按百分比算，缩放时不用重排 -->
                             <ui:VisualElement name="face-overlay" class="face-overlay">
                                 <ui:Label name="face-overlay-label" class="face-overlay-label" text="UV (0,0)" />
@@ -55,9 +58,7 @@
                 <ui:VisualElement name="detail-content" class="detail-content">
 
                     <!-- 输入源 -->
-                    <ui:VisualElement name="sec-source" class="section">
-                        <ui:Toggle name="sec-source-head" label="输入源" value="true" class="section-head" />
-                        <ui:VisualElement name="sec-source-body" class="section-body">
+                    <ui:Foldout name="sec-source" text="输入源" value="true" class="section">
                             <x:ObjectField name="src-shader" label="Shader" class="field-full" />
                             <x:ObjectField name="src-material" label="Material" class="field-full" />
                             <ui:Label name="src-note" class="field-note" text="未指定" />
@@ -65,13 +66,10 @@
                                 <ui:Button name="src-apply" text="写回原材质" class="field-half" />
                                 <ui:Button name="src-revert" text="丢弃改动" class="field-half" />
                             </ui:VisualElement>
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                    </ui:Foldout>
 
                     <!-- 输出目标 -->
-                    <ui:VisualElement name="sec-output" class="section">
-                        <ui:Toggle name="sec-output-head" label="输出" value="true" class="section-head" />
-                        <ui:VisualElement name="sec-output-body" class="section-body">
+                    <ui:Foldout name="sec-output" text="输出" value="true" class="section">
                             <ui:VisualElement class="field-row">
                                 <ui:DropdownField name="out-preset" label="预设" class="field-half" />
                                 <ui:Button name="out-fit-aspect" text="匹配面片比例" class="field-half" />
@@ -89,13 +87,10 @@
                             <ui:Toggle name="out-hdr" label="HDR" class="field-toggle" />
                             <ui:Toggle name="out-srgb" label="sRGB 存储" class="field-toggle" />
                             <ui:Toggle name="out-flip" label="翻转 Y" class="field-toggle" />
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                    </ui:Foldout>
 
                     <!-- 面片 -->
-                    <ui:VisualElement name="sec-surface" class="section">
-                        <ui:Toggle name="sec-surface-head" label="面片" value="true" class="section-head" />
-                        <ui:VisualElement name="sec-surface-body" class="section-body">
+                    <ui:Foldout name="sec-surface" text="面片" value="true" class="section">
                             <xer:EnumField name="surf-kind" label="种类" class="field-full" />
                             <ui:VisualElement class="field-row">
                                 <xer:FloatField name="surf-size-x" label="宽" class="field-half" />
@@ -106,7 +101,7 @@
                                 <xer:IntegerField name="surf-seg-y" label="细分Y" class="field-half" />
                             </ui:VisualElement>
 
-                            <ui:Label class="field-note" text="面片网格（一格一张 UV 区域，向左/下扩展编号递减）" />
+                            <ui:Label class="field-note" text="面片网格" />
                             <ui:Label name="grid-info" class="field-note" text="1 × 1" />
                             <ui:VisualElement class="field-row">
                                 <ui:Button name="grid-left" text="←加列" class="field-quarter" />
@@ -115,10 +110,11 @@
                                 <ui:Button name="grid-up" text="↑加行" class="field-quarter" />
                             </ui:VisualElement>
                             <ui:VisualElement class="field-row">
-                                <ui:Button name="grid-reset" text="恢复 1×1" class="field-half" />
-                                <ui:Button name="face-zero" text="选中面归零" class="field-half" />
+                                <ui:Button name="grid-reset" text="恢复 1×1" class="field-third" />
+                                <ui:Button name="face-zero" text="选中面归零" class="field-third" />
+                                <ui:Button name="face-fit" text="选中格铺满" class="field-third" />
                             </ui:VisualElement>
-                            <ui:Label name="face-info" class="field-note" text="在左侧浏览图里点选面片" />
+                            <ui:Label name="face-info" class="field-note" text="点选面片" />
                             <ui:VisualElement class="field-row">
                                 <xer:IntegerField name="face-uv-x" label="UV X" class="field-half" />
                                 <xer:IntegerField name="face-uv-y" label="UV Y" class="field-half" />
@@ -165,13 +161,10 @@
                                 <ui:Button name="surf-flip-u" text="U镜像" class="field-third" />
                                 <ui:Button name="surf-flip-v" text="V镜像" class="field-third" />
                             </ui:VisualElement>
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                    </ui:Foldout>
 
                     <!-- 离屏相机 -->
-                    <ui:VisualElement name="sec-camera" class="section">
-                        <ui:Toggle name="sec-camera-head" label="相机" value="true" class="section-head" />
-                        <ui:VisualElement name="sec-camera-body" class="section-body">
+                    <ui:Foldout name="sec-camera" text="相机" value="true" class="section">
                             <ui:Toggle name="cam-ortho" label="正交" class="field-toggle" />
                             <xer:FloatField name="cam-ortho-size" label="正交半高" class="field-full" />
                             <xer:FloatField name="cam-fov" label="视野角" class="field-full" />
@@ -195,33 +188,24 @@
                                 <ui:Button name="cam-fit" text="框住面片" class="field-half" />
                                 <ui:Button name="cam-selftest" text="管线自检" class="field-half" />
                             </ui:VisualElement>
-                            <ui:Label name="selftest-note" class="field-note"
-                                      text="自检：用不依赖贴图与光照的内置纯色 shader 按同一套矩阵画一次，用来分清是渲染管线的问题还是被测 shader 本身的问题" />
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                            <ui:Label name="selftest-note" class="field-note" text="自检" />
+                    </ui:Foldout>
 
                     <!-- 全局参数：离屏渲染没有相机流程，光照/环境这类引擎全局量要自己补 -->
-                    <ui:VisualElement name="sec-globals" class="section">
-                        <ui:Toggle name="sec-globals-head" label="全局参数（光照 / 环境）" value="false" class="section-head" />
-                        <ui:VisualElement name="sec-globals-body" class="section-body">
-                            <ui:Label name="globals-note" class="field-note"
-                                      text="引擎在相机流程里才写入的全局量（光照方向、环境光、反射探针）这里默认缺失；勾选的条目在渲染时注入，渲染完立即还原" />
+                    <ui:Foldout name="sec-globals" text="全局参数（光照 / 环境）" value="false" class="section">
+                            <ui:Label name="globals-note" class="field-note" text="渲染时注入，渲染后还原" />
                             <ui:VisualElement class="field-row">
                                 <ui:Button name="globals-detect" text="扫描 Shader" class="field-half" />
                                 <ui:Button name="globals-presets" text="加入常用预设" class="field-half" />
                             </ui:VisualElement>
                             <ui:VisualElement name="globals-rows" class="props-rows" />
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                    </ui:Foldout>
 
                     <!-- 材质属性表：行来自 BakeShaderPropertyRow.uxml -->
-                    <ui:VisualElement name="sec-props" class="section">
-                        <ui:Toggle name="sec-props-head" label="材质属性" value="true" class="section-head" />
-                        <ui:VisualElement name="sec-props-body" class="section-body">
+                    <ui:Foldout name="sec-props" text="材质属性" value="true" class="section">
                             <ui:VisualElement name="props-rows" class="props-rows" />
                             <ui:Label name="props-note" class="field-note" text="未指定 shader" />
-                        </ui:VisualElement>
-                    </ui:VisualElement>
+                    </ui:Foldout>
 
                 </ui:VisualElement>
             </ui:ScrollView>
@@ -229,7 +213,7 @@
 
         <!-- ── 底部状态栏 ── -->
         <x:Toolbar name="status-bar" class="status-bar">
-            <ui:Label name="status-message" class="status-message" text="未渲染" />
+            <ui:Label name="status-message" class="status-message" text="" />
             <x:ToolbarSpacer class="toolbar-gap" />
             <ui:Label name="status-source" class="status-readout" text="-" />
             <ui:Label name="status-size" class="status-readout" text="-" />
