@@ -248,7 +248,11 @@ namespace XericUI.OverrideLayout
         protected override void Start()
         {
             base.Start();
-            childrenPool.Initialize();
+            // childrenPool 是这个插件后来加的格：老预制体里根本没有这一项（加载后是空池），
+            // 无条件 Initialize 会在 Start 里抛 ArgumentNullException。没配预制体就跳过——
+            // 不用对象池的滚动列表照常滚动，只是没有池化子项。
+            if (childrenPool != null && childrenPool.Prefab != null)
+                childrenPool.Initialize();
         }
 
         protected override void SetContentAnchoredPosition(Vector2 position)

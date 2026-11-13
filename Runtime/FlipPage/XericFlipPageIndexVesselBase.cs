@@ -169,7 +169,10 @@ namespace XericUI.FlipPage
         {
             base.Start();
 
-            FlipPage(currentPageIndex);
+            // 一页都还没有时不要翻（页通常是运行期才加进来的）：原来会走一遍
+            // “索引0下的节点不存在(总数0页)” 并报一条 Error，启动日志里不该有它。
+            if (TotalPageCount > 0)
+                FlipPage(currentPageIndex);
         }
 
         protected override void OnDestroy()
