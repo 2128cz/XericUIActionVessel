@@ -309,8 +309,12 @@ namespace XericUI.XTable.Rendering.Component
             RecalculateTotalSize();
             UpdateVisibleRect();
 
-            // 确保 ScrollRect Content 尺寸正确
-            RectTransform ctRt = ContentTransform as RectTransform;
+            // 确保 ScrollRect Content 尺寸正确。
+            // 有 ScrollRect 但 Content 为空时 ContentTransform 是表自己：这时写尺寸＝把表本身改成
+            // 内容尺寸（预制体一保存就是那个"奇怪的尺寸"），所以先不写。
+            RectTransform ctRt = m_ScrollRect != null && m_ScrollRect.content == null
+                ? null
+                : ContentTransform as RectTransform;
             if (ctRt != null)
             {
                 float pad2 = m_ContentOffset * 2f;
@@ -412,15 +416,40 @@ namespace XericUI.XTable.Rendering.Component
         private void CleanOrphanChildren()
         {
             Transform contentT = ContentTransform;
-            Transform borderT = contentT?.Find("_TableBorders");
+            if (contentT == null) return;
+            // 骨架缺失时 ContentTransform 回落到表自己：这时"清理孤立子物体"清的是
+            // 表自己的子物体（Viewport/Content），越清越空 ⇒ 一个都不清。
+            if (m_ScrollRect != null && m_ScrollRect.content == null && ReferenceEquals(contentT, rectTransform))
+                return;
+            Transform borderT = contentT.Find("_TableBorders");
 
             for (int i = contentT.childCount - 1; i >= 0; i--)
             {
                 var child = contentT.GetChild(i);
-                // 跳过池管理的对象（标记有 POOL_FLAGS = DontSave | HideInHierarchy）
-                if ((child.hideFlags & HideFlags.DontSave) != 0) continue;
+                // 池管理的对象（POOL_FLAGS = DontSave | HideInHierarchy）照旧跳过；
+                // 但历史上叠出来的重复背景要清掉：背景缓存是 [NonSerialized]，域重载后必丢，
+                // 而 DontSave 的 _TableBackground 还活在场景里，不清理就会一层层叠加
+                // （旧层按旧尺寸留在原位、且 HideInHierarchy 看不见，表现为边框错位/内容被盖）。
+                if ((child.hideFlags & HideFlags.DontSave) != 0)
+                {
+                    if (child.name == "_TableBackground" &&
+                        (m_BackgroundRenderer == null || child.gameObject != m_BackgroundRenderer.gameObject))
+                    {
+                        child.gameObject.hideFlags = HideFlags.None;
+                        if (Application.isPlaying) Destroy(child.gameObject);
+                        else DestroyImmediate(child.gameObject);
+                    }
+                    continue;
+                }
                 if (m_BackgroundRenderer != null && child.gameObject == m_BackgroundRenderer.gameObject) continue;
                 if (borderT != null && child == borderT) continue;
+                // 预制体自己的子物体归预制体所有，编辑模式 DestroyImmediate 会抛 InvalidOperationException。
+                // 实例和 Prefab 模式（资产）两种上下文都要跳过，否则“进去一个样、出来一个样”。
+#if UNITY_EDITOR
+                if (!Application.isPlaying &&
+                    (UnityEditor.PrefabUtility.IsPartOfPrefabInstance(child.gameObject)
+                     || UnityEditor.PrefabUtility.IsPartOfPrefabAsset(child.gameObject))) continue;
+#endif
 
                 child.gameObject.hideFlags = HideFlags.None;
                 if (Application.isPlaying)
@@ -434,14 +463,38 @@ namespace XericUI.XTable.Rendering.Component
 
         #region 背景创建
 
+        /// <summary>运行时渲染子物体的统一标记：不存盘、隐藏，且在编辑器里不可编辑（避免被记成预制体改动）。</summary>
+        private const HideFlags RuntimeRendererFlags = HideFlags.DontSave | HideFlags.HideInHierarchy | HideFlags.NotEditable;
+
         private void CreateBackground()
         {
-            if (m_BackgroundRenderer != null) return;
+            Transform contentT = ContentTransform;
+            if (m_BackgroundRenderer == null && contentT != null)
+            {
+                // 域重载会清空 [NonSerialized] 缓存，但 DontSave 的 _TableBackground 还活在场景里。
+                // 先收养它，否则每次重载都会再建一层，旧层按旧尺寸留在原位并盖住内容。
+                var existing = contentT.Find("_TableBackground");
+                if (existing != null)
+                {
+                    m_BackgroundRenderer = existing.GetComponent<XTableBackgroundRenderer>();
+                    if (m_BackgroundRenderer != null)
+                    {
+                        existing.gameObject.hideFlags = RuntimeRendererFlags;
+                        var adoptedSelection = existing.GetComponent<XTableSelectionInput>();
+                        if (adoptedSelection != null) adoptedSelection.Configure(this);
+                    }
+                }
+            }
+            if (m_BackgroundRenderer != null)
+            {
+                UpdateBackground();
+                return;
+            }
 
             var backgroundGo = new GameObject("_TableBackground",
                 typeof(RectTransform), typeof(CanvasRenderer), typeof(XTableBackgroundRenderer),
                 typeof(XTableSelectionInput));
-            backgroundGo.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
+            backgroundGo.hideFlags = RuntimeRendererFlags;
             backgroundGo.transform.SetParent(ContentTransform, false);
             backgroundGo.transform.SetAsFirstSibling();
 

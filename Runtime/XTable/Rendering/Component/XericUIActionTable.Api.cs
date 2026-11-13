@@ -662,6 +662,7 @@ namespace XericUI.XTable.Rendering.Component
 
                 m_Assembler?.DestroyAll();
                 m_PrefabPool?.DestroyAll();
+                EnsureScrollStructure();
                 ClearAllChildren();
                 m_BackgroundRenderer = null;
                 m_BorderRenderer = null;
@@ -722,6 +723,7 @@ namespace XericUI.XTable.Rendering.Component
 
                 m_Assembler?.DestroyAll();
                 m_PrefabPool?.DestroyAll();
+                EnsureScrollStructure();
                 ClearAllChildren();
                 m_BackgroundRenderer = null;
                 m_BorderRenderer = null;
@@ -809,6 +811,7 @@ namespace XericUI.XTable.Rendering.Component
 
                 m_Assembler?.DestroyAll();
                 m_PrefabPool?.DestroyAll();
+                EnsureScrollStructure();
                 ClearAllChildren();
                 m_BackgroundRenderer = null;
                 m_BorderRenderer = null;

@@ -89,6 +89,13 @@ namespace XericUI.XTable.Rendering.Component
 
         [System.NonSerialized] private XTableBackgroundRenderer m_BackgroundRenderer;
 
+        /// <summary>
+        /// content / 冻结容器这些“预制体自己的 RectTransform”由本组件驱动。
+        /// 走 DrivenRectTransformTracker 写入的几何不会落序列化、也不会被记成预制体修改；
+        /// 直接赋值则编辑模式每次刷新都会把表尺寸写进预制体（表现为“预制体坐标尺寸自己变了”）。
+        /// </summary>
+        [System.NonSerialized] private DrivenRectTransformTracker m_LayoutDriven;
+
 		/// <summary>预制体对象池——按原型分组管理</summary>
 		[System.NonSerialized] private PrefabPrototypePool m_PrefabPool;
 
@@ -205,6 +212,85 @@ namespace XericUI.XTable.Rendering.Component
             }
         }
 
+        /// <summary>
+        /// 补齐 ScrollRect 的骨架（Viewport + Content）。
+        ///
+        /// <para><b>为什么要在重建之前补</b>（2026-11-13 现场）：ScrollRect 还在、但它的
+        /// content/viewport 引用空了的时候，<see cref="ContentTransform"/> 会回落到表自己的
+        /// rectTransform ⇒ ① 表格把自己的尺寸写成内容尺寸（预制体一保存就是那个"奇怪的尺寸"）；
+        /// ② 重建时的清空清的是表自己的子物体，把原来的 Viewport/Content 一起清掉，越修越空。
+        /// 骨架回来了，这两件事都不会再发生。</para>
+        ///
+        /// <para>只补缺的那一段；按名字找得到就认领它（手摆的 Viewport/Content 不会被换成新的）。</para>
+        /// </summary>
+        [ContextMenu(XericRegistrationPaths.Table + "/补齐 ScrollRect 骨架")]
+        public void EnsureScrollStructure()
+        {
+            if (m_ScrollRect == null) return;
+            var self = rectTransform;
+            if (self == null) return;
+
+            bool changed = false;
+
+            if (m_ScrollRect.viewport == null)
+            {
+                Transform viewportT = self.Find("Viewport");
+                if (viewportT == null)
+                {
+                    viewportT = new GameObject("Viewport", typeof(RectTransform)).transform;
+                    viewportT.SetParent(self, false);
+                }
+
+                var vrt = viewportT as RectTransform;
+                if (vrt != null)
+                {
+                    vrt.anchorMin = Vector2.zero;
+                    vrt.anchorMax = Vector2.one;
+                    vrt.offsetMin = Vector2.zero;
+                    vrt.offsetMax = Vector2.zero;
+                }
+
+                if (viewportT.GetComponent<RectMask2D>() == null && viewportT.GetComponent<Mask>() == null)
+                    viewportT.gameObject.AddComponent<RectMask2D>();
+
+                m_ScrollRect.viewport = vrt;
+                changed = true;
+                Debug.Log("[XTable] ScrollRect 缺 Viewport，已补齐：" + name);
+            }
+
+            if (m_ScrollRect.content == null)
+            {
+                Transform parent = m_ScrollRect.viewport != null ? (Transform)m_ScrollRect.viewport : self;
+                Transform contentT = parent.Find("Content");
+                if (contentT == null && parent != self)
+                    contentT = self.Find("Content");
+                if (contentT == null)
+                {
+                    contentT = new GameObject("Content", typeof(RectTransform)).transform;
+                    contentT.SetParent(parent, false);
+                }
+
+                var crt = contentT as RectTransform;
+                if (crt != null)
+                {
+                    crt.anchorMin = new Vector2(0f, 1f);
+                    crt.anchorMax = new Vector2(0f, 1f);
+                    crt.pivot = new Vector2(0f, 1f);
+                    crt.anchoredPosition = Vector2.zero;
+                    crt.sizeDelta = Vector2.zero;
+                }
+
+                m_ScrollRect.content = crt;
+                changed = true;
+                Debug.Log("[XTable] ScrollRect 缺 Content，已补齐：" + name);
+            }
+
+#if UNITY_EDITOR
+            if (changed && !Application.isPlaying)
+                EditorUtility.SetDirty(m_ScrollRect);
+#endif
+        }
+
         /// <summary>表格全局配置资源</summary>
         public XTableConfig Config
         {
@@ -266,6 +352,10 @@ namespace XericUI.XTable.Rendering.Component
 
             // 预加载 Resources 中所有 .xsss 样式表到 StyleManager（仅首次）
             PreloadAllStyleSheets();
+
+            // ScrollRect 的 content/viewport 丢了就先补骨架：否则下面的清空会把表自己的子物体
+            // 当成残留清掉（越重建越空），尺寸也会写到表自己身上。
+            EnsureScrollStructure();
 
             // 域重载后旧子对象可能残留在场景中（DontSave 不自动销毁），先清空再重建
             ClearAllChildren();
@@ -333,6 +423,8 @@ namespace XericUI.XTable.Rendering.Component
         protected override void OnDisable()
         {
             base.OnDisable();
+            // 驱动属性必须在停用时显式清掉，否则 Unity 会报 tracker 里残留已销毁对象。
+            m_LayoutDriven.Clear();
         }
 
         protected override void OnDestroy()
