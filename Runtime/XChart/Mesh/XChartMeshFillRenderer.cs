@@ -26,10 +26,10 @@ namespace XericUI.XChart.Mesh
     /// <summary>
     /// 顶点预算（纯算，离线可验）。
     ///
-    /// <para><b>为什么要有它</b>：UGUI 的 65535 顶点上限是<b>每个 Graphic 各自</b>的
-    /// （`VertexHelper.FillMesh` 超了就抛 `Mesh can not have more than 65000 vertices`，他 2026-10-23
-    /// 现场中过一次），而有些元素是按记录数长网格的（散点一个点 1 个四边形、圆柱填充一片轮廓）
-    /// ⇒ 数据一多就会撞。</para>
+    /// <para><b>为什么要有它</b>：UGUI 的顶点上限是<b>每个 Graphic 各自</b>的，而且门槛是
+    /// <b>65000</b> 不是 65535（`VertexHelper.FillMesh`：`if (m_Positions.Count >= 65000) throw`，
+    /// 他 2026-10-23 与 2026-11-11 各现场中过一次），而有些元素是按记录数长网格的
+    /// （散点一个点 1 个四边形、圆柱填充一片轮廓）⇒ 数据一多就会撞。</para>
     ///
     /// <para>填充这一侧<b>不分块</b>（2026-11-08 他要求：自己写简单填充，不要那套 chunk 子物体），
     /// 所以判据从"切成几块"换成<b>"装不下的那部分必须整段放弃、并且必须报出来"</b>——
@@ -37,8 +37,12 @@ namespace XericUI.XChart.Mesh
     /// </summary>
     public static class XChartMeshBudget
     {
-        /// <summary>UGUI 每个 Graphic 的硬上限（`VertexHelper.FillMesh` 超过就抛）</summary>
-        public const int GraphicVertexCap = 65535;
+        /// <summary>
+        /// UGUI 每个 Graphic 的硬上限：`VertexHelper.FillMesh` 的判据是
+        /// `if (m_Positions.Count >= 65000) throw`（ugui 1.0.0，VertexHelper.cs:214），
+        /// 所以能装的是 <b>64999</b>，不是 65535——写 65535 会让 65000..65535 这一段必然抛。
+        /// </summary>
+        public const int GraphicVertexCap = 64999;
 
         /// <summary>
         /// 按提交顺序能装进 <paramref name="cap"/> 的<b>前缀</b>面数。
