@@ -35,12 +35,17 @@ namespace XericUI.XTable.Rendering.Component
             if (existing != null)
             {
                 m_BorderRenderer = existing.GetComponent<UILineRendererV2>();
-                if (m_BorderRenderer != null) return m_BorderRenderer;
+                if (m_BorderRenderer != null)
+                {
+                    // 顺带自愈旧对象的标记：运行期渲染物一律不可编辑，编辑期改动才不会被记成预制体覆盖。
+                    existing.gameObject.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy | HideFlags.NotEditable;
+                    return m_BorderRenderer;
+                }
             }
 
             var go = new GameObject("_TableBorders",
                 typeof(RectTransform), typeof(CanvasRenderer), typeof(UILineRendererV2));
-            go.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
+            go.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy | HideFlags.NotEditable;
             go.transform.SetParent(contentT, false);
 
             RectTransform rt = go.GetComponent<RectTransform>();

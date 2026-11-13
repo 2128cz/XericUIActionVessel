@@ -215,6 +215,9 @@ namespace XericUI.XTable.Rendering.Component
             // 偏移 m_ContentOffset（边框半宽）以对齐 Content 中单元格的偏移，
             // 避免冻结区域左侧/顶部的 1px 边框因 0.5px 坐标差被 viewport 裁切。
             float pad = m_ContentOffset * 2f;
+            // 冻结容器属于预制体：用驱动属性写入，编辑期不会把布局记成预制体修改。
+            m_LayoutDriven.Add(this, container,
+                DrivenTransformProperties.AnchoredPosition | DrivenTransformProperties.SizeDelta);
             container.anchoredPosition = position + new Vector2(m_ContentOffset, -m_ContentOffset);
             container.sizeDelta = new Vector2(m_TotalWidth + pad, m_TotalHeight + pad);
         }

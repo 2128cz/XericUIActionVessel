@@ -62,18 +62,32 @@ namespace XericUI.XTable.Rendering.Component
 
         public void CreateBackground(float width, float height, string styleNamespace, Vector2 position = default)
         {
+            if (m_BackgroundGo == null && m_Parent != null)
+            {
+                // 背景缓存是普通字段，域重载后为 null；容器里 DontSave 的 _TableBackground 还活着。
+                // 三个冻结渲染器各有自己的容器，按名字收养是安全的；不收养每次重载都会多叠一层。
+                var existing = m_Parent.Find("_TableBackground");
+                if (existing != null) m_BackgroundGo = existing.gameObject;
+            }
             if (m_BackgroundGo == null)
             {
                 m_BackgroundGo = new GameObject("_TableBackground", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(XTableSelectionInput));
-                m_BackgroundGo.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy;
+                // NotEditable：编辑期改它不会被记成预制体覆盖。
+                m_BackgroundGo.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy | HideFlags.NotEditable;
                 m_BackgroundGo.transform.SetParent(m_Parent, false);
                 m_BackgroundGo.transform.SetAsFirstSibling();
-                var image = m_BackgroundGo.GetComponent<Image>();
+            }
+            // 收养来的对象也要重新配置一次，颜色/选择输入不能沿用上一次的。
+            var image = m_BackgroundGo.GetComponent<Image>();
+            if (image != null)
+            {
                 image.raycastTarget = true;
-                m_BackgroundGo.GetComponent<XTableSelectionInput>().Configure(SelectionTable);
                 image.color = GetStyleColor?.Invoke(styleNamespace, XericUIActionTable.STYLE_CELL_BG_COLOR,
                     XericUIActionTable.BG_COLOR_FALLBACK) ?? XericUIActionTable.BG_COLOR_FALLBACK;
             }
+            var selectionInput = m_BackgroundGo.GetComponent<XTableSelectionInput>();
+            if (selectionInput != null) selectionInput.Configure(SelectionTable);
+
             var rt = m_BackgroundGo.GetComponent<RectTransform>();
             rt.anchorMin = new Vector2(0, 1);
             rt.anchorMax = new Vector2(0, 1);

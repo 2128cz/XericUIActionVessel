@@ -96,8 +96,13 @@ namespace XericUI.XTable.Rendering.Component
             float pad = m_ContentOffset * 2f;
 
             if (m_ScrollRect != null && m_ScrollRect.content != null)
+            {
+                // content 属于预制体：用驱动属性写入，值每次刷新重算、不落序列化，
+                // 编辑模式也就不会把表尺寸记成预制体修改。
+                m_LayoutDriven.Add(this, m_ScrollRect.content, DrivenTransformProperties.SizeDelta);
                 m_ScrollRect.content.sizeDelta = new Vector2(
                     m_TotalWidth + pad, m_TotalHeight + pad);
+            }
         }
 
         private void UpdateVisibleRect()
